@@ -1,4 +1,4 @@
-#include <iostream.h>
+#include <iostream>
 #include "InputParameter.H"
 #include "Types.H"
 #include "AtomStrain.H"
