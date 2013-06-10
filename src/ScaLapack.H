@@ -14,19 +14,21 @@
 #else
 
 #include <mpi.h>
-#include <iostream.h>
+#include <iostream>
 #include <stdio.h>
-#include <fstream.h>
+#include <fstream>
 #include <time.h>
 #include "Blas.H"
 #include "Utilities.H"
 
 #endif
 
+
 extern "C" {
     
     void fortran_name(dgehrd,DGEHRD)(int*,int*,int*,double*,int*,double*,double*,int*,int*);
     void fortran_name(dlacpy,DLACPY)(char*,int*,int*,double*,int*,double*,int*);
+    void fortran_name(zlacpy,ZLACPY)(char*,int*,int*,CPX*,int*,CPX*,int*);
     void fortran_name(dorghr,DORGHR)(int*,int*,int*,double*,int*,double*,double*,int*,int*);
     void fortran_name(dhseqr,DHSEQR)(char*,char*,int*,int*,int*,double*,int*,double*,double*,\
                                      double*,int*,double*,int*,int*);
@@ -68,15 +70,29 @@ extern "C" {
     void fortran_name(pzgetrf,PZGETRF)(int*,int*,CPX*,int*,int*,int*,int*,int*);
     void fortran_name(pzgetrs,PZGETRS)(char*,int*,int*,CPX*,int*,int*,int*,int*,CPX*,int*,\
                                        int*,int*,int*);
+    void fortran_name(pdsygvx,PDSYGVX)(int *,char *,char *,char *,int *,double *,\
+                      int *, int *, int *, double *, int *, int *, int *,\
+                      double *, double *, int *, int *, double *, int *,\
+                      int *, double *, double *, double *, int *, int *, int *,\
+                      double *, int *, int *, int *, int *, int *, double *, int *);
+    void fortran_name(pdgeadd,PDGEADD)(char *, int *, int *, double *, double *, int *, int *, int *, double *, double *, int *, int *, int *);
+
 
     void fortran_name(blacs_pinfo,BLACS_pinfo)(int*,int*);
-    void fortran_name(blacs_get,BLACS_GET)(int*,int*,int*);
+//    void fortran_name(blacs_get,BLACS_GET)(int*,int*,int*);
     void fortran_name(blacs_gridinit,BLACS_GRIDINIT)(int*,char*,int*,int*);
     void fortran_name(blacs_gridinfo,BLACS_GRIDINFO)(int*,int*,int*,int*,int*);
-    void fortran_name(blacs_gridexit,BLACS_GRIDEXIT)(int*);
+    void fortran_name(blacs_gridexit,blacs_gridexit)(int*);
 }
 
 /*Lapack*****************************************************************************************/
+
+inline void c_pdgeadd(char TRANS, int M, int N, double ALPHA, double *A, int IA, int JA, int *DESCA, double BETA, double *C, int IC, int JC, int *DESCC)
+{
+    fortran_name(pdgeadd,PDGEADD)(&TRANS,&M,&N,&ALPHA,A,&IA,&JA,DESCA,&BETA,C,&IC,&JC,DESCC);
+}
+
+/****/
 
 inline void c_dgehrd(int N,int ILO,int IHI,double *A,int LDA,double *TAU,double *WORK,\
                      int LWORK,int *INFO)
@@ -89,6 +105,13 @@ inline void c_dgehrd(int N,int ILO,int IHI,double *A,int LDA,double *TAU,double 
 inline void c_dlacpy(char UPLO,int M,int N,double *A,int LDA,double *B,int LDB)
 {
     fortran_name(dlacpy,DLACPY)(&UPLO,&M,&N,A,&LDA,B,&LDB);
+}
+
+/************************************************************************************************/
+
+inline void c_zlacpy(char UPLO,int M,int N,CPX *A,int LDA,CPX *B,int LDB)
+{
+    fortran_name(zlacpy,ZLACPY)(&UPLO,&M,&N,A,&LDA,B,&LDB);
 }
 
 /************************************************************************************************/
@@ -298,6 +321,20 @@ inline void c_pzgetrs(char TRANS,int N,int NRHS,CPX *A,int IA,int JA,int *DESCA,
     fortran_name(pzgetrs,PZGETRS)(&TRANS,&N,&NRHS,A,&IA,&JA,DESCA,IPIV,B,&IB,&JB,DESCB,INFO);
 }
 
+/************************************************************************************************/
+
+inline void c_pdsygvx(int ibtype, char jobz, char range, char uplo, int n, double *a,\
+                      int ia, int ja, int *desca, double *b, int ib, int jb, int *descb,\
+                      double vl, double vu, int il, int iu, double abstol, int *m,\
+                      int *nz, double *w, double orfac, double *z, int iz, int jz, int *descz,\
+                      double *work, int lwork, int *iwork, int liwork, int *ifail,\
+                      int *iclustr, double *gap, int *info)
+{
+    fortran_name(pdsygvx,PDSYGVX)(&ibtype,&jobz,&range,&uplo,&n,a,&ia,&ja,desca,b,&ib,&jb,descb,\
+                                  &vl,&vu,&il,&iu,&abstol,m,nz,w,&orfac,z,&iz,&jz,descz,\
+                                  work,&lwork,iwork,&liwork,ifail,iclustr,gap,info);
+}
+
 /*Blacs******************************************************************************************/
 
 inline void Cblacs_pinfo(int *MYPNUM,int *NPROCS)
@@ -307,10 +344,10 @@ inline void Cblacs_pinfo(int *MYPNUM,int *NPROCS)
 
 /************************************************************************************************/
 
-inline void Cblacs_get(int ICONTXT,int WHAT,int *VAL)
-{
-    fortran_name(blacs_get,BLASCS_GET)(&ICONTXT,&WHAT,VAL);
-}
+//inline void Cblacs_get(int ICONTXT,int WHAT,int *VAL)
+//{
+//    fortran_name(blacs_get,BLASCS_GET)(&ICONTXT,&WHAT,VAL);
+//}
 
 /************************************************************************************************/
 
@@ -330,7 +367,7 @@ inline void Cblacs_gridinfo(int ICONTXT,int *NPROW,int *NPCOL,int *MYPROW,int *M
 
 inline void Cblacs_gridexit(int ICONTXT)
 {
-    fortran_name(blacs_gridexit,BLACS_GRIDEXIT)(&ICONTXT);
+    fortran_name(blacs_gridexit,blacs_gridexit)(&ICONTXT);
 }
 
 /*Own********************************************************************************************/

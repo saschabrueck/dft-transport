@@ -1,8 +1,17 @@
 #ifndef __CSR
 #define __CSR
 
-#include <fstream.h>
+#include <fstream>
+#include <algorithm>
+#include <complex>
 #include "Blas.H"
+#include "array_tools.H"
+
+//#ifndef __MINMAX
+//#define __MINMAX
+//#define min(a,b) (((a)<(b))?(a):(b))
+//#define max(a,b) (((a)>(b))?(a):(b))
+//#endif
 
 class CSR{
 public:
@@ -27,8 +36,14 @@ public:
     
     TCSR(int,int,int);
     TCSR(TCSR<T>*);
-    TCSR(char*);
+    TCSR(const char*);
     TCSR(char*,int,int);
+// sab begin
+    TCSR(T,TCSR<double>*,T,TCSR<double>*);
+// THIS CONSTRUCTOR WILL CREATE A MATRIX BY WEIGHTED SUMMING OF TWO OTHERS
+    TCSR(TCSR<double>*,double*,double,int);
+// and this will construct the density matrix on the TCSR sparsity pattern
+// sab end
     ~TCSR();
     void change_contain(TCSR<T>*);
     void copy_index(TCSR<T>*);
@@ -53,6 +68,7 @@ public:
     void sparse_to_full(T*,int,int);
     void sparse_to_cmp_full(CPX*,int,int);
     void full_to_sparse(T*,int,int);
+    void tr_full_to_sparse(T*,int,int);
     void cmp_full_to_sparse(CPX*,int,int,CPX);
     void write_CSR(const char*);
     void write(const char*);
@@ -62,6 +78,13 @@ public:
     void change_findx(int);
     void get_full_index_i(int*);
     int get_msize(int,int,int,int*);
+// sab begin
+    int get_bandwidth(int);
+    void contactunitcell(T*,int,int,int,int);
+    int additionalentries(TCSR<T>*);
+    void assemble(TCSR<T>*,TCSR<T>*,TCSR<T>*,int,int);
+// sab end
+    void create(int,int,int,T*,int*,int*,int*);
 
     int pos,size,size_tot,n_nonzeros,type,findx,first_row;
     T *nnz;
@@ -113,17 +136,104 @@ inline TCSR<T>::TCSR(TCSR<T> *mat)
     c_icopy(size,mat->diag_pos,1,diag_pos,1);
 }
 
+/********************SAB*************************/
+
+template <class T>
+inline TCSR<T>::TCSR(T alphafactor,TCSR<double> *A,T betafactor,TCSR<double> *B)
+{
+    if ( (size       = A->size      )!=B->size      ) throw 0;
+    if ( (size_tot   = A->size_tot  )!=B->size_tot  ) throw 0;
+    if ( (type       = A->type      )!=B->type      ) throw 0;
+    if ( (findx      = A->findx     )!=B->findx     ) throw 0;
+    if ( (first_row  = A->first_row )!=B->first_row ) throw 0;
+
+    int addit  = B->additionalentries(A);
+
+    if (addit<0) throw 0;
+  
+    n_nonzeros = addit+A->n_nonzeros;
+
+    index_i    = new int[size];
+    edge_i     = new int[size+1];
+    nnz        = new T[n_nonzeros];
+    index_j    = new int[n_nonzeros];
+    diag_pos   = new int[size];
+
+    int i,j,edgy1,edgy2;
+    int numbercounter=0;
+    T *linefull=new T[size_tot];
+
+    for (i=0;i<size;i++) {
+        init_variable(linefull,size_tot);
+        index_i[i]=0;
+        for (edgy1=A->edge_i[i]-A->findx;edgy1<A->edge_i[i+1]-A->findx;edgy1++) {
+            linefull[A->index_j[edgy1]-A->findx]+=alphafactor*A->nnz[edgy1];
+        }
+        for (edgy2=B->edge_i[i]-B->findx;edgy2<B->edge_i[i+1]-B->findx;edgy2++) {
+            linefull[B->index_j[edgy2]-B->findx]+=betafactor*B->nnz[edgy2];
+        }
+        for (j=0;j<size_tot;j++) {
+            if (abs(linefull[j])) {
+                nnz[numbercounter]=linefull[j];
+                index_j[numbercounter]=j+findx;
+                index_i[i]++;
+                numbercounter++;
+            }
+        }
+    }
+
+    delete[] linefull;
+
+    get_row_edge();
+    get_diag_pos();
+}
+
 /************************************************************************************************/
 
 template <>
-inline TCSR<CPX>::TCSR(char *filename)
+inline TCSR<double>::TCSR(TCSR<double> *mat,double* phi,double factor,int nkval)
+{
+
+    nnz        = new double[mat->n_nonzeros];
+    index_i    = new int[mat->size];
+    index_j    = new int[mat->n_nonzeros];
+    edge_i     = new int[mat->size+1];
+    diag_pos   = new int[mat->size];
+
+    size       = mat->size;
+    size_tot   = mat->size_tot;
+    type       = mat->type;
+    n_nonzeros = mat->n_nonzeros;
+    findx      = mat->findx;
+    first_row  = mat->first_row;
+
+    c_icopy(size,mat->index_i,1,index_i,1);
+    c_icopy(n_nonzeros,mat->index_j,1,index_j,1);
+    c_icopy(size+1,mat->edge_i,1,edge_i,1);
+    c_icopy(size,mat->diag_pos,1,diag_pos,1);
+
+    int i,j;
+
+    int element=0;
+    for(i=0;i<size;i++){
+        for(j=edge_i[i]-findx;j<edge_i[i+1]-findx;j++){
+            nnz[element++]=factor*c_ddot(nkval,&phi[index_j[j]-findx],size,&phi[i],size);
+        }
+    }
+
+}
+
+/************************************************************************************************/
+
+template <>
+inline TCSR<CPX>::TCSR(const char *filename)
 {
 }
 
 /***********************************************************************************************/
 
 template <>
-inline TCSR<double>::TCSR(char *filename)
+inline TCSR<double>::TCSR(const char *filename)
 {
 
     int i,ind_i;
@@ -235,11 +345,13 @@ inline TCSR<double>::TCSR(char *filename,int msize,int mrank)
 template <class T>
 TCSR<T>::~TCSR()
 {
+
     delete[] nnz;
     delete[] index_i;
     delete[] index_j;
     delete[] edge_i;
     delete[] diag_pos;
+
 }
 
 /************************************************************************************************/
@@ -280,7 +392,7 @@ void TCSR<T>::copy_index(TCSR<T> *mat)
 }
 
 /************************************************************************************************/
-
+/*
 template <>
 void TCSR<CPX>::copy_contain(TCSR<double> *mat,double factor)
 {
@@ -299,9 +411,9 @@ void TCSR<CPX>::copy_contain(TCSR<double> *mat,double factor)
     c_icopy(size+1,mat->edge_i,1,edge_i,1);
     c_icopy(size,mat->diag_pos,1,diag_pos,1);
 }
-
+*/
 /************************************************************************************************/
-
+/*
 template <>
 void TCSR<double>::copy_contain(TCSR<double> *mat,double factor)
 {
@@ -320,9 +432,9 @@ void TCSR<double>::copy_contain(TCSR<double> *mat,double factor)
     c_icopy(size+1,mat->edge_i,1,edge_i,1);
     c_icopy(size,mat->diag_pos,1,diag_pos,1);
 }
-
+*/
 /************************************************************************************************/
-
+/*
 template <>
 void TCSR<CPX>::copy_contain(TCSR<CPX> *mat,double factor)
 {
@@ -341,9 +453,9 @@ void TCSR<CPX>::copy_contain(TCSR<CPX> *mat,double factor)
     c_icopy(size+1,mat->edge_i,1,edge_i,1);
     c_icopy(size,mat->diag_pos,1,diag_pos,1);
 }
-
+*/
 /************************************************************************************************/
-
+/*
 template <>
 void TCSR<double>::copy_contain(TCSR<CPX> *mat,double factor)
 {
@@ -362,7 +474,7 @@ void TCSR<double>::copy_contain(TCSR<CPX> *mat,double factor)
     c_icopy(size+1,mat->edge_i,1,edge_i,1);
     c_icopy(size,mat->diag_pos,1,diag_pos,1);
 }
-
+*/
 /************************************************************************************************/
 
 template <class T>
@@ -790,7 +902,7 @@ inline void TCSR<T>::spec_mat_vec_mult(T *in, T *out, int in_fst_row, int *low, 
 }
 
 /************************************************************************************************/
-
+/*
 template <>
 void TCSR<double>::sparse_to_cmp_full(CPX *B,int nrow,int ncol)
 {
@@ -805,14 +917,14 @@ void TCSR<double>::sparse_to_cmp_full(CPX *B,int nrow,int ncol)
         }
     }
 }
-
+*/
 /************************************************************************************************/
-
+/*
 template <>
 void TCSR<CPX>::sparse_to_cmp_full(CPX *B,int nrow,int ncol)
 {
 }
-
+*/
 /************************************************************************************************/
 
 template <class T>
@@ -828,6 +940,113 @@ void TCSR<T>::sparse_to_full(T *B,int nrow,int ncol)
             B[i+index*nrow]   = nnz[j];
         }
     }
+}
+
+/******************SAB ADDED THIS ***************************************************************/
+
+template <class T>
+int TCSR<T>::get_bandwidth(int ndof)
+{
+    int jmax=0;
+    for(int entry=0;entry<edge_i[ndof];entry++) {
+        if (index_j[entry]>jmax) {
+            jmax=index_j[entry];
+        }
+    }
+    double bandw=ceil(double(jmax)/ndof);
+    return int(bandw);
+// maybe add security check to make sure that bandw from other side is the same
+}
+
+/*********/
+
+template <class T>
+void TCSR<T>::contactunitcell(T *contacty,int rows,int ndof,int bandw,int signy)
+{
+    int i,j,index;
+    init_variable(contacty,rows*ndof*(bandw+1));
+    if (signy==1) {
+        for(i=0;i<rows;i++) {
+            for(j=edge_i[i]-findx;j<edge_i[i+1]-findx;j++) {
+                if ( (index=index_j[j]-findx) < ndof*(bandw+1) ) {
+                    //contacty[i+index*rows] = nnz[j];
+                    contacty[i*ndof*(bandw+1)+index] = nnz[j];
+                }
+            }
+        }
+    } else {
+        for(i=size-ndof;i<size;i++) {
+            for(j=edge_i[i]-findx;j<edge_i[i+1]-findx;j++) {
+                if ( (index=index_j[j]-findx) >= size-ndof*(bandw+1) ) {
+                    contacty[i-size+ndof+index*ndof] = nnz[j];
+                }
+            }
+        }
+    }
+}
+
+/*********/
+
+template <class T>
+int TCSR<T>::additionalentries(TCSR<T> *mat)
+{
+    int additional=0;
+    int i,edgy1,edgy2,foundit;
+    for (i=0;i<size;i++) {
+        for (edgy1=edge_i[i]-findx;edgy1<edge_i[i+1]-findx;edgy1++) {
+            foundit=0;
+            for (edgy2=mat->edge_i[i]-mat->findx;edgy2<mat->edge_i[i+1]-mat->findx;edgy2++) {
+                if (index_j[edgy1]==mat->index_j[edgy2]) {
+                    foundit++;
+                }
+            }
+            if (!foundit) {
+                additional++;
+            } else if (foundit>1) {
+                return -1;
+            }
+        }
+    }
+    return additional;
+}
+
+/************/
+
+template <class T>
+void  TCSR<T>::assemble(TCSR<T> *leftmat,TCSR<T> *middlemat,TCSR<T> *rightmat,int lsize,int rsize)
+{
+    int nleft=leftmat->n_nonzeros;
+    c_tcopy(nleft,leftmat->nnz,1,nnz,1);
+    c_icopy(lsize,leftmat->index_i,1,index_i,1);
+    c_icopy(nleft,leftmat->index_j,1,index_j,1);
+
+    int nmid=middlemat->edge_i[size-rsize]-middlemat->edge_i[lsize];
+    int poslmiddle=middlemat->edge_i[lsize]-middlemat->findx;
+    c_tcopy(nmid,&middlemat->nnz[poslmiddle],1,&nnz[nleft],1);
+    c_icopy(size-lsize-rsize,&middlemat->index_i[lsize],1,&index_i[lsize],1);
+    c_icopy(nmid,&middlemat->index_j[poslmiddle],1,&index_j[nleft],1);
+
+    int nright=rightmat->n_nonzeros;
+    c_tcopy(nright,rightmat->nnz,1,&nnz[nleft+nmid],1);
+    c_icopy(rsize,rightmat->index_i,1,&index_i[size-rsize],1);
+    c_icopy(nright,rightmat->index_j,1,&index_j[nleft+nmid],1);
+
+
+// this shift comes from the fact that j of the right stuff was not on the right place anyway!!!
+// i should add this shift not here but in other function because i need it elsewhere as well
+//    int shift=middlemat->size-lsize-rsize;
+//    if (shift!=0) {
+//        for (int i=0;i<nright;i++) {
+//            index_j[nleft+nmid+i]+=shift;
+//        }
+//    }
+
+    first_row=middlemat->first_row;
+    size_tot=middlemat->size_tot;
+
+    get_row_edge();
+    get_diag_pos();
+
 }
 
 /************************************************************************************************/
@@ -860,8 +1079,39 @@ void TCSR<T>::full_to_sparse(T *B,int nrow,int ncol)
     get_diag_pos();
 }
 
-/************************************************************************************************/
 
+template <class T>
+void TCSR<T>::tr_full_to_sparse(T *B,int nrow,int ncol)
+{
+    int i,j;
+
+    size       = nrow;
+    n_nonzeros = 0;
+
+    for(i=0;i<nrow;i++){
+
+        index_i[i] = 0;
+
+        for(j=0;j<ncol;j++){
+
+            if(abs(B[i+j*nrow])>tollim){
+
+                index_j[n_nonzeros] = j+findx;
+                nnz[n_nonzeros]     = B[i*nrow+j];
+
+                index_i[i]++;
+                n_nonzeros++;
+            }
+        }
+    }
+    get_row_edge();
+    get_diag_pos();
+}
+
+
+
+/************************************************************************************************/
+/*
 template <>
 void TCSR<double>::cmp_full_to_sparse(CPX *B,int nrow,int ncol,CPX factor)
 {
@@ -890,9 +1140,9 @@ void TCSR<double>::cmp_full_to_sparse(CPX *B,int nrow,int ncol,CPX factor)
     get_row_edge();
     get_diag_pos();
 }
-
+*/
 /************************************************************************************************/
-
+/*
 template <>
 void TCSR<CPX>::cmp_full_to_sparse(CPX *B,int nrow,int ncol,CPX factor)
 {
@@ -921,7 +1171,7 @@ void TCSR<CPX>::cmp_full_to_sparse(CPX *B,int nrow,int ncol,CPX factor)
     get_row_edge();
     get_diag_pos();
 }
-
+*/
 /************************************************************************************************/
 
 template <>
@@ -1092,5 +1342,38 @@ int TCSR<T>::get_msize(int start,int stop,int tb,int* n_of_el)
     return (tb/10)*(n_of_el[stop+1]-n_of_el[start]);
 }
 /************************************************************************************************/
+
+
+template<class T>
+void TCSR<T>::create(int N, int n_nnz, int f_index, T *nnz_arr, int *index_i_arr, int *index_j_arr, int *edge_i_arr)
+{
+
+    size = N;
+    n_nonzeros = n_nnz;
+    findx = f_index;
+
+    nnz        = new T[n_nonzeros];
+    index_i    = new int[size];
+    index_j    = new int[n_nonzeros];
+    edge_i     = new int[size+1];
+    diag_pos   = new int[size];
+
+//    std::copy(nnz_arr,nnz_arr+n_nonzeros,nnz);
+//    std::copy(index_i_arr,index_i_arr+size,index_i);
+//    std::copy(index_j_arr,index_j_arr+n_nonzeros,index_j);
+//    std::copy(edge_i_arr,edge_i_arr+size+1,edge_i);
+/*
+    for(int i=0;i<size+1;i++){
+       edge_i[i] = edge_i_arr[i];
+//       cout << edge_i_arr[i] << endl;
+    }
+*/
+
+    c_tcopy(n_nonzeros,nnz_arr,1,nnz,1);
+    c_icopy(size,index_i_arr,1,index_i,1);
+    c_icopy(n_nonzeros,index_j_arr,1,index_j,1);
+    c_icopy(size+1,edge_i_arr,1,edge_i,1);
+
+}
 
 #endif

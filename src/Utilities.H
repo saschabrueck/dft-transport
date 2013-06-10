@@ -1,6 +1,8 @@
 #ifndef __UTILITIES
 #define __UTILITIES
 
+using namespace std;
+
 #include <mpi.h>
 #include <sys/time.h>
 #include <sys/stat.h>
