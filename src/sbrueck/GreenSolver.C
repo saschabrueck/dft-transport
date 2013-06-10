@@ -1209,7 +1209,7 @@ cout<<"whatever"<<endl;
 //        c_zlacpy('A',ntriblock,nprotra,injl,ntriblock,Inj,HamSig->size_tot);
 //        c_zlacpy('A',ntriblock,nprotra,injr,ntriblock,&Inj[HamSig->size_tot*(nprotra+1)-ntriblock],HamSig->size_tot);
 
-        LinearSolver<CPX>* solver;
+/*        LinearSolver<CPX>* solver;
 cout <<"INIT SOLVER"<<endl;
         solver = new SuperLU<CPX>(HamSig,MPI_COMM_WORLD);
         sabtime=get_time(d_zer);
@@ -1219,7 +1219,7 @@ cout <<"SOLVE SOLVER"<<endl;
         solver->solve_equation(Sol,Inj,2*nprotra);
         cout << "TIME FOR WAVEFUNCTION SPARSE SOLVER WITH "<< ncells <<" UNIT CELLS " << get_time(sabtime) << endl;
         delete[] Inj;
-        delete solver;
+        delete solver;*/
         delete HamSig;
 // i think we need an allgather here
         CPX *Pmat = new CPX[ndof*ncells*ndof*ncells];
