@@ -2,10 +2,10 @@
 #define GreenSolver_H
 
 #include <mpi.h>
-#include "cDBCSR.H"
-#include "cDBCSR_tools.H"
-#include "conversion.H"
-#include "array_tools.H"
+#include "../cDBCSR.H"
+#include "../cDBCSR_tools.H"
+#include "../conversion.H"
+#include "../array_tools.H"
 
 using namespace std;
 
@@ -18,16 +18,16 @@ using namespace std;
 
 //#include "GSheaders/ElTransport.H"
 //#include "GSheaders/PhTransport.H"
-#include "Types.H"
-#include "Utilities.H"
-#include "InputParameter.H"
-#include "MPI_Timing.H"
-#include "ScaLapack.H"
-#include "Blas.H"
-#include "CSR.H"
+#include "../Types.H"
+#include "../Utilities.H"
+#include "../InputParameter.H"
+#include "../MPI_Timing.H"
+#include "../ScaLapack.H"
+#include "../Blas.H"
+#include "../CSR.H"
 
-#include "LinearSolver.H"
-#include "SuperLU.H"
+//#include "LinearSolver.H"
+//#include "SuperLU.H"
 //#include "Umfpack.H"
 //#include "MUMPS.H"
 //#include "Pardiso.H"

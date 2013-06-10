@@ -84,7 +84,10 @@ public:
     int additionalentries(TCSR<T>*);
     void assemble(TCSR<T>*,TCSR<T>*,TCSR<T>*,int,int);
 // sab end
-    void create(int,int,int,T*,int*,int*,int*);
+    void set_nnz(int,T*);
+    void set_index_i(int,int*);
+    void set_index_j(int,int*);
+    void set_edge_i(int,int*);
 
     int pos,size,size_tot,n_nonzeros,type,findx,first_row;
     T *nnz;
@@ -1343,37 +1346,52 @@ int TCSR<T>::get_msize(int start,int stop,int tb,int* n_of_el)
 }
 /************************************************************************************************/
 
-
 template<class T>
-void TCSR<T>::create(int N, int n_nnz, int f_index, T *nnz_arr, int *index_i_arr, int *index_j_arr, int *edge_i_arr)
+void TCSR<T>::set_nnz(int n_nnz, T *nnz_arr)
 {
-
-    size = N;
-    n_nonzeros = n_nnz;
-    findx = f_index;
-
-    nnz        = new T[n_nonzeros];
-    index_i    = new int[size];
-    index_j    = new int[n_nonzeros];
-    edge_i     = new int[size+1];
-    diag_pos   = new int[size];
-
-//    std::copy(nnz_arr,nnz_arr+n_nonzeros,nnz);
-//    std::copy(index_i_arr,index_i_arr+size,index_i);
-//    std::copy(index_j_arr,index_j_arr+n_nonzeros,index_j);
-//    std::copy(edge_i_arr,edge_i_arr+size+1,edge_i);
 /*
-    for(int i=0;i<size+1;i++){
-       edge_i[i] = edge_i_arr[i];
-//       cout << edge_i_arr[i] << endl;
+    for(int i=0;i<n_nnz;i++){
+       nnz[i] = nnz_arr[i];
+       cout << nnz_arr[i] << endl;
     }
 */
+    c_tcopy(n_nnz,nnz_arr,1,nnz,1);
+}
 
-    c_tcopy(n_nonzeros,nnz_arr,1,nnz,1);
-    c_icopy(size,index_i_arr,1,index_i,1);
-    c_icopy(n_nonzeros,index_j_arr,1,index_j,1);
-    c_icopy(size+1,edge_i_arr,1,edge_i,1);
+template<class T>
+void TCSR<T>::set_index_i(int N, int *index_i_arr)
+{
+/*
+    for(int i=0;i<N;i++){
+       index_i[i] = index_i_arr[i];
+       cout << index_i_arr[i] << endl;
+    }
+*/
+    c_icopy(N,index_i_arr,1,index_i,1);
+}
 
+template<class T>
+void TCSR<T>::set_index_j(int n_nnz, int *index_j_arr)
+{
+/*
+    for(int i=0;i<n_nnz;i++){
+       index_j[i] = index_j_arr[i];
+       cout << index_j_arr[i] << endl;
+    }
+*/
+    c_icopy(n_nnz,index_j_arr,1,index_j,1);
+}
+
+template<class T>
+void TCSR<T>::set_edge_i(int N, int *edge_i_arr)
+{
+/*
+    for(int i=0;i<N+1;i++){
+       edge_i[i] = edge_i_arr[i];
+       cout << edge_i_arr[i] << endl;
+    }
+*/
+    c_icopy(N+1,edge_i_arr,1,edge_i,1);
 }
 
 #endif

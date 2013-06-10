@@ -8,7 +8,7 @@
 #include "array_tools.H"
 #include "GreenSolver.H"
 
-//int greensolver_sab(TCSR<double>*,TCSR<double>*);
+int greensolver_sab(TCSR<double>*,TCSR<double>*,TCSR<double>*);
 #ifdef __cplusplus
 extern "C" {
 #endif
