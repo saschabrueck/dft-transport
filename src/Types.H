@@ -5,6 +5,7 @@ using namespace std;
 
 #include <math.h>
 #include <complex>
+#include <algorithm>
 
 #ifndef PI
 #define PI 3.14159265358979
@@ -38,16 +39,16 @@ using namespace std;
 #define scale_norm 1.0
 #endif
 
-#ifndef __MINMAX
-#define __MINMAX
-#define min(a,b) (((a)<(b))?(a):(b))
-#define max(a,b) (((a)>(b))?(a):(b))
-#endif
+//#ifndef __MINMAX
+//#define __MINMAX
+//#define min(a,b) (((a)<(b))?(a):(b))
+//#define max(a,b) (((a)>(b))?(a):(b))
+//#endif
 
-#ifdef Add_
+//#ifdef Add_
 #define fortran_name(x,y) (x ## _)
-#endif
-
+//#endif
+/*
 #ifdef NoChange
 #define fortran_name(x,y) (x)
 #endif
@@ -55,7 +56,7 @@ using namespace std;
 #ifdef UpCase
 #define fortran_name(x,y) (y)
 #endif
-
+*/
 typedef complex<double> CPLXType;
 typedef CPLXType CPX;
 typedef CPX *CPXp;
