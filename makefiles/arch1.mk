@@ -1,7 +1,7 @@
 CPP = mpicxx
 CC =
 
-CFLAGS = -g -Wall
+CFLAGS = -g -Wall -DAdd_
 CXXFLAGS = -std=c++11 $(CFLAGS)
 
 CP2KLIB = -L/data/seyedb/clean/cp2k/cp2k/lib/Linux-x86-64-gfortran/pdbg/
