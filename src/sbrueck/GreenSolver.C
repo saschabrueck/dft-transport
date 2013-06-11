@@ -6,7 +6,7 @@ WireStructure *nanowire;
 ENERGY *En;
 VOLTAGE *voltage;
 
-int greensolver_sab(TCSR<double> *Overlap,TCSR<double> *KohnSham,TCSR<double> *P_Matrix)
+int greensolver(TCSR<double> *Overlap,TCSR<double> *KohnSham,TCSR<double> *P_Matrix)
 {
 //    MPI_Comm sample_comm;
 //    int size,rank,IT,IC;
