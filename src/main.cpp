@@ -20,7 +20,11 @@ extern "C"
    void cp_c_init_cp2k(int *init_mpi, int *ierr);
    void cp_c_finalize_cp2k(int *finalize_mpi, int *ierr);
    void cp_c_create_fenv(int *new_env_id, char *input_file_path, char *output_file_path, int *ierr);
+#ifndef OPEN_MPI
    void cp_c_create_fenv_comm(int *new_env_id, char *input_file_path, char *output_file_path, int *mpi_comm, int *ierr);
+#else
+   void cp_c_create_fenv_comm(int *new_env_id, char *input_file_path, char *output_file_path, MPI_Comm *mpi_comm, int *ierr);
+#endif
    void cp_c_destroy_fenv(int *env_id, int *ierr);
 
    void cp_c_get_natom(int *env_id, int *natom, int *ierr);
@@ -32,7 +36,11 @@ extern "C"
    void cp_c_calc_energy_force(int *env_id, int *calc_force, int *ierr);
 
    void cp_c_run_input(char *input_file_path, char *output_file_path, int *ierr);
+#ifndef OPEN_MPI
    void cp_c_run_input_comm(char *input_file_path, char *output_file_path, int *mpi_comm, int *ierr);
+#else
+   void cp_c_run_input_comm(char *input_file_path, char *output_file_path, MPI_Comm *mpi_comm, int *ierr);
+#endif
 
    void cp_c_ext_scf_set_ptr(int *f_env_id, ptr2function, int *ierr);
 }
