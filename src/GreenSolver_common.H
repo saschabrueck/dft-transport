@@ -1,4 +1,11 @@
 // contains the parts common to the sbrueck/mcalderara codes later to be merged
+//
+
+#include <mpi.h>
+#include "cDBCSR.H"
+#include "cDBCSR_tools.H"
+#include "conversion.H"
+#include "array_tools.H"
 
 #ifdef __cplusplus
 extern "C" {
@@ -15,12 +22,6 @@ extern "C" {
 #ifdef __cplusplus
 }
 #endif
-
-#include <mpi.h>
-#include "cDBCSR.H"
-#include "cDBCSR_tools.H"
-#include "conversion.H"
-#include "array_tools.H"
 
 using namespace std;
 

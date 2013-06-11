@@ -1,5 +1,6 @@
 // This is merely a dummy to facilitate splitting the code structure
 // for now
+#include "GreenSolver_common.H"
 #include "GreenSolver_common.C"
 
 #ifdef MMC
