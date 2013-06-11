@@ -1,8 +1,6 @@
 #ifndef __SCALAPACK
 #define __SCALAPACK
 
-#ifdef _AIX
-
 #include <mpi.h>
 #include <iostream>
 #include <stdio.h>
@@ -10,19 +8,6 @@
 #include <time.h>
 #include "Blas.H"
 #include "Utilities.H"
-
-#else
-
-#include <mpi.h>
-#include <iostream>
-#include <stdio.h>
-#include <fstream>
-#include <time.h>
-#include "Blas.H"
-#include "Utilities.H"
-
-#endif
-
 
 extern "C" {
     

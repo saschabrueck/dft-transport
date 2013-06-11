@@ -40,14 +40,14 @@ extern "C"
 int main (int argc, char **argv)
 {
    int error, f_env_id, natom, calc_force, n_el, n_el_pos, n_el_force;
-   int init_mpi, finalize_mpi;
+   int fcomm, init_mpi, finalize_mpi;
    double e_pot;
    char *input_file;
    char *output_file = OUTPUT_FILE;
 //   char *output_file;
    double *pos, *force;
 //   int myid, nproc;
-   int mpi_comm;
+   MPI::Intercomm mpi_comm;
 
    std::string inpfile_path = argv[1];
 //   std::string outfile_path = argv[2];
@@ -67,9 +67,10 @@ int main (int argc, char **argv)
 //   myid = MPI::COMM_WORLD.Get_rank();
 //   nproc = MPI::COMM_WORLD.Get_size();
    mpi_comm = MPI::COMM_WORLD;
-
+   fcomm = int (mpi_comm);
+ 
    cp_c_init_cp2k(&init_mpi, &error);
-   cp_c_create_fenv_comm(&f_env_id, input_file, output_file, &mpi_comm, &error);
+   cp_c_create_fenv_comm(&f_env_id, input_file, output_file, &fcomm, &error);
    cp_c_ext_scf_set_ptr(&f_env_id, &c_scf_method, &error);
    cp_c_get_natom(&f_env_id, &natom, &error);
 
