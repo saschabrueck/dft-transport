@@ -7,12 +7,6 @@
 #include "Blas.H"
 #include "array_tools.H"
 
-//#ifndef __MINMAX
-//#define __MINMAX
-//#define min(a,b) (((a)<(b))?(a):(b))
-//#define max(a,b) (((a)>(b))?(a):(b))
-//#endif
-
 class CSR{
 public:
     
@@ -1349,48 +1343,24 @@ int TCSR<T>::get_msize(int start,int stop,int tb,int* n_of_el)
 template<class T>
 void TCSR<T>::set_nnz(int n_nnz, T *nnz_arr)
 {
-/*
-    for(int i=0;i<n_nnz;i++){
-       nnz[i] = nnz_arr[i];
-       cout << nnz_arr[i] << endl;
-    }
-*/
     c_tcopy(n_nnz,nnz_arr,1,nnz,1);
 }
 
 template<class T>
 void TCSR<T>::set_index_i(int N, int *index_i_arr)
 {
-/*
-    for(int i=0;i<N;i++){
-       index_i[i] = index_i_arr[i];
-       cout << index_i_arr[i] << endl;
-    }
-*/
     c_icopy(N,index_i_arr,1,index_i,1);
 }
 
 template<class T>
 void TCSR<T>::set_index_j(int n_nnz, int *index_j_arr)
 {
-/*
-    for(int i=0;i<n_nnz;i++){
-       index_j[i] = index_j_arr[i];
-       cout << index_j_arr[i] << endl;
-    }
-*/
     c_icopy(n_nnz,index_j_arr,1,index_j,1);
 }
 
 template<class T>
 void TCSR<T>::set_edge_i(int N, int *edge_i_arr)
 {
-/*
-    for(int i=0;i<N+1;i++){
-       edge_i[i] = edge_i_arr[i];
-       cout << edge_i_arr[i] << endl;
-    }
-*/
     c_icopy(N+1,edge_i_arr,1,edge_i,1);
 }
 
