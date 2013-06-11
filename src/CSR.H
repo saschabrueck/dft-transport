@@ -37,6 +37,8 @@ public:
 // THIS CONSTRUCTOR WILL CREATE A MATRIX BY WEIGHTED SUMMING OF TWO OTHERS
     TCSR(TCSR<double>*,double*,double,int);
 // and this will construct the density matrix on the TCSR sparsity pattern
+    TCSR(TCSR<T>*,MPI_Comm);
+// and this is the gather
 // sab end
     ~TCSR();
     void change_contain(TCSR<T>*);
@@ -218,6 +220,55 @@ inline TCSR<double>::TCSR(TCSR<double> *mat,double* phi,double factor,int nkval)
         }
     }
 
+}
+
+/********** written by SAB **********/
+
+template <class T>
+inline TCSR<T>::TCSR(TCSR<T> *matlocal,MPI_Comm my_comm)
+{
+    int iam,nprocs;
+    MPI_Comm_size(my_comm,&nprocs);
+    MPI_Comm_rank(my_comm,&iam);
+
+    int loc_n_nonzeros=matlocal->n_nonzeros;
+    int* dist_loc_n_nonzeros=new int[nprocs];
+    MPI_Allgather(&loc_n_nonzeros,1,MPI_INT,dist_loc_n_nonzeros,1,MPI_INT,my_comm);
+    int* displc_n_nonzeros=new int[nprocs+1]();
+    for (int iii=1;iii<nprocs+1;iii++)
+        displc_n_nonzeros[iii]=displc_n_nonzeros[iii-1]+dist_loc_n_nonzeros[iii-1];
+
+    int loc_size=matlocal->size;
+    int* dist_loc_size=new int[nprocs];
+    MPI_Allgather(&loc_size,1,MPI_INT,dist_loc_size,1,MPI_INT,my_comm);
+    int* displc_size=new int[nprocs+1]();
+    for (int iii=1;iii<nprocs+1;iii++)
+        displc_size[iii]=displc_size[iii-1]+dist_loc_size[iii-1];
+    if (displc_size[iam]!=matlocal->first_row) throw 0;
+
+    n_nonzeros = displc_n_nonzeros[nprocs];
+    size_tot   = matlocal->size_tot;
+    size       = size_tot;
+    findx      = matlocal->findx;
+    first_row  = 0;
+    type       = 0;
+    nnz        = new T[max(n_nonzeros,1)];
+    index_i    = new int[max(size,1)];
+    index_j    = new int[max(n_nonzeros,1)];
+    edge_i     = new int[size+1];
+    diag_pos   = new int[max(size,1)];
+
+    MPI_Allgatherv(matlocal->nnz,matlocal->n_nonzeros,MPI_DOUBLE_COMPLEX,nnz,dist_loc_n_nonzeros,displc_n_nonzeros,MPI_DOUBLE_COMPLEX,my_comm);//WARNING TEMPLATE! HERE ONLY FOR CPX
+    MPI_Allgatherv(matlocal->index_j,matlocal->n_nonzeros,MPI_INT,index_j,dist_loc_n_nonzeros,displc_n_nonzeros,MPI_INT,my_comm);
+    MPI_Allgatherv(matlocal->index_i,matlocal->size,MPI_INT,index_i,dist_loc_size,displc_size,MPI_INT,my_comm);
+
+    delete[] dist_loc_n_nonzeros;
+    delete[] displc_n_nonzeros;
+    delete[] dist_loc_size;
+    delete[] displc_size;
+
+    get_row_edge();
+    get_diag_pos();
 }
 
 /************************************************************************************************/
