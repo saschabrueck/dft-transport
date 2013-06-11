@@ -15,3 +15,26 @@ extern "C" {
 #ifdef __cplusplus
 }
 #endif
+
+#include <mpi.h>
+#include "cDBCSR.H"
+#include "cDBCSR_tools.H"
+#include "conversion.H"
+#include "array_tools.H"
+
+using namespace std;
+
+#include <math.h>
+#include <iostream>
+#include <time.h>
+#include <stdlib.h>
+#include <stdio.h>
+#include <limits>
+
+#include "Types.H"
+#include "Utilities.H"
+#include "InputParameter.H"
+#include "MPI_Timing.H"
+#include "ScaLapack.H"
+#include "Blas.H"
+#include "CSR.H"
