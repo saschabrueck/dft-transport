@@ -53,7 +53,7 @@ Umfpack<T>::Umfpack(TCSR<T>* mat,MPI_Comm solver_comm)
     Control[UMFPACK_STRATEGY]            = 0;       //0 for automatic choice
     Control[UMFPACK_ALLOC_INIT]          = 0.7;
     Control[UMFPACK_IRSTEP]              = 0;       //No iterative refinement
-    Control[UMFPACK_2BY2_TOLERANCE]      = 0.01;
+//    Control[UMFPACK_2BY2_TOLERANCE]      = 0.01;   //There is no UMFPACK_2BY2_TOLERANCE in new versions of Umfpack
     Control[UMFPACK_FIXQ]                = 0;
     Control[UMFPACK_AMD_DENSE]           = 10;
     Control[UMFPACK_SYM_PIVOT_TOLERANCE] = 0.001;
