@@ -45,9 +45,9 @@ using namespace std;
 #define max(a,b) (((a)>(b))?(a):(b))
 #endif
 
-#ifdef Add_
+//#ifdef Add_
 #define fortran_name(x,y) (x ## _)
-#endif
+//#endif
 
 #ifdef NoChange
 #define fortran_name(x,y) (x)
