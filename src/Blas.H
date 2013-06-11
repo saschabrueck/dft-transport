@@ -2,7 +2,7 @@
 #define __BLAS
 
 #include "mpi.h"
-#include <iostream.h>
+#include <iostream>
 #include "Types.H"
 
 extern "C" {
