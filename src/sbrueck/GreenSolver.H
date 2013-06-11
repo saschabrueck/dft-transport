@@ -32,20 +32,4 @@ using namespace std;
 //#include "MUMPS.H"
 //#include "Pardiso.H"
 
-#ifdef __cplusplus
-extern "C" {
-#endif
-
-   typedef void(*ptr2function) (c_DBCSR, c_DBCSR, c_DBCSR *);
-
-   void c_scf_method(c_DBCSR S, c_DBCSR KS, c_DBCSR * P);
-
-   void yyrestart(FILE *);
-   void yyparse();
-   extern FILE *yyin;
-
-#ifdef __cplusplus
-}
-#endif
-
 #endif
