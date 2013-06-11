@@ -1,5 +1,6 @@
 
-ARCH = ../makefiles/arch1.mk 
+ARCH = ../makefiles/mauro-bh2-scalapack.mk 
+#ARCH = ../makefiles/mauro-bh2-intelmkl.mk 
 include $(ARCH)
 
 LDFLAGS = $(LFLAGS) $(DFLAGS)
