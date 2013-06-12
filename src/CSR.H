@@ -90,6 +90,14 @@ public:
     int *index_i,*index_j,*edge_i,*diag_pos;
     
 private:
+    inline MPI_Datatype give_me_MPI_datatype (double*)
+    {
+        return MPI_DOUBLE;
+    }
+    inline MPI_Datatype give_me_MPI_datatype (CPX*)
+    {
+        return MPI_DOUBLE_COMPLEX;
+    }
 };
 
 template <class T>
@@ -258,7 +266,7 @@ inline TCSR<T>::TCSR(TCSR<T> *matlocal,MPI_Comm my_comm)
     edge_i     = new int[size+1];
     diag_pos   = new int[max(size,1)];
 
-    MPI_Allgatherv(matlocal->nnz,matlocal->n_nonzeros,MPI_DOUBLE_COMPLEX,nnz,dist_loc_n_nonzeros,displc_n_nonzeros,MPI_DOUBLE_COMPLEX,my_comm);//WARNING TEMPLATE! HERE ONLY FOR CPX
+    MPI_Allgatherv(matlocal->nnz,matlocal->n_nonzeros,give_me_MPI_datatype(nnz),nnz,dist_loc_n_nonzeros,displc_n_nonzeros,give_me_MPI_datatype(nnz),my_comm);
     MPI_Allgatherv(matlocal->index_j,matlocal->n_nonzeros,MPI_INT,index_j,dist_loc_n_nonzeros,displc_n_nonzeros,MPI_INT,my_comm);
     MPI_Allgatherv(matlocal->index_i,matlocal->size,MPI_INT,index_i,dist_loc_size,displc_size,MPI_INT,my_comm);
 
