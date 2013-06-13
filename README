@@ -1,0 +1,22 @@
+HOW TO START:
+
+Prepare CP2K:
+1) get CP2K : svn checkout svn://svn.code.sf.net/p/cp2k/code/trunk cp2k 
+1) (optional) if you already have CP2K on your machine, update your working copy of cp2k using svn -update
+
+Update CP2K:
+2) copy all the files in omendft_transport/CP2Kupdates/modules to the src directory of cp2k 
+3) copy omendft_transport/CP2Kupdates/patchfiles/patch.interface_[date].diff to the src directory of CP2K
+4) in the src directory of CP2K run : patch -p0 < patch.interface_[date].diff
+5) compile cp2k with popt or pdbg and make sure it works with an arbitray input file
+
+Compile and run:
+6) cd to omendft_transport/makefiles and using the sample .mk file (arch1.mk) write a .mk file (say, myarch.mk) according to your local installations.
+7) create a Makefile and run make 
+   > cd omendft_transport/src/
+   > ./configure --with-arch=myarch
+   > make 
+8) to run 
+   > cd ../inputfiles/files/ 
+   > mpirun -np N ../../src/interface test_external_scf.inp
+
