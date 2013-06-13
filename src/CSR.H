@@ -79,6 +79,7 @@ public:
     void contactunitcell(T*,int,int,int,int);
     int additionalentries(TCSR<T>*);
     void assemble(TCSR<T>*,TCSR<T>*,TCSR<T>*,int,int);
+    void reducescatter(TCSR<T>*,MPI_Comm);
 // sab end
     void set_nnz(int,T*);
     void set_index_i(int,int*);
@@ -1103,6 +1104,25 @@ void  TCSR<T>::assemble(TCSR<T> *leftmat,TCSR<T> *middlemat,TCSR<T> *rightmat,in
     get_row_edge();
     get_diag_pos();
 
+}
+
+/************/
+
+template <class T>
+void TCSR<T>::reducescatter(TCSR<T>*matdist,MPI_Comm my_comm)
+{
+    int iam,nprocs;
+    MPI_Comm_size(my_comm,&nprocs);
+    MPI_Comm_rank(my_comm,&iam);
+
+    int *recvcounts=new int[nprocs];
+
+    int recvloc=matdist->n_nonzeros;
+    MPI_Allgather(&recvloc,1,MPI_INT,recvcounts,1,MPI_INT,my_comm);
+
+    MPI_Reduce_scatter(nnz,matdist->nnz,recvcounts,give_me_MPI_datatype(nnz),MPI_SUM,my_comm);
+
+    delete[] recvcounts;
 }
 
 /************************************************************************************************/
