@@ -47,7 +47,9 @@ void c_scf_method(c_DBCSR S, c_DBCSR KS, c_DBCSR * P)
    if (!rank) KohnSham->first_row=0; else KohnSham->first_row=first_rows[rank-1]; 
 
    Ps = new TCSR<double>(nrows_local, S.n_nze, 0);
-   if (greensolver(Overlap,KohnSham,Ps)) throw 0;
+   Ps->copy_index(Overlap);
+   int nocc=520; if (diagscalapack(Overlap,KohnSham,Ps,nocc)) throw 0;
+//   if (greensolver(Overlap,KohnSham,Ps)) throw 0;
 
    CSR_to_cDBCSR(Ps, *P, row_block_size, col_block_size, row_dist, col_dist, local_rows, nblkrows_local_all);
 }
