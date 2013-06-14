@@ -6,9 +6,10 @@
 #include "cDBCSR_tools.H"
 #include "conversion.H"
 #include "array_tools.H"
-#include "GreenSolver.H"
+//#include "GreenSolver.H"
 
 int greensolver(TCSR<double>*,TCSR<double>*,TCSR<double>*);
+int diagscalapack(TCSR<double>*,TCSR<double>*,TCSR<double>*,int);
 #ifdef __cplusplus
 extern "C" {
 #endif

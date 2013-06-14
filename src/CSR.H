@@ -225,7 +225,7 @@ inline TCSR<double>::TCSR(TCSR<double> *mat,double* phi,double factor,int nkval)
     int element=0;
     for(i=0;i<size;i++){
         for(j=edge_i[i]-findx;j<edge_i[i+1]-findx;j++){
-            nnz[element++]=factor*c_ddot(nkval,&phi[index_j[j]-findx],size,&phi[i],size);
+            nnz[element++]=factor*c_ddot(nkval,&phi[(index_j[j]-findx)*size],1,&phi[i*size],1);
         }
     }
 
