@@ -4,10 +4,10 @@
 //#include "GSheaders/ElTransport.H"
 //#include "GSheaders/PhTransport.H"
 
-#include "LinearSolver.H"
-#include "SuperLU.H"
+//#include "../LinearSolver.H"
+//#include "../SuperLU.H"
 //#include "Umfpack.H"
-//#include "MUMPS.H"
+//#include "../MUMPS.H"
 //#include "Pardiso.H"
 
 #endif

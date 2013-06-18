@@ -299,11 +299,11 @@ cout<<"whatever"<<endl;
     colzerothr = 1.0e-12;
     double energy;
     double energystart;
-    double energyend;
+//    double energyend;
     double eps_limit;
     double eps_decay;
     energystart = 1.2;
-    energyend = 1.2;
+//    energyend = 1.2;
     eps_limit = 1.0e-6;
     eps_decay = 1.0e-6;
     int inj_sign=-1;
@@ -315,7 +315,7 @@ cout<<"whatever"<<endl;
    // paramfile.close();
 
 
-    double energystep;
+//    double energystep;
     if (bandwidth<1) cerr<<__LINE__<<endl, exit(EXIT_FAILURE);
 //    if (nprocs==1)
         energy=energystart;
@@ -1209,9 +1209,9 @@ cout<<"whatever"<<endl;
 //        c_zlacpy('A',ntriblock,nprotra,injl,ntriblock,Inj,HamSig->size_tot);
 //        c_zlacpy('A',ntriblock,nprotra,injr,ntriblock,&Inj[HamSig->size_tot*(nprotra+1)-ntriblock],HamSig->size_tot);
 
-/*        LinearSolver<CPX>* solver;
+        LinearSolver<CPX>* solver;
 cout <<"INIT SOLVER"<<endl;
-        solver = new SuperLU<CPX>(HamSig,MPI_COMM_WORLD);
+        solver = new MUMPS<CPX>(HamSig,MPI_COMM_WORLD);
         sabtime=get_time(d_zer);
 cout <<"PREPARE SOLVER"<<endl;
         solver->prepare();
@@ -1219,8 +1219,8 @@ cout <<"SOLVE SOLVER"<<endl;
         solver->solve_equation(Sol,Inj,2*nprotra);
         cout << "TIME FOR WAVEFUNCTION SPARSE SOLVER WITH "<< ncells <<" UNIT CELLS " << get_time(sabtime) << endl;
         delete[] Inj;
-        delete solver;*/
-        delete HamSig;
+        delete solver;
+/*        delete HamSig;
 // i think we need an allgather here
         CPX *Pmat = new CPX[ndof*ncells*ndof*ncells];
         CPX alphastep;
@@ -1245,6 +1245,7 @@ cout <<"SOLVE SOLVER"<<endl;
         delete[] Sol;
         delete[] vecoutdof;
         cout << "Energy " << energy << " Transmission " << transml << endl;
+*/
     } 
     else cerr<<__LINE__<<endl, exit(EXIT_FAILURE); 
 
