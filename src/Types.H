@@ -392,6 +392,17 @@ struct VOLTAGE
     double Tmax; 	
 };
 
+// SABS STRUCTURES
+struct ParameterStruct
+{
+int bandwidth;
+int ndof;
+double evoltfactor;
+double colzerothr;
+double eps_limit;
+double eps_decay;
+};
+
 #endif
 
 
