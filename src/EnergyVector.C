@@ -29,10 +29,10 @@ int energyvector(TCSR<double> *Overlap,TCSR<double> *KohnSham,TCSR<double> *P_Ma
     else
         step=energystep;
 // allocate matrices to gather on every node
-//    TCSR<double> *KohnShamCollect = new TCSR<double>(KohnSham,MPI_COMM_WORLD);
-//    TCSR<double> *OverlapCollect = new TCSR<double>(Overlap,MPI_COMM_WORLD);
-    TCSR<double> *KohnShamCollect = new TCSR<double>("CNT5_h.mtx");
-    TCSR<double> *OverlapCollect  = new TCSR<double>("CNT5_s.mtx");
+    TCSR<double> *KohnShamCollect = new TCSR<double>(KohnSham,MPI_COMM_WORLD);
+    TCSR<double> *OverlapCollect = new TCSR<double>(Overlap,MPI_COMM_WORLD);
+//    TCSR<double> *KohnShamCollect = new TCSR<double>("CNT5_h.mtx");
+//    TCSR<double> *OverlapCollect  = new TCSR<double>("CNT5_s.mtx");
     TCSR<CPX> *Ps = new TCSR<CPX>(OverlapCollect->size,OverlapCollect->n_nonzeros,OverlapCollect->findx);
 // run 
     int method=2;
