@@ -1,0 +1,177 @@
+(*CacheID: 234*)
+(* Internal cache information:
+NotebookFileLineBreakTest
+NotebookFileLineBreakTest
+NotebookDataPosition[         0,          0]
+NotebookDataLength[      6742,        176]
+NotebookOptionsPosition[      6012,        145]
+NotebookOutlinePosition[      6351,        160]
+CellTagsIndexPosition[      6308,        157]
+WindowFrame->Normal*)
+
+(* Beginning of Notebook Content *)
+Notebook[{
+Cell[BoxData[
+ RowBox[{
+  RowBox[{
+   RowBox[{"writeGaussLeg", "[", 
+    RowBox[{"degree_", ",", "abscfile_", ",", "weightsfile_"}], "]"}], ":=", 
+   RowBox[{"(", "\[IndentingNewLine]", 
+    RowBox[{
+     RowBox[{"precision", "=", "20"}], ";", "\[IndentingNewLine]", 
+     RowBox[{"nodes", "=", 
+      RowBox[{"Cases", "[", 
+       RowBox[{
+        RowBox[{"NSolve", "[", 
+         RowBox[{
+          RowBox[{
+           RowBox[{"LegendreP", "[", 
+            RowBox[{"degree", ",", "x"}], "]"}], "\[Equal]", "0"}], ",", "x", 
+          ",", "precision"}], "]"}], ",", 
+        RowBox[{"_", "?", "NumericQ"}], ",", " ", "Infinity"}], "]"}]}], ";", 
+     
+     RowBox[{"weights", "=", 
+      RowBox[{"2", " ", "*", 
+       RowBox[{
+        RowBox[{"(", 
+         RowBox[{"1", "-", 
+          RowBox[{"nodes", "^", "2"}]}], ")"}], "/", 
+        RowBox[{
+         RowBox[{"(", 
+          RowBox[{"degree", "*", 
+           RowBox[{"LegendreP", "[", 
+            RowBox[{
+             RowBox[{"degree", "-", "1"}], ",", "nodes"}], "]"}]}], ")"}], 
+         "^", "2"}]}]}]}], ";", "\[IndentingNewLine]", 
+     RowBox[{"WriteString", "[", 
+      RowBox[{"abscfile", ",", " ", 
+       RowBox[{"ToString", "[", 
+        RowBox[{"NumberForm", "[", 
+         RowBox[{
+          RowBox[{"N", "[", "nodes", "]"}], ",", "precision"}], "]"}], "]"}], 
+       ",", "\"\<,\\n\>\""}], "]"}], ";", "\[IndentingNewLine]", 
+     RowBox[{"WriteString", "[", 
+      RowBox[{"weightsfile", ",", " ", 
+       RowBox[{"ToString", "[", 
+        RowBox[{"NumberForm", "[", 
+         RowBox[{
+          RowBox[{"N", "[", "weights", "]"}], ",", "precision"}], "]"}], 
+        "]"}], ",", "\"\<,\\n\>\""}], "]"}]}], "\[IndentingNewLine]", ")"}]}],
+   "\[IndentingNewLine]"}]], "Input",
+ CellChangeTimes->{{3.5804486598484488`*^9, 3.580448672428816*^9}, {
+   3.580448755813765*^9, 3.580448834130007*^9}, {3.5804490152213163`*^9, 
+   3.5804490262638683`*^9}, {3.580449145418603*^9, 3.58044914635956*^9}, {
+   3.580455278524363*^9, 3.580455280737617*^9}, {3.580462434966382*^9, 
+   3.580462435044578*^9}, {3.5804627237707453`*^9, 3.580462846110957*^9}, {
+   3.5804628804653063`*^9, 3.580462938582683*^9}, {3.580462970151762*^9, 
+   3.5804629981859818`*^9}, {3.580463145998954*^9, 3.580463206836841*^9}, {
+   3.580464043610403*^9, 3.580464099343075*^9}, 3.580464254906057*^9, {
+   3.5804648905025578`*^9, 3.580464891104004*^9}, {3.580465222970478*^9, 
+   3.5804652360815077`*^9}, {3.5804654046103973`*^9, 3.580465420688066*^9}, {
+   3.580467109916803*^9, 3.580467113646563*^9}, {3.580467249272265*^9, 
+   3.580467273084752*^9}, {3.580471894034848*^9, 3.580471923474453*^9}}],
+
+Cell[CellGroupData[{
+
+Cell[BoxData[{
+ RowBox[{"abscfile", "=", 
+  RowBox[{
+  "OpenAppend", "[", "\"\<Integration_GL_absc.precomp\>\"", 
+   "]"}]}], "\[IndentingNewLine]", 
+ RowBox[{"weightsfile", "=", 
+  RowBox[{
+  "OpenAppend", "[", "\"\<Integration_GL_weights.precomp\>\"", 
+   "]"}]}]}], "Input",
+ CellChangeTimes->{{3.580463247321217*^9, 3.580463280078711*^9}, {
+  3.580465711221917*^9, 3.580465736508917*^9}, {3.580467098144536*^9, 
+  3.580467102705042*^9}, {3.580467597201642*^9, 3.5804676129440107`*^9}}],
+
+Cell[BoxData[
+ RowBox[{"OutputStream", "[", 
+  RowBox[{"\<\"Integration_GL_absc.precomp\"\>", ",", "90"}], "]"}]], "Output",\
+
+ CellChangeTimes->{
+  3.580463282165648*^9, 3.580464162600645*^9, 3.580464850678626*^9, 
+   3.580464910239771*^9, 3.5804652655044518`*^9, 3.580465741526383*^9, {
+   3.580467150461175*^9, 3.5804671745091753`*^9}, 3.580467628224886*^9, 
+   3.5805301386294727`*^9, 3.580531715015822*^9}],
+
+Cell[BoxData[
+ RowBox[{"OutputStream", "[", 
+  RowBox[{"\<\"Integration_GL_weights.precomp\"\>", ",", "91"}], 
+  "]"}]], "Output",
+ CellChangeTimes->{
+  3.580463282165648*^9, 3.580464162600645*^9, 3.580464850678626*^9, 
+   3.580464910239771*^9, 3.5804652655044518`*^9, 3.580465741526383*^9, {
+   3.580467150461175*^9, 3.5804671745091753`*^9}, 3.580467628224886*^9, 
+   3.5805301386294727`*^9, 3.580531715070868*^9}]
+}, Open  ]],
+
+Cell[BoxData[
+ RowBox[{"Do", "[", 
+  RowBox[{
+   RowBox[{"writeGaussLeg", "[", 
+    RowBox[{"i", ",", "abscfile", ",", "weightsfile"}], "]"}], ",", 
+   RowBox[{"{", 
+    RowBox[{"i", ",", "25"}], "}"}]}], "]"}]], "Input",
+ CellChangeTimes->{{3.580463297306028*^9, 3.5804633131834507`*^9}, {
+  3.580464181825037*^9, 3.580464192377022*^9}, {3.580464685063057*^9, 
+  3.580464730475951*^9}, {3.5804647912264223`*^9, 3.580464804711217*^9}, {
+  3.580467634687228*^9, 3.580467637802017*^9}, {3.580530117640293*^9, 
+  3.580530117763937*^9}, {3.580531702247788*^9, 3.580531702320178*^9}}],
+
+Cell[CellGroupData[{
+
+Cell[BoxData[{
+ RowBox[{"Close", "[", "abscfile", "]"}], "\[IndentingNewLine]", 
+ RowBox[{"Close", "[", "weightsfile", "]"}]}], "Input",
+ CellChangeTimes->{{3.580463993164349*^9, 3.5804640260702257`*^9}, 
+   3.5804673478183107`*^9}],
+
+Cell[BoxData["\<\"Integration_GL_absc.precomp\"\>"], "Output",
+ CellChangeTimes->{{3.5804640042368193`*^9, 3.5804640283792353`*^9}, 
+   3.580464268818948*^9, {3.580464898589716*^9, 3.580464916143911*^9}, 
+   3.580465256370302*^9, 3.5804657023289547`*^9, {3.5804671472254963`*^9, 
+   3.580467180958033*^9}, 3.580530131177106*^9, 3.580530344878284*^9, 
+   3.580531723103277*^9}],
+
+Cell[BoxData["\<\"Integration_GL_weights.precomp\"\>"], "Output",
+ CellChangeTimes->{{3.5804640042368193`*^9, 3.5804640283792353`*^9}, 
+   3.580464268818948*^9, {3.580464898589716*^9, 3.580464916143911*^9}, 
+   3.580465256370302*^9, 3.5804657023289547`*^9, {3.5804671472254963`*^9, 
+   3.580467180958033*^9}, 3.580530131177106*^9, 3.580530344878284*^9, 
+   3.58053172310898*^9}]
+}, Open  ]]
+},
+WindowSize->{987, 577},
+WindowMargins->{{Automatic, 418}, {221, Automatic}},
+FrontEndVersion->"9.0 for Linux x86 (64-bit) (November 20, 2012)",
+StyleDefinitions->"Default.nb"
+]
+(* End of Notebook Content *)
+
+(* Internal cache information *)
+(*CellTagsOutline
+CellTagsIndex->{}
+*)
+(*CellTagsIndex
+CellTagsIndex->{}
+*)
+(*NotebookFileOutline
+Notebook[{
+Cell[400, 13, 2639, 58, 187, "Input"],
+Cell[CellGroupData[{
+Cell[3064, 75, 489, 11, 55, "Input"],
+Cell[3556, 88, 411, 8, 32, "Output"],
+Cell[3970, 98, 415, 8, 32, "Output"]
+}, Open  ]],
+Cell[4400, 109, 579, 11, 32, "Input"],
+Cell[CellGroupData[{
+Cell[5004, 124, 232, 4, 55, "Input"],
+Cell[5239, 130, 376, 5, 32, "Output"],
+Cell[5618, 137, 378, 5, 89, "Output"]
+}, Open  ]]
+}
+]
+*)
+
