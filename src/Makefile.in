@@ -10,7 +10,7 @@ include $(ARCH)
 LDFLAGS = $(LFLAGS) $(DFLAGS)
 
 SOURCES = main.cpp cDBCSR_tools.cpp c_scf.cpp DiagScaLapack.C Density.C EnergyVector.C
-CFILES = GreenSolver.C array_tools.C Utilities.C CSR.C
+CFILES = array_tools.C Utilities.C CSR.C
 
 OBJECTS = $(SOURCES:.cpp=.o) $(CFILES) $(TIMINGS)
 EXECUTABLE = interface
