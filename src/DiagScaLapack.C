@@ -1,4 +1,3 @@
-#include "CSR.H"
 #include "ScaLapack.H"
 #include "array_tools.H"
 
@@ -80,7 +79,6 @@ int diagscalapack(TCSR<double> *Overlap,TCSR<double> *KohnSham,TCSR<double> *P_M
     int *iclu       = new int[2*nprocs];
     double *dgap    = new double[nprocs];
     if (nprocs<1) return (cerr<<__LINE__<<endl, EXIT_FAILURE);  
-    if (!iam) cout<<"Start diagonalization"<<endl;
     c_pdsygvx(1,'V','A','U',nvec,KSloc,1,1,descKS,OVloc,1,1,descOV,\
               0.0,0.0,1,1,0.0,&mout,&nzout,eigval,0.0,Zloc,1,1,descZ,\
               workytest,-1,iworkytest,-1,ifail,iclu,dgap,&iinfo);
@@ -128,6 +126,8 @@ int diagscalapack(TCSR<double> *Overlap,TCSR<double> *KohnSham,TCSR<double> *P_M
     Density->reducescatter(P_Matrix,MPI_COMM_WORLD);
     if (!iam) cout << "Time after MPI " << get_time(sabtime) << endl;
 
+    if (!iam) P_Matrix->write_CSR("Pmatrix");
+    if (!iam) for (int ii=0;ii<nvec;ii++) cout<<eigval[ii]<<endl;
     delete[] eigval;
 
     Cblacs_gridexit(icontxt);

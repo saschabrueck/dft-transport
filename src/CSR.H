@@ -77,9 +77,13 @@ public:
 // sab begin
     int get_bandwidth(int);
     void contactunitcell(T*,int,int,int,int);
+    void contactunitcell(T*,int,int,int);
     int additionalentries(TCSR<T>*);
     void assemble(TCSR<T>*,TCSR<T>*,TCSR<T>*,int,int);
+    void assembleshift(TCSR<T>*,TCSR<T>*,TCSR<T>*,int,int);
     void reducescatter(TCSR<T>*,MPI_Comm);
+    void reducescatterfactorconvert(TCSR<double>*,MPI_Comm,double);
+    void psipsidagger(TCSR<double>*,CPX*,int);
 // sab end
     void set_nnz(int,T*);
     void set_index_i(int,int*);
@@ -1020,6 +1024,7 @@ int TCSR<T>::get_bandwidth(int ndof)
 template <class T>
 void TCSR<T>::contactunitcell(T *contacty,int rows,int ndof,int bandw,int signy)
 {
+// this is only experimental
     int i,j,index;
     init_variable(contacty,rows*ndof*(bandw+1));
     if (signy==1) {
@@ -1031,6 +1036,36 @@ void TCSR<T>::contactunitcell(T *contacty,int rows,int ndof,int bandw,int signy)
                 }
             }
         }
+    } else {
+        for(i=size-ndof;i<size;i++) {
+            for(j=edge_i[i]-findx;j<edge_i[i+1]-findx;j++) {
+                if ( (index=index_j[j]-findx) >= size-ndof*(bandw+1) ) {
+                    contacty[i-size+ndof+index*ndof] = nnz[j];
+                }
+            }
+        }
+    }
+}
+
+/*********/
+
+template <class T>
+void TCSR<T>::contactunitcell(T *contacty,int ndof,int bandw,int signy)
+{
+// this is the old version
+// i dont think this works for the parallel case
+    int i,j,index;
+    init_variable(contacty,ndof*ndof*(2*bandw-1));
+    if (signy==1) {
+        for(i=0;i<ndof;i++) {
+            for(j=edge_i[i]-findx;j<edge_i[i+1]-findx;j++) {
+                if ( (index=index_j[j]-findx) < ndof*(bandw+1) ) {
+                    contacty[bandw*ndof*ndof+i+index*ndof] = nnz[j];
+                }
+            }
+        }
+        for (int ibw=1;ibw<=bandw;ibw++)
+            full_conjugate_transpose(ndof,ndof,&contacty[(bandw+ibw)*ndof*ndof],&contacty[(bandw-ibw)*ndof*ndof]);
     } else {
         for(i=size-ndof;i<size;i++) {
             for(j=edge_i[i]-findx;j<edge_i[i+1]-findx;j++) {
@@ -1071,6 +1106,7 @@ int TCSR<T>::additionalentries(TCSR<T> *mat)
 
 template <class T>
 void  TCSR<T>::assemble(TCSR<T> *leftmat,TCSR<T> *middlemat,TCSR<T> *rightmat,int lsize,int rsize)
+// this is experimental
 {
     int nleft=leftmat->n_nonzeros;
     c_tcopy(nleft,leftmat->nnz,1,nnz,1);
@@ -1109,6 +1145,37 @@ void  TCSR<T>::assemble(TCSR<T> *leftmat,TCSR<T> *middlemat,TCSR<T> *rightmat,in
 /************/
 
 template <class T>
+void  TCSR<T>::assembleshift(TCSR<T> *leftmat,TCSR<T> *middlemat,TCSR<T> *rightmat,int lrsize,int shift)
+{
+    int nleft=leftmat->edge_i[lrsize]-leftmat->findx;
+    c_tcopy(nleft,leftmat->nnz,1,nnz,1);
+    c_icopy(lrsize,leftmat->index_i,1,index_i,1);
+    c_icopy(nleft,leftmat->index_j,1,index_j,1);
+
+    int nmid=middlemat->edge_i[size_tot-lrsize]-middlemat->edge_i[lrsize];
+    int poslmiddle=middlemat->edge_i[lrsize]-middlemat->findx;
+    c_tcopy(nmid,&middlemat->nnz[poslmiddle],1,&nnz[nleft],1);
+    c_icopy(size_tot-2*lrsize,&middlemat->index_i[lrsize],1,&index_i[lrsize],1);
+    c_icopy(nmid,&middlemat->index_j[poslmiddle],1,&index_j[nleft],1);
+
+    int nright=rightmat->edge_i[lrsize]-rightmat->findx;
+    c_tcopy(nright,rightmat->nnz,1,&nnz[nleft+nmid],1);
+    c_icopy(lrsize,rightmat->index_i,1,&index_i[size_tot-lrsize],1);
+    c_icopy(nright,rightmat->index_j,1,&index_j[nleft+nmid],1);
+
+    if (shift!=0) {
+        for (int i=0;i<nright;i++) {
+            index_j[nleft+nmid+i]+=shift;
+        }
+    }
+
+    get_row_edge();
+    get_diag_pos();
+}
+
+/************/
+
+template <class T>
 void TCSR<T>::reducescatter(TCSR<T>*matdist,MPI_Comm my_comm)
 {
     int iam,nprocs;
@@ -1123,6 +1190,55 @@ void TCSR<T>::reducescatter(TCSR<T>*matdist,MPI_Comm my_comm)
     MPI_Reduce_scatter(nnz,matdist->nnz,recvcounts,give_me_MPI_datatype(nnz),MPI_SUM,my_comm);
 
     delete[] recvcounts;
+}
+
+/************/
+
+template <>
+inline void TCSR<CPX>::reducescatterfactorconvert(TCSR<double>*matdist,MPI_Comm my_comm, double factor)
+{
+    int iam,nprocs;
+    MPI_Comm_size(my_comm,&nprocs);
+    MPI_Comm_rank(my_comm,&iam);
+
+    int *recvcounts=new int[nprocs];
+
+    int recvloc=matdist->n_nonzeros;
+    MPI_Allgather(&recvloc,1,MPI_INT,recvcounts,1,MPI_INT,my_comm);
+
+    double *nnztmp = new double[n_nonzeros];
+    c_dcopy(n_nonzeros,(double*)nnz,2,nnztmp,1);
+    c_dscal(n_nonzeros,factor,nnztmp,1);
+
+    MPI_Reduce_scatter(nnztmp,matdist->nnz,recvcounts,give_me_MPI_datatype(nnztmp),MPI_SUM,my_comm);
+
+    delete[] nnztmp;
+    delete[] recvcounts;
+}
+
+/************/
+
+template <>
+inline void TCSR<CPX>::psipsidagger(TCSR<double> *mat,CPX* phi,int nkval)
+{
+    size       = mat->size;
+    size_tot   = mat->size_tot;
+    type       = mat->type;
+    n_nonzeros = mat->n_nonzeros;
+    findx      = mat->findx;
+    first_row  = mat->first_row;
+
+    c_icopy(size,mat->index_i,1,index_i,1);
+    c_icopy(n_nonzeros,mat->index_j,1,index_j,1);
+    c_icopy(size+1,mat->edge_i,1,edge_i,1);
+    c_icopy(size,mat->diag_pos,1,diag_pos,1);
+
+    int i,j,element=0;
+    for(i=0;i<size;i++){
+        for(j=edge_i[i]-findx;j<edge_i[i+1]-findx;j++){
+            nnz[element++]=c_zdotc(nkval,&phi[index_j[j]-findx],size,&phi[i],size);
+        }
+    }
 }
 
 /************************************************************************************************/
