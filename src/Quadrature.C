@@ -1,8 +1,8 @@
 #include <exception>
 #include <iostream>   // TODO: remove that later
 
-#include "Integration.H"
-#include "Integration_GL.H"
+#include "Quadrature.H"
+#include "Quadrature_GL.H"
 
 #ifndef PI
 #define PI 3.141592653589793238462
@@ -11,17 +11,17 @@
 /** \brief Initializer
  *
  *  Currently implemented methods for quadrature:
- *    - 'integral_type::CCGL'
+ *    - 'quadrature_type::CCGL'
  *      Complex contour Gauss Legendre. Abscissae and weights are
  *      precalculated up to machine precision, maximum number of
  *      abscissae is 120.
  *
- * \param integral_type The type of integral for which the abscissae/weights are to be loaded or calculated. See above for a list of supported values.
+ * \param quadrature_type The type of quadrature for which the abscissae/weights are to be loaded or calculated. See above for a list of supported values.
  * \param start Lower bound of range with nonzero state density
  * \param end Upper bound of range with nonzero state density
  * \param nabsc How many abscissae to use for the quadrature
  */
-IntAbsc::IntAbsc(integral_type type, double start, double end, unsigned int nabsc)
+Quadrature::Quadrature(quadrature_type type, double start, double end, unsigned int nabsc)
 {
 
   itype = type;
@@ -35,13 +35,13 @@ IntAbsc::IntAbsc(integral_type type, double start, double end, unsigned int nabs
     band_end=start;
   }
   //else {
-  //  throw exc_intabsc;
+  //  throw exc_quadrature;
   //}
 
   switch (itype) {
-    case integral_type::CCGL:
+    case quadrature_type::CCGL:
       //if (nabsc >= GaussLegendre::absc.size() || nabsc == 0) {
-      //  throw exc_intabsc;
+      //  throw exc_quadrature;
       //}
       auto radius=(band_end-band_start)/2.0;
       auto center=(band_start+band_end)/2.0;
@@ -61,8 +61,8 @@ IntAbsc::IntAbsc(integral_type type, double start, double end, unsigned int nabs
   }
 };
 
-class excIntAbsc: public std::exception {
+class excQuadrature: public std::exception {
   virtual const char* what() const throw() {
-    return "Generic fault in IntAbsc()";
+    return "Generic fault in Quadrature()";
   }
-} exc_intabsc;
+} exc_quadrature;
