@@ -1,9 +1,13 @@
-// This is merely a dummy to facilitate splitting the code structure
-// for now
-#include "GreenSolver_common.H"
+#ifndef GreenSolver_H
+#define GreenSolver_H
 
-#ifdef MMC
-#include "mcalderara/GreenSolver.H"
-#else
-#include "sbrueck/GreenSolver.H"
+//#include "GSheaders/ElTransport.H"
+//#include "GSheaders/PhTransport.H"
+
+#include "LinearSolver.H"
+#include "SuperLU.H"
+//#include "Umfpack.H"
+//#include "MUMPS.H"
+//#include "Pardiso.H"
+
 #endif
