@@ -52,13 +52,24 @@ void c_scf_method(c_DBCSR S, c_DBCSR KS, c_DBCSR * P)
 
    Ps = new TCSR<double>(nrows_local, S.n_nze, 0);
    Ps->copy_index(Overlap);
+/*
+fstream countfile("countfile");
+int counter;
+countfile >> counter;
+counter++;
+countfile.seekg(ios_base::beg);
+countfile << counter;
+if (counter==6) remove("nocc");
+*/
    ifstream noccfile("nocc");
    if (noccfile) {
       int nocc;
       noccfile >> nocc;
+      if (!rank) cout << "Starting ScaLaPackDiag" << endl;
       if (diagscalapack(Overlap,KohnSham,Ps,nocc)) throw 0;
    } else {
-       if (energyvector(Overlap,KohnSham,Ps)) throw 0;
+      if (!rank) cout << "Starting Transport" << endl;
+      if (energyvector(Overlap,KohnSham,Ps)) throw 0;
 // below my experimental code
 //     if (greensolver(Overlap,KohnSham,Ps)) throw 0;
    }

@@ -10,8 +10,8 @@ using namespace std;
 //#include "CSR.H"
 #include "LinearSolver.H"
 //#include "SuperLU.H"
-//#include "Umfpack.H"
-#include "MUMPS.H"
+#include "Umfpack.H"
+//#include "MUMPS.H"
 //#include "Pardiso.H"
 
 int density(TCSR<double> *KohnSham,TCSR<double> *Overlap,TCSR<CPX> *Ps,CPX energy,int method,ParameterStruct parameter_sab)
@@ -713,7 +713,7 @@ int density(TCSR<double> *KohnSham,TCSR<double> *Overlap,TCSR<CPX> *Ps,CPX energ
         c_zlacpy('A',ntriblock,nprotra,injl,ntriblock,Inj,HamSig->size_tot);
         c_zlacpy('A',ntriblock,nprotra,injr,ntriblock,&Inj[HamSig->size_tot*(nprotra+1)-ntriblock],HamSig->size_tot);
         LinearSolver<CPX>* solver;
-        solver = new MUMPS<CPX>(HamSig,MPI_COMM_WORLD);
+        solver = new Umfpack<CPX>(HamSig,MPI_COMM_WORLD);
         sabtime=get_time(d_zer);
         solver->prepare();
         solver->solve_equation(Sol,Inj,2*nprotra);

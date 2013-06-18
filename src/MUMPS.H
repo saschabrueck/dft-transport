@@ -138,7 +138,8 @@ void MUMPS<CPX>::solve_equation(CPX *res, CPX *arg_rhs, int no_rhs)
 
     id.nrhs     = no_rhs;
     id.lrhs     = id.n;
-    id.rhs      = new ZMUMPS_COMPLEX[no_rhs*2*id.n];// or mumps_double_complex???
+    id.rhs      = new F_DOUBLE[no_rhs*2*id.n];
+    //id.rhs      = new ZMUMPS_COMPLEX[no_rhs*2*id.n];
     id.job      = 3;
     
     if(mpi_rank){
@@ -190,7 +191,8 @@ void MUMPS<CPX>::create_local_matrix(TCSR<CPX> *matrix,ZMUMPS_STRUC_C *ZStruc)
     ZStruc->nz_loc  = matrix->n_nonzeros;
     ZStruc->irn_loc = new int[matrix->n_nonzeros];
     ZStruc->jcn_loc = new int[matrix->n_nonzeros];
-    ZStruc->a_loc   = new ZMUMPS_COMPLEX[matrix->n_nonzeros];
+    ZStruc->a_loc   = new F_DOUBLE[matrix->n_nonzeros];
+    //ZStruc->a_loc   = new ZMUMPS_COMPLEX[matrix->n_nonzeros];
 
     fst_row         = matrix->first_row;
     m_loc           = matrix->size;
