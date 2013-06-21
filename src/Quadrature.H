@@ -8,13 +8,14 @@
  *
  *  \brief User friendly access to quadrature types in \sa Quadrature
  *
- *  For a detailed description of the quadrature methods implemented, see
- *  \sa set_type
  *
  */
-enum class quadrature_type
-{
-  CCGL
+enum class quadrature_type {
+  CCGL,   // Complex Contour Gauss Legendre
+  GL,     // Gauss Legendre
+  ANPS,   // Areshkin-Nikolic Pole Summation
+  GC,     // Gauss Chebychev
+  //TR    // Trapezoidal Rule
 };
 
 /** \class Quadrature
@@ -28,30 +29,24 @@ enum class quadrature_type
  *  \version $Revision$
  *  \date $Date$
  */
-class Quadrature
-{
-  private:
-    double band_start;
-    double band_end;
-    quadrature_type itype;
-  public:
-    /// Vector containing the abscissae
-    std::vector<CPX> absc;
-    
-    /// Vector containing the corresponding weights
-    std::vector<CPX> weights;
+class Quadrature {
+ public:
+  std::vector<CPX> abscissae;    ///< Vector containing the abscissae
+  std::vector<CPX> weights; ///< Vector containing the corresponding weights
+  Quadrature(quadrature_type, double, double, double, double, unsigned int);
+  double get_start() {return band_start;}; ///< Get start of band
+  double get_end() {return band_end;}; ///< Get end of band
 
-    /// Constructor for direct initialization
-    Quadrature(quadrature_type, double, double, unsigned int);
-
-    /// Get start of band
-    double get_start() {return band_start;};
-
-    /// Get end of band
-    double get_end() {return band_end;};
+ private:
+  const double k = 8.617332478e-5;        // k in [eV/K]
+  double band_start;
+  double band_end;
+  double fermi_level;
+  double temperature;
+  quadrature_type my_type;
 };
 
 /// \exception Generic fault in Quadrature
-class exc_quadrature;
+class excQuadrature;
 
 #endif
