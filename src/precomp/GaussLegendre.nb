@@ -3,61 +3,126 @@
 NotebookFileLineBreakTest
 NotebookFileLineBreakTest
 NotebookDataPosition[         0,          0]
-NotebookDataLength[      6742,        176]
-NotebookOptionsPosition[      6012,        145]
-NotebookOutlinePosition[      6351,        160]
-CellTagsIndexPosition[      6308,        157]
+NotebookDataLength[      7603,        175]
+NotebookOptionsPosition[      7207,        155]
+NotebookOutlinePosition[      7546,        170]
+CellTagsIndexPosition[      7503,        167]
 WindowFrame->Normal*)
 
 (* Beginning of Notebook Content *)
 Notebook[{
-Cell[BoxData[
+Cell[BoxData[{
  RowBox[{
   RowBox[{
    RowBox[{"writeGaussLeg", "[", 
-    RowBox[{"degree_", ",", "abscfile_", ",", "weightsfile_"}], "]"}], ":=", 
-   RowBox[{"(", "\[IndentingNewLine]", 
+    RowBox[{"maxdegree_", ",", "abscfile_", ",", "weightsfile_"}], "]"}], ":=",
+    "\[IndentingNewLine]", 
+   RowBox[{"Module", "[", 
     RowBox[{
-     RowBox[{"precision", "=", "20"}], ";", "\[IndentingNewLine]", 
-     RowBox[{"nodes", "=", 
-      RowBox[{"Cases", "[", 
+     RowBox[{"{", 
+      RowBox[{
+      "precision", ",", " ", "nodes", ",", " ", "weights", ",", "nodesString",
+        ",", "weightsString", ",", "abscfilehandle", ",", 
+       "weightsfilehandle"}], "}"}], ",", 
+     RowBox[{
+      RowBox[{"precision", "=", "20"}], ";", "\[IndentingNewLine]", 
+      RowBox[{"abscfilehandle", "=", 
+       RowBox[{"OpenWrite", "[", "abscfile", "]"}]}], ";", 
+      "\[IndentingNewLine]", 
+      RowBox[{"weightsfilehandle", "=", 
+       RowBox[{"OpenWrite", "[", "weightsfile", "]"}]}], ";", 
+      "\[IndentingNewLine]", 
+      RowBox[{"Do", "[", "\[IndentingNewLine]", 
        RowBox[{
-        RowBox[{"NSolve", "[", 
-         RowBox[{
-          RowBox[{
-           RowBox[{"LegendreP", "[", 
-            RowBox[{"degree", ",", "x"}], "]"}], "\[Equal]", "0"}], ",", "x", 
-          ",", "precision"}], "]"}], ",", 
-        RowBox[{"_", "?", "NumericQ"}], ",", " ", "Infinity"}], "]"}]}], ";", 
-     
-     RowBox[{"weights", "=", 
-      RowBox[{"2", " ", "*", 
-       RowBox[{
-        RowBox[{"(", 
-         RowBox[{"1", "-", 
-          RowBox[{"nodes", "^", "2"}]}], ")"}], "/", 
         RowBox[{
-         RowBox[{"(", 
-          RowBox[{"degree", "*", 
-           RowBox[{"LegendreP", "[", 
+         RowBox[{"nodes", "=", 
+          RowBox[{"Cases", "[", 
+           RowBox[{
+            RowBox[{"NSolve", "[", 
+             RowBox[{
+              RowBox[{
+               RowBox[{"LegendreP", "[", 
+                RowBox[{"degree", ",", "x"}], "]"}], "\[Equal]", "0"}], ",", 
+              "x", ",", "precision"}], "]"}], ",", 
+            RowBox[{"_", "?", "NumericQ"}], ",", " ", "Infinity"}], "]"}]}], 
+         ";", 
+         RowBox[{"weights", "=", 
+          RowBox[{"2", " ", "*", 
+           RowBox[{
+            RowBox[{"(", 
+             RowBox[{"1", "-", 
+              RowBox[{"nodes", "^", "2"}]}], ")"}], "/", 
             RowBox[{
-             RowBox[{"degree", "-", "1"}], ",", "nodes"}], "]"}]}], ")"}], 
-         "^", "2"}]}]}]}], ";", "\[IndentingNewLine]", 
-     RowBox[{"WriteString", "[", 
-      RowBox[{"abscfile", ",", " ", 
-       RowBox[{"ToString", "[", 
-        RowBox[{"NumberForm", "[", 
-         RowBox[{
-          RowBox[{"N", "[", "nodes", "]"}], ",", "precision"}], "]"}], "]"}], 
-       ",", "\"\<,\\n\>\""}], "]"}], ";", "\[IndentingNewLine]", 
-     RowBox[{"WriteString", "[", 
-      RowBox[{"weightsfile", ",", " ", 
-       RowBox[{"ToString", "[", 
-        RowBox[{"NumberForm", "[", 
-         RowBox[{
-          RowBox[{"N", "[", "weights", "]"}], ",", "precision"}], "]"}], 
-        "]"}], ",", "\"\<,\\n\>\""}], "]"}]}], "\[IndentingNewLine]", ")"}]}],
-   "\[IndentingNewLine]"}]], "Input",
+             RowBox[{"(", 
+              RowBox[{"degree", "*", 
+               RowBox[{"LegendreP", "[", 
+                RowBox[{
+                 RowBox[{"degree", "-", "1"}], ",", "nodes"}], "]"}]}], ")"}],
+              "^", "2"}]}]}]}], ";", "\[IndentingNewLine]", 
+         RowBox[{"nodesString", "=", 
+          RowBox[{"StringReplace", "[", 
+           RowBox[{
+            RowBox[{"StringJoin", "[", 
+             RowBox[{"\"\<{\>\"", ",", 
+              RowBox[{
+               RowBox[{
+                RowBox[{"StringJoin", "[", 
+                 RowBox[{
+                  RowBox[{"ToString", "[", 
+                   RowBox[{
+                    RowBox[{"N", "[", "#", "]"}], ",", 
+                    RowBox[{"FormatType", "\[Rule]", "InputForm"}]}], "]"}], 
+                  ",", "\"\<,\>\""}], "]"}], "&"}], "/@", "nodes"}], ",", 
+              RowBox[{"If", "[", 
+               RowBox[{
+                RowBox[{"degree", "\[Equal]", " ", "maxdegree"}], ",", 
+                "\"\<}\\n\>\"", ",", "\"\<},\\n\>\""}], "]"}]}], "]"}], ",", 
+            RowBox[{"{", 
+             RowBox[{
+              RowBox[{"\"\<,}\>\"", "\[Rule]", "\"\<}\>\""}], ",", 
+              RowBox[{"\"\<*^\>\"", "\[Rule]", "\"\<e\>\""}]}], "}"}]}], 
+           "]"}]}], ";", "\[IndentingNewLine]", 
+         RowBox[{"weightsString", "=", 
+          RowBox[{"StringReplace", "[", 
+           RowBox[{
+            RowBox[{"StringJoin", "[", 
+             RowBox[{"\"\<{\>\"", ",", 
+              RowBox[{
+               RowBox[{
+                RowBox[{"StringJoin", "[", 
+                 RowBox[{
+                  RowBox[{"ToString", "[", 
+                   RowBox[{
+                    RowBox[{"N", "[", "#", "]"}], ",", 
+                    RowBox[{"FormatType", "\[Rule]", "InputForm"}]}], "]"}], 
+                  ",", "\"\<,\>\""}], "]"}], "&"}], "/@", "weights"}], ",", 
+              RowBox[{"If", "[", 
+               RowBox[{
+                RowBox[{"degree", "\[Equal]", "maxdegree"}], ",", 
+                "\"\<}\\n\>\"", ",", "\"\<},\\n\>\""}], "]"}]}], "]"}], ",", 
+            RowBox[{"{", 
+             RowBox[{
+              RowBox[{"\"\<,}\>\"", "\[Rule]", "\"\<}\>\""}], ",", 
+              RowBox[{"\"\<*^\>\"", "\[Rule]", "\"\<e\>\""}]}], "}"}]}], 
+           "]"}]}], ";", "\[IndentingNewLine]", 
+         RowBox[{"WriteString", "[", 
+          RowBox[{"abscfilehandle", ",", " ", "nodesString"}], "]"}], ";", 
+         "\[IndentingNewLine]", 
+         RowBox[{"WriteString", "[", 
+          RowBox[{"weightsfilehandle", ",", " ", "weightsString"}], "]"}]}], 
+        "\[IndentingNewLine]", ",", 
+        RowBox[{"{", 
+         RowBox[{"degree", ",", "maxdegree"}], "}"}]}], "]"}], ";", 
+      "\[IndentingNewLine]", 
+      RowBox[{"Close", "[", "abscfilehandle", "]"}], ";", 
+      "\[IndentingNewLine]", 
+      RowBox[{"Close", "[", "weightsfilehandle", "]"}], ";"}]}], 
+    "\[IndentingNewLine]", "]"}]}], 
+  "\[IndentingNewLine]"}], "\[IndentingNewLine]", 
+ RowBox[{"writeGaussLeg", "[", 
+  RowBox[{
+  "140", ",", "\"\<Quadrature_GL_absc.precomp\>\"", ",", 
+   "\"\<Quadrature_GL_weights.precomp\>\""}], "]"}]}], "Input",
  CellChangeTimes->{{3.5804486598484488`*^9, 3.580448672428816*^9}, {
    3.580448755813765*^9, 3.580448834130007*^9}, {3.5804490152213163`*^9, 
    3.5804490262638683`*^9}, {3.580449145418603*^9, 3.58044914635956*^9}, {
@@ -69,82 +134,27 @@ Cell[BoxData[
    3.5804648905025578`*^9, 3.580464891104004*^9}, {3.580465222970478*^9, 
    3.5804652360815077`*^9}, {3.5804654046103973`*^9, 3.580465420688066*^9}, {
    3.580467109916803*^9, 3.580467113646563*^9}, {3.580467249272265*^9, 
-   3.580467273084752*^9}, {3.580471894034848*^9, 3.580471923474453*^9}}],
-
-Cell[CellGroupData[{
-
-Cell[BoxData[{
- RowBox[{"abscfile", "=", 
-  RowBox[{
-  "OpenAppend", "[", "\"\<Integration_GL_absc.precomp\>\"", 
-   "]"}]}], "\[IndentingNewLine]", 
- RowBox[{"weightsfile", "=", 
-  RowBox[{
-  "OpenAppend", "[", "\"\<Integration_GL_weights.precomp\>\"", 
-   "]"}]}]}], "Input",
- CellChangeTimes->{{3.580463247321217*^9, 3.580463280078711*^9}, {
-  3.580465711221917*^9, 3.580465736508917*^9}, {3.580467098144536*^9, 
-  3.580467102705042*^9}, {3.580467597201642*^9, 3.5804676129440107`*^9}}],
-
-Cell[BoxData[
- RowBox[{"OutputStream", "[", 
-  RowBox[{"\<\"Integration_GL_absc.precomp\"\>", ",", "90"}], "]"}]], "Output",\
-
- CellChangeTimes->{
-  3.580463282165648*^9, 3.580464162600645*^9, 3.580464850678626*^9, 
-   3.580464910239771*^9, 3.5804652655044518`*^9, 3.580465741526383*^9, {
-   3.580467150461175*^9, 3.5804671745091753`*^9}, 3.580467628224886*^9, 
-   3.5805301386294727`*^9, 3.580531715015822*^9}],
-
-Cell[BoxData[
- RowBox[{"OutputStream", "[", 
-  RowBox[{"\<\"Integration_GL_weights.precomp\"\>", ",", "91"}], 
-  "]"}]], "Output",
- CellChangeTimes->{
-  3.580463282165648*^9, 3.580464162600645*^9, 3.580464850678626*^9, 
-   3.580464910239771*^9, 3.5804652655044518`*^9, 3.580465741526383*^9, {
-   3.580467150461175*^9, 3.5804671745091753`*^9}, 3.580467628224886*^9, 
-   3.5805301386294727`*^9, 3.580531715070868*^9}]
-}, Open  ]],
-
-Cell[BoxData[
- RowBox[{"Do", "[", 
-  RowBox[{
-   RowBox[{"writeGaussLeg", "[", 
-    RowBox[{"i", ",", "abscfile", ",", "weightsfile"}], "]"}], ",", 
-   RowBox[{"{", 
-    RowBox[{"i", ",", "25"}], "}"}]}], "]"}]], "Input",
- CellChangeTimes->{{3.580463297306028*^9, 3.5804633131834507`*^9}, {
-  3.580464181825037*^9, 3.580464192377022*^9}, {3.580464685063057*^9, 
-  3.580464730475951*^9}, {3.5804647912264223`*^9, 3.580464804711217*^9}, {
-  3.580467634687228*^9, 3.580467637802017*^9}, {3.580530117640293*^9, 
-  3.580530117763937*^9}, {3.580531702247788*^9, 3.580531702320178*^9}}],
-
-Cell[CellGroupData[{
-
-Cell[BoxData[{
- RowBox[{"Close", "[", "abscfile", "]"}], "\[IndentingNewLine]", 
- RowBox[{"Close", "[", "weightsfile", "]"}]}], "Input",
- CellChangeTimes->{{3.580463993164349*^9, 3.5804640260702257`*^9}, 
-   3.5804673478183107`*^9}],
-
-Cell[BoxData["\<\"Integration_GL_absc.precomp\"\>"], "Output",
- CellChangeTimes->{{3.5804640042368193`*^9, 3.5804640283792353`*^9}, 
-   3.580464268818948*^9, {3.580464898589716*^9, 3.580464916143911*^9}, 
-   3.580465256370302*^9, 3.5804657023289547`*^9, {3.5804671472254963`*^9, 
-   3.580467180958033*^9}, 3.580530131177106*^9, 3.580530344878284*^9, 
-   3.580531723103277*^9}],
-
-Cell[BoxData["\<\"Integration_GL_weights.precomp\"\>"], "Output",
- CellChangeTimes->{{3.5804640042368193`*^9, 3.5804640283792353`*^9}, 
-   3.580464268818948*^9, {3.580464898589716*^9, 3.580464916143911*^9}, 
-   3.580465256370302*^9, 3.5804657023289547`*^9, {3.5804671472254963`*^9, 
-   3.580467180958033*^9}, 3.580530131177106*^9, 3.580530344878284*^9, 
-   3.58053172310898*^9}]
-}, Open  ]]
+   3.580467273084752*^9}, {3.580471894034848*^9, 3.580471923474453*^9}, {
+   3.58057286466619*^9, 3.580572875802026*^9}, {3.580572907383819*^9, 
+   3.5805729114029016`*^9}, {3.580572947275879*^9, 3.580573103334746*^9}, {
+   3.580573253388258*^9, 3.580573307010171*^9}, {3.580573606894203*^9, 
+   3.5805737437955093`*^9}, {3.580573965390873*^9, 3.5805739975159693`*^9}, {
+   3.580574078005859*^9, 3.58057408453862*^9}, {3.580574150462037*^9, 
+   3.580574228793955*^9}, {3.580574292532865*^9, 3.580574338151436*^9}, {
+   3.580574423884359*^9, 3.580574577973536*^9}, {3.580574937165216*^9, 
+   3.580574999903598*^9}, {3.580575032924985*^9, 3.58057510534439*^9}, {
+   3.58057519201632*^9, 3.580575210103455*^9}, {3.5805752432785378`*^9, 
+   3.580575323952176*^9}, {3.580575355651867*^9, 3.580575408587881*^9}, {
+   3.5805754503292847`*^9, 3.580575451787665*^9}, {3.5805755603531103`*^9, 
+   3.580575568139226*^9}, {3.580575745198082*^9, 3.580575819327497*^9}, {
+   3.580575891960759*^9, 3.580575892363661*^9}, {3.580575966765904*^9, 
+   3.580575969433666*^9}, {3.5805760167669973`*^9, 3.580576040961746*^9}, {
+   3.580576099225884*^9, 3.5805761789737988`*^9}, 3.580576229177184*^9, {
+   3.580576330860805*^9, 3.58057633104359*^9}, {3.5806204568901443`*^9, 
+   3.5806204802772007`*^9}, {3.580620841151248*^9, 3.580620846248736*^9}}]
 },
-WindowSize->{987, 577},
-WindowMargins->{{Automatic, 418}, {221, Automatic}},
+WindowSize->{1386, 922},
+WindowMargins->{{Automatic, -10}, {78, Automatic}},
 FrontEndVersion->"9.0 for Linux x86 (64-bit) (November 20, 2012)",
 StyleDefinitions->"Default.nb"
 ]
@@ -159,18 +169,7 @@ CellTagsIndex->{}
 *)
 (*NotebookFileOutline
 Notebook[{
-Cell[400, 13, 2639, 58, 187, "Input"],
-Cell[CellGroupData[{
-Cell[3064, 75, 489, 11, 55, "Input"],
-Cell[3556, 88, 411, 8, 32, "Output"],
-Cell[3970, 98, 415, 8, 32, "Output"]
-}, Open  ]],
-Cell[4400, 109, 579, 11, 32, "Input"],
-Cell[CellGroupData[{
-Cell[5004, 124, 232, 4, 55, "Input"],
-Cell[5239, 130, 376, 5, 32, "Output"],
-Cell[5618, 137, 378, 5, 89, "Output"]
-}, Open  ]]
+Cell[400, 13, 6803, 140, 429, "Input"]
 }
 ]
 *)
