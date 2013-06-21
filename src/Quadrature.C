@@ -21,17 +21,37 @@ class excQuadrature: public std::exception {
 /** \brief Initializer
  *
  *  Currently implemented methods for quadrature:
+ *    - 'quadrature_type::GL'
+ *      Real line Gauss-Legendre. Abscissae and weights are precalculated
+ *      up to machine precision, maximum number of abscissae is 140.
  *    - 'quadrature_type::CCGL'
- *      Complex contour Gauss Legendre. Abscissae and weights are
- *      precalculated up to machine precision, maximum number of
- *      abscissae is 140.
+ *      Complex contour Gauss Legendre. Same as above but abscissae are
+ *      located on a half circle in the upper complex plane.
+ *    - 'quadrature_type::ANPS'
+ *      Areshkin-Nikolic Pole Summation. Quadrature by replacing the
+ *      fermi function with a suitable alternative to sum up over
+ *      the residues of the poles. For more details, see
+ *      'Electron density and transport in top-gated graphene nanoribbon
+ *      devices: First-principles Green function algorithms for systems 
+ *      containing a large number of atoms', Areshkin&Nikolic, 
+ *      Phys. Rev. B. 81, 2010
+ *    - 'quadrature_type::GC'
+ *      Real line Gauss-Chebychev. Abscissae and weights are calculated
+ *      on the fly. This method allows for a pole on the upper end of the
+ *      integration domain.
  *
- * \param quadrature_type The type of quadrature for which the abscissae/weights are to be loaded or calculated. See above for a list of supported values.
+ * \param quadrature_type The type of quadrature for which the 
+ *                        abscissae/weights are to be loaded or 
+ *                        calculated. See above for a list of 
+ *                        supported values.
  * \param start Lower bound of range with nonzero state density in [eV]
  * \param end Upper bound of range with nonzero state density in [eV]
  * \param T Temperature in [K]
  * \param Ef Fermi level in [eV]
- * \param num_abscissae How many abscissae to use for the quadrature
+ * \param num_abscissae For GL, CCGL and GC: How many abscissae to use 
+ *                      for the quadrature. For ANPS: exponent specifying
+ *                      the precision, base e. Set to n to specify a
+ *                      precision of exp(-6).
  */
 Quadrature::Quadrature(quadrature_type type, double start, double end,
                        double T, double Ef, unsigned int num_abscissae) {

@@ -11,10 +11,10 @@
  *
  */
 enum class quadrature_type {
-  CCGL,   // Complex Contour Gauss Legendre
-  GL,     // Gauss Legendre
+  CCGL,   // Complex Contour Gauss-Legendre
+  GL,     // Gauss-Legendre
   ANPS,   // Areshkin-Nikolic Pole Summation
-  GC,     // Gauss Chebychev
+  GC,     // Gauss-Chebychev
   //TR    // Trapezoidal Rule
 };
 
