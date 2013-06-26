@@ -4,7 +4,7 @@
 int diagscalapack(TCSR<double>*,TCSR<double>*,TCSR<double>*,int);
 int energyvector(TCSR<double>*,TCSR<double>*,TCSR<double>*);
 
-void c_scf_method(c_DBCSR S, c_DBCSR KS, c_DBCSR * P)
+void c_scf_method(int nelectron, c_DBCSR S, c_DBCSR KS, c_DBCSR * P)
 {
    Vector1D<int> row_block_size, col_block_size, local_rows, row_dist, col_dist, 
                  nblkrows_local_all, nrows_local_all, first_rows;
@@ -66,7 +66,7 @@ if (counter==6) remove("nocc");
       int nocc;
       noccfile >> nocc;
       if (!rank) cout << "Starting ScaLaPackDiag" << endl;
-      if (diagscalapack(Overlap,KohnSham,Ps,nocc)) throw 0;
+      if (diagscalapack(Overlap,KohnSham,Ps,nelectron)) throw 0;
    } else {
       if (!rank) cout << "Starting Transport" << endl;
       if (energyvector(Overlap,KohnSham,Ps)) throw 0;
