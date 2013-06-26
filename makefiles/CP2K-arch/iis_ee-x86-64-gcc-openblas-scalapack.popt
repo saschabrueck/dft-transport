@@ -1,0 +1,33 @@
+# This arch-file allows compilation of CP2K on iis.ee.ethz.ch machines. It
+# assumes that GCC, scalapack, openblas, fftw and mpich2 are installed
+# separately. To use my installations (tuned for attelas*.ee.ethz.ch):
+#
+#   BASE=/home/mauro/sw
+#   export PATH=$BASE/gcc/4.8.1/bin:$BASE/mpich2/bin:$PATH
+#   export LD_LIBRARY_PATH="$BASE/openblas/lib:$BASE/scalapack/lib:$BASE/gcc/4.8.1/lib64:$BASE/gcc/4.8.1/lib:$LD_LIBRARY_PATH"
+#
+
+BASE     = /home/mauro/sw
+GCC_LIB  = $(BASE)/gcc/4.8.1/lib64
+SCALAPACK_LIB = $(BASE)/scalapack/lib
+OPENBLAS_LIB = $(BASE)/openblas/lib
+FFTW_LIB = $(BASE)/fftw/gcc/lib
+FFTW_INC = $(BASE)/fftw/gcc/include
+
+CC       = cc
+CPP      = 
+
+FC       = mpif90 
+LD       = mpif90
+
+AR       = ar -r
+
+CPPFLAGS = 
+DFLAGS   = -D__GFORTRAN -D__FFTSG -D__FFTW3 -D__parallel -D__SCALAPACK -D__BLACS 
+FCFLAGS  = -O3 -march=native -ffast-math -funroll-loops -g -ffree-form \
+           $(DFLAGS) -I$(FFTW_INC)
+LDFLAGS  = $(FCFLAGS) -L$(GCC_LIB) -L$(SCALAPACK_LIB) -L$(OPENBLAS_LIB) \
+           -L$(FFTW_LIB)
+LIBS     = -lstdc++ -lfftw3 -lscalapack -lopenblas 
+
+OBJECTS_ARCHITECTURE = machine_gfortran.o
