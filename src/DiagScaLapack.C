@@ -39,7 +39,8 @@ int diagscalapack(TCSR<double> *Overlap,TCSR<double> *KohnSham,TCSR<double> *P_M
         npcol=nprocs/nprow;
     } // end while
     if (!iam) cout <<"Procs "<<nprocs<<" Rows "<<nprow<<" Cols "<<npcol<<endl;
-    int icontxt=int(MPI_COMM_WORLD);
+//    int icontxt=int(MPI_COMM_WORLD);
+    int icontxt=MPI_Comm_c2f(MPI_COMM_WORLD);
     Cblacs_gridinit(&icontxt,"R",nprow,npcol);
     Cblacs_gridinfo(icontxt,&nprow,&npcol,&myrow,&mycol);
     int row_per_processor    = nvec/nprow;
@@ -127,10 +128,12 @@ int diagscalapack(TCSR<double> *Overlap,TCSR<double> *KohnSham,TCSR<double> *P_M
     if (!iam) cout << "Time after MPI " << get_time(sabtime) << endl;
 
     if (!iam) P_Matrix->write_CSR("Pmatrix");
-    if (!iam) for (int ii=0;ii<nvec;ii++) cout<<eigval[ii]<<endl;
+//    if (!iam) for (int ii=0;ii<nvec;ii++) cout<<eigval[ii]<<endl;
+    if (!iam) print_array(eigval,nvec);
     delete[] eigval;
 
     Cblacs_gridexit(icontxt);
 
     return 0;
 }
+
