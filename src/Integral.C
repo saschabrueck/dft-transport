@@ -22,6 +22,7 @@ void integrate(TCSR<double> *S_split, TCSR<double> *KohnSham_split,
   TCSR<double> *KohnSham = new TCSR<double>(KohnSham_split, MPI_COMM_WORLD);
   TCSR<double> *S = new TCSR<double>(S_split, MPI_COMM_WORLD);
   TCSR<CPX> *P = new TCSR<CPX>(S->size, S->n_nonzeros, S->findx);
+  P->init_variable(P->nnz,P->n_nonzeros);
   // TODO: decide what integral method to use on what energy range
   unsigned int num_abscissae = 100;
   Quadrature integral = Quadrature(quadrature_type::CCGL, parameters.band_start,
@@ -29,15 +30,13 @@ void integrate(TCSR<double> *S_split, TCSR<double> *KohnSham_split,
                                    parameters.Ef, num_abscissae);
   int my_abscissae_start = ...;
   int my_abscissae_end = ...;
-  int method = 2;       // this is for density()
+  int method = 2;       // 1 means GF, 2 means WF, for complex contour use 1 later
   for (auto i = my_abscissa_start; i < my_abscissa_end; ++i) {
     auto abscissa = integral.abscissae[i];
     auto weight = integral.weights[i];
-    // TODO: this call requires an interface change in density to include
-    //       the weights and add the 'new' P to the old one
     density(KohnSham, S, P, abscissa, weight, method, parameters);
   }
-  P->reducescatterfactorconvert(P, MPI_COMM_WORLD, 1.0);
+  P->reducescatterconvert(P, MPI_COMM_WORLD);
 };
 
 } // namespace

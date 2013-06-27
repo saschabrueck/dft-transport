@@ -13,8 +13,9 @@ using namespace std;
 #include "Umfpack.H"
 //#include "MUMPS.H"
 //#include "Pardiso.H"
+#include "Density.H"
 
-int density(TCSR<double> *KohnSham,TCSR<double> *Overlap,TCSR<CPX> *Ps,CPX energy,int method,ParameterStruct parameter_sab)
+int density(TCSR<double> *KohnSham,TCSR<double> *Overlap,TCSR<CPX> *Ps,CPX energy,CPX weight,int method,ParameterStruct parameter_sab)
 {
     int iam, nprocs;
     MPI_Comm_size(MPI_COMM_WORLD,&nprocs);
@@ -726,7 +727,7 @@ int density(TCSR<double> *KohnSham,TCSR<double> *Overlap,TCSR<CPX> *Ps,CPX energ
         //c_zgemm('N','C',ndof*ncells,ndof*ncells,2*nprotra,alphastep/(2*M_PI),Sol,ndof*ncells,Sol,ndof*ncells,z_zer,Pmat,ndof*ncells);
         //cout << "TIME FOR CONSTRUCTION OF FULL DENSITY MATRIX " << get_time(sabtime) << endl;
         sabtime=get_time(d_zer);
-        Ps->psipsidagger(Overlap,Sol,2*nprotra);
+        Ps->psipsidaggerfactoradd(Overlap,Sol,2*nprotra,weight);
         cout << "TIME FOR CONSTRUCTION OF S-PATTERN DENSITY MATRIX " << get_time(sabtime) << endl;
 // transmission
         CPX *vecoutdof=new CPX[ndof];

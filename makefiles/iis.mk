@@ -37,7 +37,7 @@ QHULLLIB      = $(LIB_TOP)/QHULL/src/libqhull.a
 SUPERLULIB    = $(LIB_TOP)/SuperLU_DIST_2.0/Lib/libsuperlu_dist_2.0.a
 UMFPACKLIB    = $(LIB_TOP)/UMFPACK/Lib/libumfpack.a
 
-LFLAGS = -L$(BASE)/cp2k/cp2k/lib/iis_ee-x86-64-gcc-openblas-scalapack/popt/ \
+LFLAGS = -L/usr/zupo/sim3/bruecks/cp2k/cp2k/lib/iis_ee-x86-64-gcc-openblas-scalapack/popt/ \
 	-L$(GCC_LIB) -L$(SCALAPACK_LIB) -L$(OPENBLAS_LIB) -L$(FFTW_LIB)
 DFLAGS =
 LIBS = $(SUPERLULIB) $(UMFPACKLIB) $(AMDLIB) $(METISLIB) $(MUMPSLIB) $(PORDLIB) \

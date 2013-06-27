@@ -34,11 +34,17 @@ int energyvector(TCSR<double> *Overlap,TCSR<double> *KohnSham,TCSR<double> *P_Ma
 //    TCSR<double> *KohnShamCollect = new TCSR<double>("CNT5_h.mtx");
 //    TCSR<double> *OverlapCollect  = new TCSR<double>("CNT5_s.mtx");
     TCSR<CPX> *Ps = new TCSR<CPX>(OverlapCollect->size,OverlapCollect->n_nonzeros,OverlapCollect->findx);
+    Ps->init_variable(Ps->nnz,Ps->n_nonzeros);
 // run 
     int method=2;
-    if (density(KohnShamCollect,OverlapCollect,Ps,energy,method,parameter_sab)) return (cerr<<__LINE__<<endl, EXIT_FAILURE);
+    if (density(KohnShamCollect,OverlapCollect,Ps,energy,step,method,parameter_sab)) return (cerr<<__LINE__<<endl, EXIT_FAILURE);
+// trPS
+    CPX trPScpx=c_ddot(Ps->n_nonzeros,(double*) Ps->nnz,2,OverlapCollect->nnz,1);
+    CPX trPScpxSum=CPX(0.0,0.0);
+    MPI_Allreduce(&trPScpx,&trPScpxSum,1,MPI_DOUBLE_COMPLEX,MPI_SUM,MPI_COMM_WORLD);
+    if (!iam) cout << "Number of electrons from density matrix tr(PS) " << real(trPScpxSum) << endl;
 // sum and scatter to distributed p matrix
-    Ps->reducescatterfactorconvert(P_Matrix,MPI_COMM_WORLD,step);
+    Ps->reducescatterconvert(P_Matrix,MPI_COMM_WORLD);
 
     return 0;
 }
