@@ -83,7 +83,9 @@ public:
     void assembleshift(TCSR<T>*,TCSR<T>*,TCSR<T>*,int,int);
     void reducescatter(TCSR<T>*,MPI_Comm);
     void reducescatterfactorconvert(TCSR<double>*,MPI_Comm,double);
+    void reducescatterconvert(TCSR<double>*,MPI_Comm);
     void psipsidagger(TCSR<double>*,CPX*,int);
+    void psipsidaggerfactoradd(TCSR<double>*,CPX*,int,CPX);
 // sab end
     void set_nnz(int,T*);
     void set_index_i(int,int*);
@@ -1219,6 +1221,29 @@ inline void TCSR<CPX>::reducescatterfactorconvert(TCSR<double>*matdist,MPI_Comm 
 /************/
 
 template <>
+inline void TCSR<CPX>::reducescatterconvert(TCSR<double>*matdist,MPI_Comm my_comm)
+{
+    int iam,nprocs;
+    MPI_Comm_size(my_comm,&nprocs);
+    MPI_Comm_rank(my_comm,&iam);
+
+    int *recvcounts=new int[nprocs];
+
+    int recvloc=matdist->n_nonzeros;
+    MPI_Allgather(&recvloc,1,MPI_INT,recvcounts,1,MPI_INT,my_comm);
+
+    double *nnztmp = new double[n_nonzeros];
+    c_dcopy(n_nonzeros,(double*)nnz,2,nnztmp,1);
+
+    MPI_Reduce_scatter(nnztmp,matdist->nnz,recvcounts,give_me_MPI_datatype(nnztmp),MPI_SUM,my_comm);
+
+    delete[] nnztmp;
+    delete[] recvcounts;
+}
+
+/************/
+
+template <>
 inline void TCSR<CPX>::psipsidagger(TCSR<double> *mat,CPX* phi,int nkval)
 {
     size       = mat->size;
@@ -1237,6 +1262,31 @@ inline void TCSR<CPX>::psipsidagger(TCSR<double> *mat,CPX* phi,int nkval)
     for(i=0;i<size;i++){
         for(j=edge_i[i]-findx;j<edge_i[i+1]-findx;j++){
             nnz[element++]=c_zdotc(nkval,&phi[index_j[j]-findx],size,&phi[i],size);
+        }
+    }
+}
+
+/************/
+
+template <>
+inline void TCSR<CPX>::psipsidaggerfactoradd(TCSR<double> *mat,CPX* phi,int nkval,CPX factor)
+{
+    size       = mat->size;
+    size_tot   = mat->size_tot;
+    type       = mat->type;
+    n_nonzeros = mat->n_nonzeros;
+    findx      = mat->findx;
+    first_row  = mat->first_row;
+
+    c_icopy(size,mat->index_i,1,index_i,1);
+    c_icopy(n_nonzeros,mat->index_j,1,index_j,1);
+    c_icopy(size+1,mat->edge_i,1,edge_i,1);
+    c_icopy(size,mat->diag_pos,1,diag_pos,1);
+
+    int i,j,element=0;
+    for(i=0;i<size;i++){
+        for(j=edge_i[i]-findx;j<edge_i[i+1]-findx;j++){
+            nnz[element++]+=factor*c_zdotc(nkval,&phi[index_j[j]-findx],size,&phi[i],size);
         }
     }
 }
