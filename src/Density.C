@@ -262,9 +262,9 @@ int density(TCSR<double> *KohnSham,TCSR<double> *Overlap,TCSR<CPX> *Ps,CPX energ
         double eigi=eigvalimag[iindnzcoln];
         if ( (abs(eigr)>eps_limit || abs(eigi)>eps_limit) && (abs(eigr+1)>eps_limit || abs(eigi)>eps_limit) ) {
            CPX lambda=z_one/(z_one/CPX(eigr,eigi)+z_one);
-           if (abs(lambda)>d_one+eps_decay && inj_sign>0 || abs(lambda)<d_one-eps_decay && inj_sign<0)
+           if ((abs(lambda)>d_one+eps_decay && inj_sign>0) || (abs(lambda)<d_one-eps_decay && inj_sign<0))
                dectravec[ndectra++]=iindnzcoln;
-           else if (abs(lambda)<d_one-eps_decay && inj_sign>0 || abs(lambda)>d_one+eps_decay && inj_sign<0)
+           else if ((abs(lambda)<d_one-eps_decay && inj_sign>0) || (abs(lambda)>d_one+eps_decay && inj_sign<0))
                decrefvec[ndecref++]=iindnzcoln;
            else {
                c_zcopy(ndofsq,&KScpx[(bandwidth+1)*ndofsq],1,matcdof,1);
