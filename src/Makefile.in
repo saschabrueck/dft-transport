@@ -1,4 +1,3 @@
-
 ifneq (,$(findstring .mk,@arch@))
 ARCH = ../makefiles/@arch@
 else
@@ -9,23 +8,28 @@ include $(ARCH)
 
 LDFLAGS = $(LFLAGS) $(DFLAGS)
 
-SOURCES = main.cpp cDBCSR_tools.cpp c_scf.cpp DiagScaLapack.C Density.C EnergyVector.C
-CFILES = array_tools.C Utilities.C CSR.C
+MAIN = main.cpp
+SOURCES_CPP = cDBCSR_tools.cpp c_scf.cpp
+SOURCES_C = array_tools.C Utilities.C CSR.C DiagScaLapack.C Density.C EnergyVector.C Pardiso.C Quadrature.C
 
-OBJECTS = $(SOURCES:.cpp=.o) $(CFILES) $(TIMINGS)
+OBJECTS = $(SOURCES_CPP:.cpp=.o) $(SOURCES_C:.C=.o)
 EXECUTABLE = interface
+MYEXECUTABLE = mymain
 
-all: $(SOURCES) $(EXECUTABLE)
+all: $(SOURCES_CPP) $(SOURCES_C) $(EXECUTABLE)
 
-$(EXECUTABLE): $(OBJECTS)
+$(EXECUTABLE): $(MAIN:.cpp=.o) $(OBJECTS)
 	$(CPP) $(CXXFLAGS) $(INCLUDES) -o $@ $(OBJECTS) $(LDFLAGS) $(LIBS)
 
 .cpp.o:
 	$(CPP) $(INCLUDES) $(CXXFLAGS) -c $< -o $@
 
-#.C.o:
-#	$(CPP) $(INCLUDES) $(CXXFLAGS) -c $< -o $@
+.C.o:
+	$(CPP) $(INCLUDES) $(CXXFLAGS) -c $< -o $@ $(LDFLAGS) $(LIBS)
+
+$(MYEXECUTABLE): $(MYEXECUTABLE).cc $(SOURCES_CPP) $(SOURCES_C) $(OBJECTS)
+	$(CPP) $(CXXFLAGS) $(INCLUDES) $(MYEXECUTABLE).cc -o $@ $(OBJECTS) $(PARDISO) $(LDFLAGS) $(LIBS)
 
 .PHONY: clean
 clean:
-	rm -rf *o $(EXECUTABLE) output.out csr.*
+	rm -rf *.o $(EXECUTABLE) $(MYEXECUTABLE) output.out csr.*
