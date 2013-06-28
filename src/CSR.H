@@ -86,6 +86,7 @@ public:
     void reducescatterconvert(TCSR<double>*,MPI_Comm);
     void psipsidagger(TCSR<double>*,CPX*,int);
     void psipsidaggerfactoradd(TCSR<double>*,CPX*,int,CPX);
+    void moveawaypbc(T*,T*,int,int);
 // sab end
     void set_nnz(int,T*);
     void set_index_i(int,int*);
@@ -1287,6 +1288,37 @@ inline void TCSR<CPX>::psipsidaggerfactoradd(TCSR<double> *mat,CPX* phi,int nkva
     for(i=0;i<size;i++){
         for(j=edge_i[i]-findx;j<edge_i[i+1]-findx;j++){
             nnz[element++]+=factor*c_zdotc(nkval,&phi[index_j[j]-findx],size,&phi[i],size);
+        }
+    }
+}
+
+/************/
+
+template <class T>
+void TCSR<T>::moveawaypbc(T *left, T *right, int bw, int ndof)
+{
+    int i,e;
+    int bwndof=bw*ndof;
+    T zero;
+    init_variable(&zero,1);
+    init_variable(left,size_tot*size_tot);
+    init_variable(right,size_tot*size_tot);
+
+    for (i=0;i<bwndof;i++) {
+        for (e=edge_i[i];e<edge_i[i+1];e++) {
+            if (index_j[e]-i>=bwndof) {
+                right[i+index_j[e]*size_tot]=nnz[e];
+                nnz[e]=zero;
+            }
+        }
+    }
+
+    for (i=size_tot-bwndof;i<size_tot;i++) {
+        for (e=edge_i[i];e<edge_i[i+1];e++) {
+            if (index_j[e]-i<=bwndof) {
+                left[i+index_j[e]*size_tot]=nnz[e];
+                nnz[e]=zero;
+            }
         }
     }
 }

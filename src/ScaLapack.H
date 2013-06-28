@@ -64,10 +64,10 @@ extern "C" {
 
 
     void fortran_name(blacs_pinfo,BLACS_pinfo)(int*,int*);
-//    void fortran_name(blacs_get,BLACS_GET)(int*,int*,int*);
+    void fortran_name(blacs_get,BLACS_GET)(int*,int*,int*);
     void fortran_name(blacs_gridinit,BLACS_GRIDINIT)(int*,char*,int*,int*);
     void fortran_name(blacs_gridinfo,BLACS_GRIDINFO)(int*,int*,int*,int*,int*);
-    void fortran_name(blacs_gridexit,blacs_gridexit)(int*);
+    void fortran_name(blacs_gridexit,BLACS_GRIDEXIT)(int*);
 }
 
 /*Lapack*****************************************************************************************/
@@ -329,10 +329,10 @@ inline void Cblacs_pinfo(int *MYPNUM,int *NPROCS)
 
 /************************************************************************************************/
 
-//inline void Cblacs_get(int ICONTXT,int WHAT,int *VAL)
-//{
-//    fortran_name(blacs_get,BLASCS_GET)(&ICONTXT,&WHAT,VAL);
-//}
+inline void Cblacs_get(int ICONTXT,int WHAT,int *VAL)
+{
+    fortran_name(blacs_get,BLASCS_GET)(&ICONTXT,&WHAT,VAL);
+}
 
 /************************************************************************************************/
 
@@ -352,7 +352,7 @@ inline void Cblacs_gridinfo(int ICONTXT,int *NPROW,int *NPCOL,int *MYPROW,int *M
 
 inline void Cblacs_gridexit(int ICONTXT)
 {
-    fortran_name(blacs_gridexit,blacs_gridexit)(&ICONTXT);
+    fortran_name(blacs_gridexit,BLACS_GRIDEXIT)(&ICONTXT);
 }
 
 /*Own********************************************************************************************/
