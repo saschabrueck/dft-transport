@@ -19,7 +19,7 @@ MYEXECUTABLE = mymain
 all: $(SOURCES_CPP) $(SOURCES_C) $(EXECUTABLE)
 
 $(EXECUTABLE): $(MAIN:.cpp=.o) $(OBJECTS)
-	$(CPP) $(CXXFLAGS) $(INCLUDES) -o $@ $(OBJECTS) $(LDFLAGS) $(LIBS)
+	$(CPP) $(CXXFLAGS) $(INCLUDES) -o $@ $(MAIN:.cpp=.o) $(OBJECTS) $(LDFLAGS) $(LIBS)
 
 .cpp.o:
 	$(CPP) $(INCLUDES) $(CXXFLAGS) -c $< -o $@
