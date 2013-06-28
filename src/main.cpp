@@ -43,7 +43,7 @@ int main (int argc, char **argv)
    int fcomm, init_mpi, finalize_mpi;
    double e_pot;
    char *input_file;
-   char *output_file = OUTPUT_FILE;
+   char *output_file = (char *)OUTPUT_FILE;
 //   char *output_file;
    double *pos, *force;
 //   int myid, nproc;
