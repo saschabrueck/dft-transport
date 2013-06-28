@@ -65,6 +65,9 @@ Quadrature::Quadrature(quadrature_type type, double start, double end,
   } else {
     throw excQuadrature("Invalid range specified");
   }
+  if (num_abscissae == 0) {
+    throw excQuadrature("Invalid number of abscissae specified");
+  }
   switch (my_type) {
     case quadrature_type::CCGL: {
       if (num_abscissae >= GaussLegendre::abscissae.size() || 
@@ -76,7 +79,7 @@ Quadrature::Quadrature(quadrature_type type, double start, double end,
       const auto abscissae_precalc = GaussLegendre::abscissae[num_abscissae-1];
       const auto weights_precalc = GaussLegendre::weights[num_abscissae-1];
       CPX fermi = {1.0, 0.0};
-      for (int i = 0; i <= num_abscissae - 1; ++i) {
+      for (uint i = 0; i <= num_abscissae - 1; ++i) {
         // Shift the precalculated abscissa from [-1 1] to [0, pi] interval
         auto abscissa = abscissae_precalc[i] * (PI - 0.0) / 2.0 +
                         (PI + 0.0) / 2.0;
@@ -103,7 +106,7 @@ Quadrature::Quadrature(quadrature_type type, double start, double end,
       const auto abscissae_precalc = GaussLegendre::abscissae[num_abscissae-1];
       const auto weights_precalc = GaussLegendre::weights[num_abscissae-1];
       auto fermi = 1.0;
-      for (int i = 0; i <= num_abscissae - 1; ++i) {
+      for (uint i = 0; i <= num_abscissae - 1; ++i) {
         auto abscissa = abscissae_precalc[i] * (band_end - band_start) / 2.0 + 
                        (band_end + band_start) / 2.0;
         abscissae.push_back(abscissa);
@@ -120,8 +123,8 @@ Quadrature::Quadrature(quadrature_type type, double start, double end,
       //       specification of the precision (as exponent p of e)
       // TODO: check eqn. 8 in the paper and print a warning if it doesn't hold
       // TODO: this method doesn't work for T=0
-      auto test_begin = 10;
-      auto test_end = 30;
+      //auto test_begin = 10;
+      //auto test_end = 30;
       auto precision_exponent = 30;
       auto precision = exp(-precision_exponent);
       // Loop for minimizing the number of poles for a given precision
@@ -235,7 +238,7 @@ Quadrature::Quadrature(quadrature_type type, double start, double end,
         throw excQuadrature("Invalid number of abscissae");
       }
       auto fermi = 1.0;
-      for (int n = 1; n <= num_abscissae; ++n) {
+      for (uint n = 1; n <= num_abscissae; ++n) {
         auto abscissa = -(cos(PI * (2 * n - 1.0) / (2.0 * num_abscissae)) *
                         (band_end - band_start) / 2.0 +
                         (band_end + band_start) / 2.0);
