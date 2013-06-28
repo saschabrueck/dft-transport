@@ -39,7 +39,8 @@ extern "C" {
     void fortran_name(zcopy,ZCOPY)(int *n,CPX *dx,int *incx,CPX *dy,int *incy);
     void fortran_name(zaxpy,ZAXPY)(int *n, CPX *alpha, CPX *x, int *incx, CPX *y, int *incy);
     double fortran_name(dasum,DASUM)(int *n,double *dx,int *incx);
-    double fortran_name(dzasum,DASUM)(int *n,CPX *dx,int *incx);
+// SAB
+    double fortran_name(dzasum,DZASUM)(int *n,CPX *dx,int *incx);
 
 //Lapack
     void fortran_name(dgetrf,DGETRF)(int *m, int *n, double *a, int *lda, int *ipiv, int *info);
@@ -83,9 +84,12 @@ extern "C" {
     void fortran_name(dstebz,DSTEBZ)(char *range,char *order,int *iter,double *vl,double *vu,int *il,int *iu,\
                                      double *abstol,double *diag,double *offd,int *neval,int *nsplit,\
                                      double *eval,int *iblock,int *isplit,double *work,int *iwork,int *info);
-	void fortran_name(zlarnv,ZLARNV)(int*,int*,int*,CPX*);
+    void fortran_name(zlarnv,ZLARNV)(int*,int*,int*,CPX*);
+// SAB
     void fortran_name(dsygv,DSYGV)(int *itype,char *jobz,char *uplo,int *n,double *a,int *lda,double *b,int *ldb,\
                     double *w,double *work,int *lwork,int *info);
+    void fortran_name(zhegv,ZHEGV)(int *itype,char *jobz,char *uplo,int *n,CPX *a,int *lda,CPX *b,int *ldb,\
+                    double *w,CPX *work,int *lwork,double *rwork,int *info);
 }
 
 /*My Blas*******************************************************************************************/
@@ -230,14 +234,14 @@ inline double c_dasum(int n,double *dx,int incx)
     return fortran_name(dasum,DASUM)(&n,dx,&incx);
 }
 
-/****SAB****/
+/*SAB********************************************************************************************/
 
 inline double c_dzasum(int n,CPX *dx,int incx)
 {
     return fortran_name(dzasum,DZASUM)(&n,dx,&incx);
 }
 
-/************************************************************************************************/
+/*SAB*END****************************************************************************************/
 
 template <typename T,typename W>
 inline void c_tcopy(int n,T *dx,int incx,W *dy,int incy);
@@ -446,14 +450,6 @@ inline void c_dsysv(char uplo,int n,int nrhs,double *a,int lda,int *ipiv,double 
 
 /************************************************************************************************/
 
-inline void c_dsygv(int itype,char jobz,char uplo,int n,double *a,int lda,double *b,int ldb,\
-                    double *w,double *work,int lwork,int *info)
-{
-    fortran_name(dsygv,DSYGV)(&itype,&jobz,&uplo,&n,a,&lda,b,&ldb,w,work,&lwork,info);
-}
-
-/************************************************************************************************/
-
 inline void c_dsytrf(char uplo,int n,double *a,int lda,int *ipiv,double *work,int lwork,int *info)
 {
     fortran_name(dsytrf,DSYTRF)(&uplo,&n,a,&lda,ipiv,work,&lwork,info);
@@ -477,10 +473,31 @@ inline void c_dstebz(char *range,char *order,int *iter,double *vl,double *vu,int
 	                            iblock,isplit,work,iwork,info);
 }
 
+/************************************************************************************************/
+
 inline void c_zlarnv(int *idist,int *iseed,int n,CPX *x)
 {
 	fortran_name(zlarnv,ZLARNV)(idist,iseed,&n,x);
 }
+
+/*SAB********************************************************************************************/
+
+inline void c_dsygv(int itype,char jobz,char uplo,int n,double *a,int lda,double *b,int ldb,\
+                    double *w,double *work,int lwork,int *info)
+{
+    fortran_name(dsygv,DSYGV)(&itype,&jobz,&uplo,&n,a,&lda,b,&ldb,w,work,&lwork,info);
+}
+
+/************************************************************************************************/
+
+inline void c_zhegv(int itype,char jobz,char uplo,int n,CPX *a,int lda,CPX *b,int ldb,\
+                    double *w,CPX *work,int lwork,double *rwork,int *info)
+{
+    fortran_name(zhegv,ZHEGV)(&itype,&jobz,&uplo,&n,a,&lda,b,&ldb,w,work,&lwork,rwork,info);
+}
+
+/*SAB*END****************************************************************************************/
+
 #endif
 
 
