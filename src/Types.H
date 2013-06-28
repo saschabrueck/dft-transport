@@ -39,11 +39,12 @@ using namespace std;
 #define scale_norm 1.0
 #endif
 
-#ifndef __MINMAX
-#define __MINMAX
-#define min(a,b) (((a)<(b))?(a):(b))
-#define max(a,b) (((a)>(b))?(a):(b))
-#endif
+// This breaks the Pardiso header
+//#ifndef __MINMAX
+//#define __MINMAX
+//#define min(a,b) (((a)<(b))?(a):(b))
+//#define max(a,b) (((a)>(b))?(a):(b))
+//#endif
 
 #ifdef Add_
 #define fortran_name(x,y) (x ## _)
