@@ -1211,7 +1211,7 @@ cout<<"whatever"<<endl;
 
         LinearSolver<CPX>* solver;
 cout <<"INIT SOLVER"<<endl;
-        solver = new MUMPS<CPX>(HamSig,MPI_COMM_WORLD);
+        solver = new Umfpack<CPX>(HamSig,MPI_COMM_WORLD);
         sabtime=get_time(d_zer);
 cout <<"PREPARE SOLVER"<<endl;
         solver->prepare();

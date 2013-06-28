@@ -45,8 +45,8 @@ using namespace std;
 
 #include "LinearSolver.H"
 //#include "SuperLU.H"
-//#include "Umfpack.H"
-#include "MUMPS.H"
+#include "Umfpack.H"
+//#include "MUMPS.H"
 //#include "Pardiso.H"
 
 #endif

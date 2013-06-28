@@ -1,6 +1,7 @@
 #include "c_scf.H"
 
-//int greensolver(TCSR<double>*,TCSR<double>*,TCSR<double>*);
+int kpointintegration(TCSR<double>*,TCSR<double>*,TCSR<double>*,int);
+int greensolver(TCSR<double>*,TCSR<double>*,TCSR<double>*);
 int diagscalapack(TCSR<double>*,TCSR<double>*,TCSR<double>*,int);
 int energyvector(TCSR<double>*,TCSR<double>*,TCSR<double>*);
 
@@ -61,17 +62,21 @@ countfile.seekg(ios_base::beg);
 countfile << counter;
 if (counter==6) remove("nocc");
 */
-   ifstream noccfile("nocc");
-   if (noccfile) {
-      int nocc;
-      noccfile >> nocc;
+   ifstream diagfile("DoDiag");
+   ifstream expefile("DoExperimental");
+   ifstream kpoifile("DoKPoint");
+   if (diagfile) {
       if (!rank) cout << "Starting ScaLaPackDiag" << endl;
       if (diagscalapack(Overlap,KohnSham,Ps,nelectron)) throw 0;
+   } else if (kpoifile) {
+      if (!rank) cout << "Starting KPointIntegration" << endl;
+      if (kpointintegration(Overlap,KohnSham,Ps,nelectron)) throw 0;
+   } else if (expefile) {
+      if (!rank) cout << "Starting experimental code" << endl;
+      if (greensolver(Overlap,KohnSham,Ps)) throw 0;
    } else {
       if (!rank) cout << "Starting Transport" << endl;
       if (energyvector(Overlap,KohnSham,Ps)) throw 0;
-// below my experimental code
-//     if (greensolver(Overlap,KohnSham,Ps)) throw 0;
    }
 
    CSR_to_cDBCSR(Ps, *P, row_block_size, col_block_size, row_dist, col_dist, local_rows, nblkrows_local_all);
