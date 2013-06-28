@@ -31,18 +31,12 @@ int density(TCSR<double> *KohnSham,TCSR<double> *Overlap,TCSR<CPX> *Ps,CPX energ
     double sabtime;
     int iinfo=0;
 // get parameters
-    int ndof=parameter_sab.ndof;
+    int ncells=parameter_sab.ncells;
     int bandwidth=parameter_sab.bandwidth;
     double evoltfactor=parameter_sab.evoltfactor;
     double colzerothr=parameter_sab.colzerothr;
     double eps_limit=parameter_sab.eps_limit;
     double eps_decay=parameter_sab.eps_decay;
-    int ndofsq,ndofsqbandwidth;
-    ndofsq=ndof*ndof;
-    ndofsqbandwidth=ndofsq*(2*bandwidth+1);
-    int ntriblock=bandwidth*ndof;
-    int triblocksize=ntriblock*ntriblock;
-    ndofsqbandwidth=ndofsq*(2*bandwidth+1);
 // complex or real energy
     int complexenergypoint=0;
     if (imag(energy)) complexenergypoint=1;
@@ -51,14 +45,22 @@ int density(TCSR<double> *KohnSham,TCSR<double> *Overlap,TCSR<CPX> *Ps,CPX energ
     int inj_sign=-1;
 // H-E*S
     TCSR<CPX> *SumHamC;
-    CPX* KScpx=new CPX[ndofsqbandwidth];
 // WARNING BECAUSE OF PBC IN HAMILTONIAN IT CANNOT DETERMINE BANDWIDTH
 //    bandwidth=max(KohnSham->get_bandwidth(ndof),Overlap->get_bandwidth(ndof));
         //TCSR<CPX> *SumHamC = new TCSR<CPX>(SumHam->size_tot,SumHam->n_nonzeros,SumHam->findx);
         //SumHamC->copy_contain(SumHam,d_one);
     SumHamC = new TCSR<CPX>(CPX(evoltfactor,d_zer),KohnSham,-energy,Overlap);
-    int ncells=SumHamC->size_tot/ndof;
+// set parameters
+    int ndof=SumHamC->size_tot/ncells;
     if (ndof*ncells!=SumHamC->size_tot) return (cerr<<__LINE__<<endl, EXIT_FAILURE);
+    int ndofsq,ndofsqbandwidth;
+    ndofsq=ndof*ndof;
+    ndofsqbandwidth=ndofsq*(2*bandwidth+1);
+    int ntriblock=bandwidth*ndof;
+    int triblocksize=ntriblock*ntriblock;
+    ndofsqbandwidth=ndofsq*(2*bandwidth+1);
+// copy block
+    CPX* KScpx=new CPX[ndofsqbandwidth];
     SumHamC->contactunitcell(KScpx,ndof,bandwidth,1);
     double* KSfull=new double[ndofsqbandwidth];
     c_dcopy(ndofsqbandwidth,(double*)KScpx,2,KSfull,1);
