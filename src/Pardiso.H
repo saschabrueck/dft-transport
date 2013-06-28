@@ -3,7 +3,8 @@
 
 #include "Types.H"
 #include <complex>
-#include <omp.h>
+#include "CSR.H"
+// will need to make some includes
 
 namespace Pardiso {
 
