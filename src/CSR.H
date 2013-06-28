@@ -33,12 +33,14 @@ public:
     TCSR(const char*);
     TCSR(char*,int,int);
 // sab begin
-    TCSR(T,TCSR<double>*,T,TCSR<double>*);
 // THIS CONSTRUCTOR WILL CREATE A MATRIX BY WEIGHTED SUMMING OF TWO OTHERS
-    TCSR(TCSR<double>*,double*,double,int);
+    TCSR(T,TCSR<double>*,T,TCSR<double>*);
 // and this will construct the density matrix on the TCSR sparsity pattern
-    TCSR(TCSR<T>*,MPI_Comm);
+// WITH THE TRANSPOSED ORBITALS AS INPUT
+    TCSR(TCSR<double>*,double*,double,int);
+    TCSR(TCSR<double>*,CPX*,CPX,int);
 // and this is the gather
+    TCSR(TCSR<T>*,MPI_Comm);
 // sab end
     ~TCSR();
     void change_contain(TCSR<T>*);
@@ -151,7 +153,7 @@ inline TCSR<T>::TCSR(TCSR<T> *mat)
     c_icopy(size,mat->diag_pos,1,diag_pos,1);
 }
 
-/********************SAB*************************/
+/******************** written by SAB ********************/
 
 template <class T>
 inline TCSR<T>::TCSR(T alphafactor,TCSR<double> *A,T betafactor,TCSR<double> *B)
@@ -203,7 +205,7 @@ inline TCSR<T>::TCSR(T alphafactor,TCSR<double> *A,T betafactor,TCSR<double> *B)
     get_diag_pos();
 }
 
-/************************************************************************************************/
+/******************** written by SAB ********************/
 
 template <>
 inline TCSR<double>::TCSR(TCSR<double> *mat,double* phi,double factor,int nkval)
@@ -238,7 +240,42 @@ inline TCSR<double>::TCSR(TCSR<double> *mat,double* phi,double factor,int nkval)
 
 }
 
-/********** written by SAB **********/
+/******************** written by SAB ********************/
+
+template <>
+inline TCSR<CPX>::TCSR(TCSR<double> *mat,CPX* phi,CPX factor,int nkval)
+{
+
+    nnz        = new CPX[mat->n_nonzeros];
+    index_i    = new int[mat->size];
+    index_j    = new int[mat->n_nonzeros];
+    edge_i     = new int[mat->size+1];
+    diag_pos   = new int[mat->size];
+
+    size       = mat->size;
+    size_tot   = mat->size_tot;
+    type       = mat->type;
+    n_nonzeros = mat->n_nonzeros;
+    findx      = mat->findx;
+    first_row  = mat->first_row;
+
+    c_icopy(size,mat->index_i,1,index_i,1);
+    c_icopy(n_nonzeros,mat->index_j,1,index_j,1);
+    c_icopy(size+1,mat->edge_i,1,edge_i,1);
+    c_icopy(size,mat->diag_pos,1,diag_pos,1);
+
+    int i,j;
+
+    int element=0;
+    for(i=0;i<size;i++){
+        for(j=edge_i[i]-findx;j<edge_i[i+1]-findx;j++){
+            nnz[element++]=factor*c_zdotc(nkval,&phi[(index_j[j]-findx)*size],1,&phi[i*size],1);
+        }
+    }
+
+}
+
+/******************** written by SAB ********************/
 
 template <class T>
 inline TCSR<T>::TCSR(TCSR<T> *matlocal,MPI_Comm my_comm)
@@ -1006,7 +1043,7 @@ void TCSR<T>::sparse_to_full(T *B,int nrow,int ncol)
     }
 }
 
-/******************SAB ADDED THIS ***************************************************************/
+/*SAB********************************************************************************************/
 
 template <class T>
 int TCSR<T>::get_bandwidth(int ndof)
@@ -1022,7 +1059,7 @@ int TCSR<T>::get_bandwidth(int ndof)
 // maybe add security check to make sure that bandw from other side is the same
 }
 
-/*********/
+/************************************************************************************************/
 
 template <class T>
 void TCSR<T>::contactunitcell(T *contacty,int rows,int ndof,int bandw,int signy)
@@ -1050,7 +1087,7 @@ void TCSR<T>::contactunitcell(T *contacty,int rows,int ndof,int bandw,int signy)
     }
 }
 
-/*********/
+/************************************************************************************************/
 
 template <class T>
 void TCSR<T>::contactunitcell(T *contacty,int ndof,int bandw,int signy)
@@ -1080,7 +1117,7 @@ void TCSR<T>::contactunitcell(T *contacty,int ndof,int bandw,int signy)
     }
 }
 
-/*********/
+/************************************************************************************************/
 
 template <class T>
 int TCSR<T>::additionalentries(TCSR<T> *mat)
@@ -1105,7 +1142,7 @@ int TCSR<T>::additionalentries(TCSR<T> *mat)
     return additional;
 }
 
-/************/
+/************************************************************************************************/
 
 template <class T>
 void  TCSR<T>::assemble(TCSR<T> *leftmat,TCSR<T> *middlemat,TCSR<T> *rightmat,int lsize,int rsize)
@@ -1145,7 +1182,7 @@ void  TCSR<T>::assemble(TCSR<T> *leftmat,TCSR<T> *middlemat,TCSR<T> *rightmat,in
 
 }
 
-/************/
+/************************************************************************************************/
 
 template <class T>
 void  TCSR<T>::assembleshift(TCSR<T> *leftmat,TCSR<T> *middlemat,TCSR<T> *rightmat,int lrsize,int shift)
@@ -1176,7 +1213,7 @@ void  TCSR<T>::assembleshift(TCSR<T> *leftmat,TCSR<T> *middlemat,TCSR<T> *rightm
     get_diag_pos();
 }
 
-/************/
+/************************************************************************************************/
 
 template <class T>
 void TCSR<T>::reducescatter(TCSR<T>*matdist,MPI_Comm my_comm)
@@ -1195,7 +1232,7 @@ void TCSR<T>::reducescatter(TCSR<T>*matdist,MPI_Comm my_comm)
     delete[] recvcounts;
 }
 
-/************/
+/************************************************************************************************/
 
 template <>
 inline void TCSR<CPX>::reducescatterfactorconvert(TCSR<double>*matdist,MPI_Comm my_comm, double factor)
@@ -1219,7 +1256,7 @@ inline void TCSR<CPX>::reducescatterfactorconvert(TCSR<double>*matdist,MPI_Comm 
     delete[] recvcounts;
 }
 
-/************/
+/************************************************************************************************/
 
 template <>
 inline void TCSR<CPX>::reducescatterconvert(TCSR<double>*matdist,MPI_Comm my_comm)
@@ -1242,7 +1279,7 @@ inline void TCSR<CPX>::reducescatterconvert(TCSR<double>*matdist,MPI_Comm my_com
     delete[] recvcounts;
 }
 
-/************/
+/************************************************************************************************/
 
 template <>
 inline void TCSR<CPX>::psipsidagger(TCSR<double> *mat,CPX* phi,int nkval)
@@ -1267,7 +1304,7 @@ inline void TCSR<CPX>::psipsidagger(TCSR<double> *mat,CPX* phi,int nkval)
     }
 }
 
-/************/
+/************************************************************************************************/
 
 template <>
 inline void TCSR<CPX>::psipsidaggerfactoradd(TCSR<double> *mat,CPX* phi,int nkval,CPX factor)
@@ -1292,7 +1329,7 @@ inline void TCSR<CPX>::psipsidaggerfactoradd(TCSR<double> *mat,CPX* phi,int nkva
     }
 }
 
-/************/
+/************************************************************************************************/
 
 template <class T>
 void TCSR<T>::moveawaypbc(T *left, T *right, int bw, int ndof)
@@ -1315,7 +1352,7 @@ void TCSR<T>::moveawaypbc(T *left, T *right, int bw, int ndof)
 
     for (i=size_tot-bwndof;i<size_tot;i++) {
         for (e=edge_i[i];e<edge_i[i+1];e++) {
-            if (index_j[e]-i<=bwndof) {
+            if (index_j[e]-i<=-bwndof) {
                 left[i+index_j[e]*size_tot]=nnz[e];
                 nnz[e]=zero;
             }
@@ -1323,7 +1360,7 @@ void TCSR<T>::moveawaypbc(T *left, T *right, int bw, int ndof)
     }
 }
 
-/************************************************************************************************/
+/*SAB*END****************************************************************************************/
 
 template <class T>
 void TCSR<T>::full_to_sparse(T *B,int nrow,int ncol)
