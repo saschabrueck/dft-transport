@@ -10,7 +10,7 @@ LDFLAGS = $(LFLAGS) $(DFLAGS)
 
 MAIN = main.cpp
 SOURCES_CPP = cDBCSR_tools.cpp c_scf.cpp
-SOURCES_C = array_tools.C Utilities.C CSR.C DiagScaLapack.C Density.C EnergyVector.C Pardiso.C Quadrature.C
+SOURCES_C = array_tools.C Utilities.C CSR.C DiagScaLapack.C Density.C EnergyVector.C Quadrature.C
 
 OBJECTS = $(SOURCES_CPP:.cpp=.o) $(SOURCES_C:.C=.o)
 EXECUTABLE = interface
@@ -28,7 +28,7 @@ $(EXECUTABLE): $(MAIN:.cpp=.o) $(OBJECTS)
 	$(CPP) $(INCLUDES) $(CXXFLAGS) -c $< -o $@ $(LDFLAGS) $(LIBS)
 
 $(MYEXECUTABLE): $(MYEXECUTABLE).cc $(SOURCES_CPP) $(SOURCES_C) $(OBJECTS)
-	$(CPP) $(CXXFLAGS) $(INCLUDES) $(MYEXECUTABLE).cc -o $@ $(OBJECTS) $(PARDISO) $(LDFLAGS) $(LIBS)
+	$(CPP) $(CXXFLAGS) $(INCLUDES) $(MYEXECUTABLE).cc -o $@ $(OBJECTS) $(LDFLAGS) $(LIBS)
 
 .PHONY: clean
 clean:
