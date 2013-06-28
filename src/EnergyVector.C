@@ -13,7 +13,7 @@ int energyvector(TCSR<double> *Overlap,TCSR<double> *KohnSham,TCSR<double> *P_Ma
     double energystart;
     double energyend;
     ifstream paramfile("Parameters");
-    paramfile >> parameter_sab.bandwidth >> parameter_sab.ndof >> parameter_sab.evoltfactor >> parameter_sab.colzerothr >> parameter_sab.eps_limit >> parameter_sab.eps_decay >> energystart >> energyend;
+    paramfile >> parameter_sab.bandwidth >> parameter_sab.ncells >> parameter_sab.evoltfactor >> parameter_sab.colzerothr >> parameter_sab.eps_limit >> parameter_sab.eps_decay >> energystart >> energyend;
     paramfile.close();
     if (parameter_sab.bandwidth<1) return (cerr<<__LINE__<<endl, EXIT_FAILURE);
 // get integration points along real axis with simple uniform trapezoidal rule

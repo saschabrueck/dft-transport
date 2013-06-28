@@ -397,7 +397,7 @@ struct VOLTAGE
 struct ParameterStruct
 {
 int bandwidth;
-int ndof;
+int ncells;
 double evoltfactor;
 double colzerothr;
 double eps_limit;
