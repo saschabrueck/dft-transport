@@ -600,6 +600,8 @@ PACKAGE_BUGREPORT=''
 
 ac_subst_vars='LTLIBOBJS
 LIBOBJS
+pardiso_so
+pardiso
 arch
 target_alias
 host_alias
@@ -642,6 +644,7 @@ ac_subst_files=''
 ac_user_opts='
 enable_option_checking
 with_arch
+with_pardiso
 '
       ac_precious_vars='build_alias
 host_alias
@@ -1268,6 +1271,7 @@ Optional Packages:
   --with-PACKAGE[=ARG]    use PACKAGE [ARG=yes]
   --without-PACKAGE       do not use PACKAGE (same as --with-PACKAGE=no)
   --with-arch             machine dependent .mk file. Default: arch1
+  --with-pardiso          enable Pardiso. Default: no
 
 _ACEOF
 ac_status=$?
@@ -1755,6 +1759,11 @@ ac_compiler_gnu=$ac_cv_cxx_compiler_gnu
 #	fi
 #])
 
+#AC_CHECK_HEADERS(iostream)
+#AC_CHECK_LIB(m, cos)
+
+
+#AC_SUBST(mpicompile, MPI)
 
 # Check whether --with-arch was given.
 if test "${with_arch+set}" = set; then
@@ -1764,19 +1773,48 @@ fi
 
 if test "$with_arch" != ""
 then
-    { $as_echo "$as_me:$LINENO: Your machine dependent makefile is $with_arch. Default is: arch1" >&5
+	{ $as_echo "$as_me:$LINENO: Your machine dependent makefile is $with_arch. Default is: arch1" >&5
 $as_echo "$as_me: Your machine dependent makefile is $with_arch. Default is: arch1" >&6;}
-    arch=$with_arch
+	arch=$with_arch
 
 elif test "$with_arch" = ""
 then
-    { $as_echo "$as_me:$LINENO: WARNING: No architecture dependent makefile specified. ARCH is set to the default: arch1" >&5
+	{ $as_echo "$as_me:$LINENO: WARNING: No architecture dependent makefile specified. ARCH is set to the default: arch1" >&5
 $as_echo "$as_me: WARNING: No architecture dependent makefile specified. ARCH is set to the default: arch1" >&2;}
-    { $as_echo "$as_me:$LINENO: If you have a different architecture please specify it as --with-arch=myarch" >&5
+	{ $as_echo "$as_me:$LINENO: If you have a different architecture please specify it as --with-arch=myarch" >&5
 $as_echo "$as_me: If you have a different architecture please specify it as --with-arch=myarch" >&6;}
-    arch=arch1
+	arch=arch1
+
+#else
+#	AC_MSG_NOTICE([No stuff for you.])
+fi
+
+
+# Check whether --with-pardiso was given.
+if test "${with_pardiso+set}" = set; then
+  withval=$with_pardiso; with_pardiso=$withval
+fi
+
+
+if test "x$with_pardiso" == "xyes"; then
+    { $as_echo "$as_me:$LINENO: Pardiso enabled." >&5
+$as_echo "$as_me: Pardiso enabled." >&6;}
+    pardiso=Pardiso.C
+
+    pardiso_so='$(PARDISO)'
+
+#elif test "$with_pardiso" != ""
+#then
+#    AC_MSG_NOTICE([No Pardiso.])
+#    AC_SUBST(pardiso,)
+else
+   { $as_echo "$as_me:$LINENO: No Pardiso." >&5
+$as_echo "$as_me: No Pardiso." >&6;}
+
 
 fi
+
+#AC_SUBST(arch, arch1)
 
 ac_config_files="$ac_config_files Makefile"
 
