@@ -53,15 +53,15 @@ void c_scf_method(int nelectron, c_DBCSR S, c_DBCSR KS, c_DBCSR * P)
 
    Ps = new TCSR<double>(nrows_local, S.n_nze, 0);
    Ps->copy_index(Overlap);
-/*
-fstream countfile("countfile");
+
+/*fstream countfile("countfile");
 int counter;
 countfile >> counter;
 counter++;
 countfile.seekg(ios_base::beg);
 countfile << counter;
-if (counter==6) remove("nocc");
-*/
+if (counter==6) remove("DoDiag");*/
+
    ifstream diagfile("DoDiag");
    ifstream expefile("DoExperimental");
    ifstream kpoifile("DoKPoint");
