@@ -44,7 +44,8 @@ public:
 // sab end
     ~TCSR();
     void change_contain(TCSR<T>*);
-    void copy_index(TCSR<T>*);
+    void copy_index(TCSR<double>*);
+    void copy_index(TCSR<CPX>*);
     void copy_contain(TCSR<double>*,double);
     void copy_contain(TCSR<CPX>*,double);
     void cpu_distribute(int*,int*,int,int,int);
@@ -477,7 +478,7 @@ void TCSR<T>::change_contain(TCSR<T> *mat)
 /************************************************************************************************/
 
 template <class T>
-void TCSR<T>::copy_index(TCSR<T> *mat)
+void TCSR<T>::copy_index(TCSR<double> *mat)
 {
     size       = mat->size;
     size_tot   = mat->size_tot;
@@ -492,6 +493,23 @@ void TCSR<T>::copy_index(TCSR<T> *mat)
     c_icopy(size,mat->diag_pos,1,diag_pos,1);
 }
 
+/************************************************************************************************/
+
+template <class T>
+void TCSR<T>::copy_index(TCSR<CPX> *mat)
+{
+    size       = mat->size;
+    size_tot   = mat->size_tot;
+    type       = mat->type;
+    n_nonzeros = mat->n_nonzeros;
+    findx      = mat->findx;
+    first_row  = mat->first_row;
+
+    c_icopy(size,mat->index_i,1,index_i,1);
+    c_icopy(n_nonzeros,mat->index_j,1,index_j,1);
+    c_icopy(size+1,mat->edge_i,1,edge_i,1);
+    c_icopy(size,mat->diag_pos,1,diag_pos,1);
+}
 /************************************************************************************************/
 /*
 template <>
@@ -1343,7 +1361,7 @@ void TCSR<T>::moveawaypbc(T *left, T *right, int bw, int ndof)
 
     for (i=0;i<bwndof;i++) {
         for (e=edge_i[i];e<edge_i[i+1];e++) {
-            if (index_j[e]-i>=bwndof) {
+            if (index_j[e]-i>=bwndof+ndof) {
                 right[i+index_j[e]*size_tot]=nnz[e];
                 nnz[e]=zero;
             }
