@@ -23,6 +23,14 @@ int kpointintegration(TCSR<double> *Overlap,TCSR<double> *KohnSham,TCSR<double> 
         value=-M_PI+iam*step;
     }
 
+    double alphastep;
+    if (nprocs==1)
+        alphastep=1.0;
+    else if (!iam || iam==nprocs-1)
+        alphastep=1.0/2;
+    else
+        alphastep=1.0;
+
     TCSR<double> *KohnShamCollect = new TCSR<double>(KohnSham,MPI_COMM_WORLD);
     TCSR<double> *OverlapCollect = new TCSR<double>(Overlap,MPI_COMM_WORLD);
 
@@ -66,18 +74,33 @@ int kpointintegration(TCSR<double> *Overlap,TCSR<double> *KohnSham,TCSR<double> 
     CPX *work=new CPX[lwork];
     c_zhegv(1,'V','U',size,A,size,B,size,eigval,work,lwork,rwork,&info);
     if (info) { cout<<info<<endl; return info; }
+    delete[] work;
 
-    double alphastep;
-    if (nprocs==1)
-        alphastep=1.0;
-    else if (!iam || iam==nprocs-1)
-        alphastep=step/2;
-    else
-        alphastep=step;
+    double fermi;
+    if (!iam) fermi=(eigval[nocc-1]+eigval[nocc])/2;
+    MPI_Bcast(&fermi,1,MPI_DOUBLE,0,MPI_COMM_WORLD);
+    int nocclocal=-1;
+    while (eigval[++nocclocal]<fermi);
+    int nocctry=0;
+    MPI_Allreduce(&nocclocal,&nocctry,1,MPI_INT,MPI_SUM,MPI_COMM_WORLD);
+    if (!iam) cout << "New Fermi Level " << fermi << endl;
+    cout << iam << " contributes " << nocclocal << endl;
+    if (!iam) cout << "New Number of Electrons " << (double) nocctry/nprocs << endl;
+    while (nocctry!=nocc*nprocs) {
+        if (nocctry<nocc*nprocs) fermi=(fermi+eigval[nocc])/2;
+        if (nocctry>nocc*nprocs) fermi=(fermi+eigval[nocc-1])/2;
+        MPI_Bcast(&fermi,1,MPI_DOUBLE,0,MPI_COMM_WORLD);
+        if (!iam) cout << "New Fermi Level " << fermi << endl;
+        nocclocal=-1;
+        while (eigval[++nocclocal]<fermi);
+        cout << iam << " contributes " << nocclocal << endl;
+        MPI_Allreduce(&nocclocal,&nocctry,1,MPI_INT,MPI_SUM,MPI_COMM_WORLD);
+        if (!iam) cout << "New Number of Electrons " << (double) nocctry/nprocs << endl;
+    }
 
     full_transpose(size,size,A,B);
     delete[] A;
-    TCSR<CPX> *Ps = new TCSR<CPX>(OverlapCollect,B,CPX(alphastep,0.0),nocc);
+    TCSR<CPX> *Ps = new TCSR<CPX>(OverlapCollect,B,CPX(alphastep*step/(2*M_PI),0.0),nocclocal);
     delete[] B;
     delete OverlapCollect;
 
