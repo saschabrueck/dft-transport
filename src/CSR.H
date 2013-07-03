@@ -1065,15 +1065,16 @@ void TCSR<T>::sparse_to_full(T *B,int nrow,int ncol)
 
 template <class T>
 int TCSR<T>::get_bandwidth(int ndof)
+// do not use, delete later, contains error (should be edge_i[ndof+1] I think), is useless
 {
     int jmax=0;
-    for(int entry=0;entry<edge_i[ndof];entry++) {
-        if (index_j[entry]>jmax) {
-            jmax=index_j[entry];
+    for(int entry=0;entry<edge_i[ndof]-findx;entry++) {
+        if (index_j[entry]-findx>jmax && nnz[entry]!=0.0) {
+            jmax=index_j[entry]-findx;
         }
     }
     double bandw=ceil(double(jmax)/ndof);
-    return int(bandw);
+    return int(bandw)-1;
 // maybe add security check to make sure that bandw from other side is the same
 }
 
@@ -1360,18 +1361,18 @@ void TCSR<T>::moveawaypbc(T *left, T *right, int bw, int ndof)
     init_variable(right,size_tot*size_tot);
 
     for (i=0;i<bwndof;i++) {
-        for (e=edge_i[i];e<edge_i[i+1];e++) {
-            if (index_j[e]-i>=bwndof+ndof) {
-                right[i+index_j[e]*size_tot]=nnz[e];
+        for (e=edge_i[i]-findx;e<edge_i[i+1]-findx;e++) {
+            if (index_j[e]-findx-i>=bwndof) {
+                right[i+(index_j[e]-findx)*size_tot]=nnz[e];
                 nnz[e]=zero;
             }
         }
     }
 
     for (i=size_tot-bwndof;i<size_tot;i++) {
-        for (e=edge_i[i];e<edge_i[i+1];e++) {
-            if (index_j[e]-i<=-bwndof) {
-                left[i+index_j[e]*size_tot]=nnz[e];
+        for (e=edge_i[i]-findx;e<edge_i[i+1]-findx;e++) {
+            if (index_j[e]-findx-i<=-bwndof) {
+                left[i+(index_j[e]-findx)*size_tot]=nnz[e];
                 nnz[e]=zero;
             }
         }
