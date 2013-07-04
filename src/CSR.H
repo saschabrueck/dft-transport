@@ -231,11 +231,9 @@ inline TCSR<double>::TCSR(TCSR<double> *mat,double* phi,double factor,int nkval)
     c_icopy(size,mat->diag_pos,1,diag_pos,1);
 
     int i,j;
-
-    int element=0;
     for(i=0;i<size;i++){
         for(j=edge_i[i]-findx;j<edge_i[i+1]-findx;j++){
-            nnz[element++]=factor*c_ddot(nkval,&phi[(index_j[j]-findx)*size],1,&phi[i*size],1);
+            nnz[j]=factor*c_ddot(nkval,&phi[(index_j[j]-findx)*size],1,&phi[i*size],1);
         }
     }
 
@@ -266,11 +264,9 @@ inline TCSR<CPX>::TCSR(TCSR<double> *mat,CPX* phi,CPX factor,int nkval)
     c_icopy(size,mat->diag_pos,1,diag_pos,1);
 
     int i,j;
-
-    int element=0;
     for(i=0;i<size;i++){
         for(j=edge_i[i]-findx;j<edge_i[i+1]-findx;j++){
-            nnz[element++]=factor*c_zdotc(nkval,&phi[(index_j[j]-findx)*size],1,&phi[i*size],1);
+            nnz[j]=factor*c_zdotc(nkval,&phi[(index_j[j]-findx)*size],1,&phi[i*size],1);
         }
     }
 
