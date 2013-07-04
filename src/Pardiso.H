@@ -8,8 +8,8 @@
 
 namespace Pardiso {
 
-void sparse_inv(TCSR<double> *matrix);
-void sparse_inv(TCSR<CPX> *matrix);
+void sparse_invert(TCSR<double> *matrix);
+void sparse_invert(TCSR<CPX> *matrix);
 
 }
 

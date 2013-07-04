@@ -326,6 +326,41 @@ inline TCSR<T>::TCSR(TCSR<T> *matlocal,MPI_Comm my_comm)
 template <>
 inline TCSR<CPX>::TCSR(const char *filename)
 {
+
+    int i, ind_i;
+    FILE *F = fopen(filename, "r");
+    double real_i, imag_i;
+
+    fscanf(F,"%i",&size);
+    fscanf(F,"%i",&n_nonzeros);
+    fscanf(F,"%i",&findx);
+
+    nnz        = new CPX[n_nonzeros];
+    index_i    = new int[size];
+    index_j    = new int[n_nonzeros];
+    edge_i     = new int[size+1];
+    diag_pos   = new int[size];
+
+    size_tot   = size;
+    type       = 0;
+    first_row  = 0;
+
+    for(i=0;i<size;i++) index_i[i] = 0;
+
+    for(i=0;i<n_nonzeros;i++){
+        fscanf(F,"%i",&ind_i);
+        fscanf(F,"%i",index_j+i);
+        fscanf(F,"%lg",&real_i);
+        fscanf(F,"%lg",&imag_i);
+        nnz[i] = CPX(real_i,imag_i);
+
+        if(ind_i==index_j[i]){
+            diag_pos[ind_i-findx] = i;
+        }
+        index_i[ind_i-findx]++;
+    }
+    get_row_edge();
+    fclose(F);
 }
 
 /***********************************************************************************************/
@@ -355,13 +390,12 @@ inline TCSR<double>::TCSR(const char *filename)
    
     for(i=0;i<n_nonzeros;i++){
         fscanf(F,"%i",&ind_i);
-	fscanf(F,"%i",index_j+i);
-	fscanf(F,"%lg",nnz+i);
-	if(ind_i==index_j[i]){
-	    diag_pos[ind_i-findx] = i;
-	}
-	index_i[ind_i-findx]++;
-	
+	      fscanf(F,"%i",index_j+i);
+	      fscanf(F,"%lg",nnz+i);
+	      if(ind_i==index_j[i]){
+	          diag_pos[ind_i-findx] = i;
+	      }
+	      index_i[ind_i-findx]++;
     }
     get_row_edge();
     fclose(F);

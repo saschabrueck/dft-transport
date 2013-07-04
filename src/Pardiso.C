@@ -5,9 +5,9 @@
 
 extern "C" {
 
-    void fortran_name(pardisoinit,PARDISOINIT)(void*,int*,int*,int*,\
+    void fortran_name(pardisoinit,PARDISOINIT)(void*,int*,int*,int*,
         double*,int*);
-    int fortran_name(pardiso,PARDISO)(void*,int*,int*, int*,int*,int*,\
+    int fortran_name(pardiso,PARDISO)(void*,int*,int*, int*,int*,int*,
         CPX*,int*,int*,int*,int*,int*,int*,CPX*,CPX*,int*,double*);
 }
 
@@ -26,7 +26,7 @@ namespace Pardiso {
  *       in CSR format
  *  \post The input matrix has been replaced by its inverse
  */
-void sparse_inv(TCSR<CPX> *matrix) {
+void sparse_invert(TCSR<CPX> *matrix) {
   // Input parameters for pardiso (see pardiso documentation)
   int maxfct = 1;
   int mnum = 1;
@@ -43,7 +43,7 @@ void sparse_inv(TCSR<CPX> *matrix) {
   int iparam[64];
   double dparam[64];
 
-  fortran_name(pardisoinit,PARDISOINIT)(handle,&mtype,&solver,iparam,\
+  fortran_name(pardisoinit,PARDISOINIT)(handle,&mtype,&solver,iparam,
       dparam,&error);
 
   iparam[0] = 1;
@@ -65,19 +65,26 @@ void sparse_inv(TCSR<CPX> *matrix) {
 
   phase = 11;   // reorder and symbolic factorization
   fortran_name(pardiso,PARDISO)(handle,&maxfct,&mnum,&mtype,&phase,&n,
-      matrix->nnz,matrix->edge_i,matrix->index_j,NULL,&nrhs,
-      iparam,&msglvl,NULL,NULL,&error,dparam);
+      matrix->nnz,matrix->edge_i,matrix->index_j,NULL,&nrhs,iparam,
+      &msglvl,NULL,NULL,&error,dparam);
 
   phase = 22;   // factorize
   fortran_name(pardiso,PARDISO)(handle,&maxfct,&mnum,&mtype,&phase,&n,
-      matrix->nnz,matrix->edge_i,matrix->index_j,NULL,&nrhs,
-      iparam,&msglvl,NULL,NULL,&error,dparam);
+      matrix->nnz,matrix->edge_i,matrix->index_j,NULL,&nrhs,iparam,
+      &msglvl,NULL,NULL,&error,dparam);
 
+  std::cout << "checkpoint1\n";
   phase = -22;  // sparsity preserving inversion
   iparam[35] = 0;
   fortran_name(pardiso,PARDISO)(handle,&maxfct,&mnum,&mtype,&phase,&n,
-      matrix->nnz,matrix->edge_i,matrix->index_j,NULL,&nrhs,
-      iparam,&msglvl,NULL,NULL,&error,dparam);
+      matrix->nnz,matrix->edge_i,matrix->index_j,NULL,&nrhs,iparam,
+      &msglvl,NULL,NULL,&error,dparam);
+
+  phase = -1;   // clearing the pardiso instance (shouldn't kill
+                // the matrix
+  fortran_name(pardiso,PARDISO)(handle,&maxfct,&mnum,&mtype,&phase,&n,
+      matrix->nnz,matrix->edge_i,matrix->index_j,NULL,&nrhs,iparam,
+      &msglvl,NULL,NULL,&error,dparam);
 
 }
 
