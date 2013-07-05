@@ -9,7 +9,7 @@ CPP = mpic++
 CC =
 
 CFLAGS = -g -Wall -DAdd_
-CXXFLAGS = -std=c++11 -fopenmp $(CFLAGS) -DMMC
+CXXFLAGS = -std=c++11 -fopenmp $(CFLAGS)
 PARDISO_SO = /home/mauro/sw/pardiso/lib/libpardiso490-INTEL120-X86-64.so
 PARDISO_INTEL_LIB = -L/usr/pack/intel_compiler-11.1.075-af/Linux-x86_64/mkl/lib/em64t -lmkl_intel_lp64 -lmkl_sequential -lmkl_core -Wl,-rpath,/usr/pack/intel_compiler-11.1.075-af/Linux-x86_64/mkl/lib/em64t/ -L/usr/pack/intel_compiler-11.1.075-af/Linux-x86_64/lib/ -lifcore -lifport -lpthread -limf -lsvml -lintlc -lm -lpthread -lm -Wl,-rpath,/usr/pack/intel_compiler-11.1.075-af/Linux-x86_64/lib/ -Wl,-rpath,/usr/pack/intel_compiler-11.1.075-af/Linux-x86_64/mkl/lib/em64t
 
