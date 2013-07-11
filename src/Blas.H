@@ -90,6 +90,7 @@ extern "C" {
                     double *w,double *work,int *lwork,int *info);
     void fortran_name(zhegv,ZHEGV)(int *itype,char *jobz,char *uplo,int *n,CPX *a,int *lda,CPX *b,int *ldb,\
                     double *w,CPX *work,int *lwork,double *rwork,int *info);
+    void fortran_name(dlasrt,DLASRT)(char*,int*,double*,int*);
 }
 
 /*My Blas*******************************************************************************************/
@@ -494,6 +495,13 @@ inline void c_zhegv(int itype,char jobz,char uplo,int n,CPX *a,int lda,CPX *b,in
                     double *w,CPX *work,int lwork,double *rwork,int *info)
 {
     fortran_name(zhegv,ZHEGV)(&itype,&jobz,&uplo,&n,a,&lda,b,&ldb,w,work,&lwork,rwork,info);
+}
+
+/************************************************************************************************/
+
+inline void c_dlasrt(char id,int n,double* d,int *info)
+{
+    fortran_name(dlasrt,DLASRT)(&id,&n,d,info);
 }
 
 /*SAB*END****************************************************************************************/

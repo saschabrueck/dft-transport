@@ -398,10 +398,12 @@ struct ParameterStruct
 {
 int bandwidth;
 int ncells;
+int nocc;
 double evoltfactor;
 double colzerothr;
 double eps_limit;
 double eps_decay;
+double eps_singularities;
 };
 
 #endif
