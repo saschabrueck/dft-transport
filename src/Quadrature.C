@@ -2,7 +2,6 @@
 #include <iostream>   // TODO: remove that later
 
 #include "Quadrature.H"
-#include "Quadrature_GL.H"
 
 #ifndef PI
 #define PI 3.141592653589793238462
@@ -17,6 +16,8 @@ class excQuadrature: public std::exception {
  private:
   std::string errmsg;
 };
+
+#include "Quadrature_GL.H"
 
 /** \brief Initializer
  *
@@ -53,8 +54,9 @@ class excQuadrature: public std::exception {
  *                      the precision, base e. Set to n to specify a
  *                      precision of exp(-6).
  */
-Quadrature::Quadrature(quadrature_type type, double start, double end,
-                       double T, double Ef, unsigned int num_abscissae) {
+Quadrature::Quadrature(quadrature_types::quadrature_type type, double start, 
+                       double end, double T, double Ef, 
+                       unsigned int num_abscissae) {
   my_type = type;
   if (start < end) {
     band_start = start;
@@ -69,22 +71,23 @@ Quadrature::Quadrature(quadrature_type type, double start, double end,
     throw excQuadrature("Invalid number of abscissae specified");
   }
   switch (my_type) {
-    case quadrature_type::CCGL: {
-      if (num_abscissae >= GaussLegendre::abscissae.size() || 
-          num_abscissae == 0) {
+    case quadrature_types::CCGL: {
+      if (num_abscissae == 0) {
         throw excQuadrature("Invalid number of abscissae");
       } 
-      auto radius = (band_end - band_start) / 2.0;
-      auto center = (band_start + band_end) / 2.0;
-      const auto abscissae_precalc = GaussLegendre::abscissae[num_abscissae-1];
-      const auto weights_precalc = GaussLegendre::weights[num_abscissae-1];
-      CPX fermi = {1.0, 0.0};
+      double radius = (band_end - band_start) / 2.0;
+      double center = (band_start + band_end) / 2.0;
+      const std::vector<double> abscissae_precalc = 
+                                    GaussLegendre::get_abscissae(num_abscissae-1);
+      const std::vector<double> weights_precalc = 
+                                    GaussLegendre::get_weights(num_abscissae-1);
+      CPX fermi(1.0, 0.0);
       for (uint i = 0; i <= num_abscissae - 1; ++i) {
         // Shift the precalculated abscissa from [-1 1] to [0, pi] interval
-        auto abscissa = abscissae_precalc[i] * (PI - 0.0) / 2.0 +
+        double abscissa = abscissae_precalc[i] * (PI - 0.0) / 2.0 +
                         (PI + 0.0) / 2.0;
         // Calculate point on the contour
-        auto contour_point = radius * CPX(-cos(abscissa), sin(abscissa)) +
+        CPX contour_point = radius * CPX(-cos(abscissa), sin(abscissa)) +
                              center;
         abscissae.push_back(contour_point);
         // Fermi function at given point:
@@ -98,16 +101,17 @@ Quadrature::Quadrature(quadrature_type type, double start, double end,
       }
       break;
     }
-    case quadrature_type::GL: {
-      if (num_abscissae >= GaussLegendre::abscissae.size() ||
-          num_abscissae == 0) {
+    case quadrature_types::GL: {
+      if (num_abscissae == 0) {
         throw excQuadrature("Invalid number of abscissae");
       }
-      const auto abscissae_precalc = GaussLegendre::abscissae[num_abscissae-1];
-      const auto weights_precalc = GaussLegendre::weights[num_abscissae-1];
-      auto fermi = 1.0;
+      const std::vector<double> abscissae_precalc = 
+                                  GaussLegendre::get_abscissae(num_abscissae-1);
+      const std::vector<double> weights_precalc = 
+                                  GaussLegendre::get_weights(num_abscissae-1);
+      double fermi = 1.0;
       for (uint i = 0; i <= num_abscissae - 1; ++i) {
-        auto abscissa = abscissae_precalc[i] * (band_end - band_start) / 2.0 + 
+        double abscissa = abscissae_precalc[i] * (band_end - band_start) / 2.0 + 
                        (band_end + band_start) / 2.0;
         abscissae.push_back(abscissa);
         if (T != 0) {
@@ -118,34 +122,34 @@ Quadrature::Quadrature(quadrature_type type, double start, double end,
       }
       break;
     }
-    case quadrature_type::ANPS: {
+    case quadrature_types::ANPS: {
       // TODO: think about how to extend the interface to allow for
       //       specification of the precision (as exponent p of e)
       // TODO: check eqn. 8 in the paper and print a warning if it doesn't hold
       // TODO: this method doesn't work for T=0
       //auto test_begin = 10;
       //auto test_end = 30;
-      auto precision_exponent = 30;
-      auto precision = exp(-precision_exponent);
+      int precision_exponent = 30;
+      double precision = exp(-precision_exponent);
       // Loop for minimizing the number of poles for a given precision
       //for (auto vertical_poles = test_begin; vertical_poles <= test_end; 
       //     ++vertical_poles) {
-        auto vertical_poles = 20;
+        int vertical_poles = 20;
         // NOTE: I assume T_real = T but in fact T_real would be another
         // optimization parameter like vertical_poles.
-        auto T_real = T;
-        auto mu_real = band_start - (precision_exponent * k * T_real);
-        auto mu_imaginary = 2 * vertical_poles * PI * k * T;
-        auto T_imaginary = mu_imaginary / (precision_exponent * k);
-        CPX mu_imaginary_cpx = {0.0, mu_imaginary};
-        CPX T_imaginary_cpx = {0.0, T_imaginary};
+        double T_real = T;
+        double mu_real = band_start - (precision_exponent * k * T_real);
+        double mu_imaginary = 2 * vertical_poles * PI * k * T;
+        double T_imaginary = mu_imaginary / (precision_exponent * k);
+        CPX mu_imaginary_cpx(0.0, mu_imaginary);
+        CPX T_imaginary_cpx(0.0, T_imaginary);
         CPX z, residue;
         int n;
 
         n=0;
         while (true) {
           // Construct poles on 'vertical' line through the physical fermi level
-          z = {Ef, (2 * n + 1) * PI * k * T};
+          CPX z=(Ef, (2 * n + 1) * PI * k * T);
           residue = -k * T * (1.0 / (1.0 + exp((z - mu_imaginary_cpx) /
                              (k * T_imaginary_cpx)))); // fermi_imaginary
           if (norm(residue) > precision) {
@@ -164,7 +168,7 @@ Quadrature::Quadrature(quadrature_type type, double start, double end,
         while (true) {
           // Construct poles on 'horizontal' line at height my_imaginary
           // from Ef downwards
-          z = {Ef - (2 * n + 1) * PI * k * T_imaginary, mu_imaginary};
+          CPX z=(Ef, (2 * n + 1) * PI * k * T_imaginary, mu_imaginary);
           residue = -k * T_imaginary_cpx *
                          ((1.0 / (1.0 + exp((z - Ef) / (k * T)))) - // fermi
                          (1.0 / (1.0 + exp((z - mu_real) / (k * T_real)))));
@@ -194,7 +198,7 @@ Quadrature::Quadrature(quadrature_type type, double start, double end,
         while (true) {
           // Construct poles on 'horizontal' line at height my_imaginary
           // from Ef upwards
-          z = {Ef + (2 * n + 1) * PI * k * T_imaginary, mu_imaginary};
+          CPX z=(Ef, (2 * n + 1) * PI * k * T_imaginary, mu_imaginary);
           residue = -k * T_imaginary_cpx *
                          ((1.0 / (1.0 + exp((z - Ef) / (k * T)))) -
                          (1.0 / (1.0 + exp((z - mu_real) / (k * T_real)))));
@@ -220,7 +224,7 @@ Quadrature::Quadrature(quadrature_type type, double start, double end,
         n=0;
         while (true) {
           // Construct poles on 'vertical' line through mu_real
-          z = {mu_real, (2 * n + 1) * PI * k * T};
+          CPX z=(mu_real, (2 * n + 1) * PI * k * T);
           residue = -k * T_real * (1.0 / (1.0 + exp((z - mu_imaginary_cpx) /
                              (k * T_imaginary_cpx)))); // fermi_imaginary
           if (norm(residue) > precision) {
@@ -233,13 +237,13 @@ Quadrature::Quadrature(quadrature_type type, double start, double end,
         }
 
     } // case ANPS
-    case quadrature_type::GC: {
+    case quadrature_types::GC: {
       if (num_abscissae <= 1) {
         throw excQuadrature("Invalid number of abscissae");
       }
-      auto fermi = 1.0;
+      double fermi = 1.0;
       for (uint n = 1; n <= num_abscissae; ++n) {
-        auto abscissa = -(cos(PI * (2 * n - 1.0) / (2.0 * num_abscissae)) *
+        double abscissa = -(cos(PI * (2 * n - 1.0) / (2.0 * num_abscissae)) *
                         (band_end - band_start) / 2.0 +
                         (band_end + band_start) / 2.0);
         abscissae.push_back(abscissa);
