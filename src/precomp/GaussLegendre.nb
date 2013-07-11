@@ -3,10 +3,10 @@
 NotebookFileLineBreakTest
 NotebookFileLineBreakTest
 NotebookDataPosition[         0,          0]
-NotebookDataLength[      7603,        175]
-NotebookOptionsPosition[      7207,        155]
-NotebookOutlinePosition[      7546,        170]
-CellTagsIndexPosition[      7503,        167]
+NotebookDataLength[      8086,        185]
+NotebookOptionsPosition[      7692,        165]
+NotebookOutlinePosition[      8029,        180]
+CellTagsIndexPosition[      7986,        177]
 WindowFrame->Normal*)
 
 (* Beginning of Notebook Content *)
@@ -117,8 +117,17 @@ Cell[BoxData[{
       RowBox[{"Close", "[", "abscfilehandle", "]"}], ";", 
       "\[IndentingNewLine]", 
       RowBox[{"Close", "[", "weightsfilehandle", "]"}], ";"}]}], 
-    "\[IndentingNewLine]", "]"}]}], 
-  "\[IndentingNewLine]"}], "\[IndentingNewLine]", 
+    "\[IndentingNewLine]", "]"}]}], "\[IndentingNewLine]", 
+  "\[IndentingNewLine]", 
+  RowBox[{"(*", " ", 
+   RowBox[{
+    RowBox[{"IMPORTANT", ":", " ", 
+     RowBox[{
+     "when", " ", "changing", " ", "the", " ", "number", " ", "of", " ", 
+      "precalculated", " ", "abscissae"}]}], ",", " ", 
+    RowBox[{"make", " ", "sure", " ", "PREC_SIZE", " ", "in", " ", 
+     RowBox[{"Quadrature_GL", ".", "H"}], " ", "is", " ", "changed", " ", 
+     RowBox[{"accordingly", "!"}]}]}], " ", "*)"}]}], "\[IndentingNewLine]", 
  RowBox[{"writeGaussLeg", "[", 
   RowBox[{
   "140", ",", "\"\<Quadrature_GL_absc.precomp\>\"", ",", 
@@ -151,10 +160,11 @@ Cell[BoxData[{
    3.580575969433666*^9}, {3.5805760167669973`*^9, 3.580576040961746*^9}, {
    3.580576099225884*^9, 3.5805761789737988`*^9}, 3.580576229177184*^9, {
    3.580576330860805*^9, 3.58057633104359*^9}, {3.5806204568901443`*^9, 
-   3.5806204802772007`*^9}, {3.580620841151248*^9, 3.580620846248736*^9}}]
+   3.5806204802772007`*^9}, {3.580620841151248*^9, 3.580620846248736*^9}, {
+   3.5823683273510857`*^9, 3.582368409350264*^9}}]
 },
 WindowSize->{1386, 922},
-WindowMargins->{{Automatic, -10}, {78, Automatic}},
+WindowMargins->{{Automatic, 0}, {73, Automatic}},
 FrontEndVersion->"9.0 for Linux x86 (64-bit) (November 20, 2012)",
 StyleDefinitions->"Default.nb"
 ]
@@ -169,7 +179,7 @@ CellTagsIndex->{}
 *)
 (*NotebookFileOutline
 Notebook[{
-Cell[400, 13, 6803, 140, 429, "Input"]
+Cell[400, 13, 7288, 150, 451, "Input"]
 }
 ]
 *)
