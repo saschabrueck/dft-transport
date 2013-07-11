@@ -3,7 +3,7 @@
 int kpointintegration(TCSR<double>*,TCSR<double>*,TCSR<double>*,int);
 int greensolver(TCSR<double>*,TCSR<double>*,TCSR<double>*);
 int diagscalapack(TCSR<double>*,TCSR<double>*,TCSR<double>*,int);
-int energyvector(TCSR<double>*,TCSR<double>*,TCSR<double>*);
+int energyvector(TCSR<double>*,TCSR<double>*,TCSR<double>*,int);
 
 void c_scf_method(int nelectron, c_DBCSR S, c_DBCSR KS, c_DBCSR * P)
 {
@@ -76,7 +76,7 @@ if (counter==6) remove("DoDiag");*/
       if (greensolver(Overlap,KohnSham,Ps)) throw 0;
    } else {
       if (!rank) cout << "Starting Transport" << endl;
-      if (energyvector(Overlap,KohnSham,Ps)) throw 0;
+      if (energyvector(Overlap,KohnSham,Ps,nelectron)) throw 0;
    }
 
    CSR_to_cDBCSR(Ps, *P, row_block_size, col_block_size, row_dist, col_dist, local_rows, nblkrows_local_all);

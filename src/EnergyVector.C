@@ -1,8 +1,9 @@
 #include "CSR.H"
 #include "Types.H"
 #include "Density.H"
+#include "GetSingularities.H"
 
-int energyvector(TCSR<double> *Overlap,TCSR<double> *KohnSham,TCSR<double> *P_Matrix)
+int energyvector(TCSR<double> *Overlap,TCSR<double> *KohnSham,TCSR<double> *P_Matrix,int nocc)
 {
     int iam, nprocs;
     MPI_Comm_size(MPI_COMM_WORLD,&nprocs);
@@ -13,9 +14,22 @@ int energyvector(TCSR<double> *Overlap,TCSR<double> *KohnSham,TCSR<double> *P_Ma
     double energystart;
     double energyend;
     ifstream paramfile("Parameters");
-    paramfile >> parameter_sab.bandwidth >> parameter_sab.ncells >> parameter_sab.evoltfactor >> parameter_sab.colzerothr >> parameter_sab.eps_limit >> parameter_sab.eps_decay >> energystart >> energyend;
+    paramfile >> parameter_sab.bandwidth >> parameter_sab.ncells >> parameter_sab.evoltfactor
+              >> parameter_sab.colzerothr >> parameter_sab.eps_limit >> parameter_sab.eps_decay >> parameter_sab.eps_singularities;
+//    paramfile >> energystart >> energyend;
     paramfile.close();
     if (parameter_sab.bandwidth<1) return (cerr<<__LINE__<<endl, EXIT_FAILURE);
+    parameter_sab.nocc=nocc;
+// allocate matrices to gather on every node
+    TCSR<double> *KohnShamCollect = new TCSR<double>(KohnSham,MPI_COMM_WORLD);
+    TCSR<double> *OverlapCollect = new TCSR<double>(Overlap,MPI_COMM_WORLD);
+//    TCSR<double> *KohnShamCollect = new TCSR<double>("CNT5_h.mtx");
+//    TCSR<double> *OverlapCollect  = new TCSR<double>("CNT5_s.mtx");
+    TCSR<CPX> *Ps = new TCSR<CPX>(OverlapCollect->size,OverlapCollect->n_nonzeros,OverlapCollect->findx);
+    Ps->init_variable(Ps->nnz,Ps->n_nonzeros);
+// determine singularity stuff
+    Singularities *singularities = new Singularities(KohnShamCollect,OverlapCollect,parameter_sab);
+    energystart=singularities->energy_gs; energyend=singularities->energy_vbe;
 // get integration points along real axis with simple uniform trapezoidal rule
     double energystep;
     if (nprocs==1)
@@ -28,13 +42,8 @@ int energyvector(TCSR<double> *Overlap,TCSR<double> *KohnSham,TCSR<double> *P_Ma
         step=energystep/2;
     else
         step=energystep;
-// allocate matrices to gather on every node
-    TCSR<double> *KohnShamCollect = new TCSR<double>(KohnSham,MPI_COMM_WORLD);
-    TCSR<double> *OverlapCollect = new TCSR<double>(Overlap,MPI_COMM_WORLD);
-//    TCSR<double> *KohnShamCollect = new TCSR<double>("CNT5_h.mtx");
-//    TCSR<double> *OverlapCollect  = new TCSR<double>("CNT5_s.mtx");
-    TCSR<CPX> *Ps = new TCSR<CPX>(OverlapCollect->size,OverlapCollect->n_nonzeros,OverlapCollect->findx);
-    Ps->init_variable(Ps->nnz,Ps->n_nonzeros);
+// after creating integration points delete singularities
+    delete singularities;
 // run 
     int method=2;
     if (density(KohnShamCollect,OverlapCollect,Ps,energy,step,method,parameter_sab)) return (cerr<<__LINE__<<endl, EXIT_FAILURE);

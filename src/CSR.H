@@ -1141,8 +1141,7 @@ void TCSR<T>::contactunitcell(T *contacty,int rows,int ndof,int bandw,int signy)
 template <class T>
 void TCSR<T>::contactunitcell(T *contacty,int ndof,int bandw,int signy)
 {
-// this is the old version
-// i dont think this works for the parallel case
+// this is the version for the serial case and no spin orbit coupling
     int i,j,index;
     init_variable(contacty,ndof*ndof*(2*bandw-1));
     if (signy==1) {
@@ -1154,7 +1153,7 @@ void TCSR<T>::contactunitcell(T *contacty,int ndof,int bandw,int signy)
             }
         }
         for (int ibw=1;ibw<=bandw;ibw++)
-            full_conjugate_transpose(ndof,ndof,&contacty[(bandw+ibw)*ndof*ndof],&contacty[(bandw-ibw)*ndof*ndof]);
+            full_transpose(ndof,ndof,&contacty[(bandw+ibw)*ndof*ndof],&contacty[(bandw-ibw)*ndof*ndof]);
     } else {
         for(i=size-ndof;i<size;i++) {
             for(j=edge_i[i]-findx;j<edge_i[i+1]-findx;j++) {
@@ -1163,6 +1162,8 @@ void TCSR<T>::contactunitcell(T *contacty,int ndof,int bandw,int signy)
                 }
             }
         }
+        for (int ibw=1;ibw<=bandw;ibw++)
+            full_transpose(ndof,ndof,&contacty[(bandw-ibw)*ndof*ndof],&contacty[(bandw+ibw)*ndof*ndof]);
     }
 }
 

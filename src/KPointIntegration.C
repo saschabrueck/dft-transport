@@ -72,7 +72,7 @@ int kpointintegration(TCSR<double> *Overlap,TCSR<double> *KohnSham,TCSR<double> 
     c_zcopy(sizesq,B,1,B2,1);
 
     double *eigval=new double[size];
-    double rwork[3*size-2];
+    double *rwork = new double[3*size-2];
     int info;
     CPX twork;
     c_zhegv(1,'V','U',size,A,size,B,size,eigval,&twork,-1,rwork,&info);
@@ -81,6 +81,7 @@ int kpointintegration(TCSR<double> *Overlap,TCSR<double> *KohnSham,TCSR<double> 
     c_zhegv(1,'V','U',size,A,size,B,size,eigval,work,lwork,rwork,&info);
     if (info) { cout<<info<<endl; return info; }
     delete[] work;
+    delete[] rwork;
 
     double fermi;
     if (!iam) fermi=(eigval[nocc-1]+eigval[nocc])/2;
