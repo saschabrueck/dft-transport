@@ -57,6 +57,7 @@ class excQuadrature: public std::exception {
 Quadrature::Quadrature(quadrature_types::quadrature_type type, double start, 
                        double end, double T, double Ef, 
                        unsigned int num_abscissae) {
+  double k=K_BOLTZMANN;
   my_type = type;
   if (start < end) {
     band_start = start;
