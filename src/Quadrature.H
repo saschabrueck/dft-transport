@@ -7,7 +7,9 @@
 #include <complex>
 
 // k in [eV/K]
-double k = 8.617332478e-5;
+#ifndef K_BOLTZMANN
+#define K_BOLTZMANN 8.617332478e-5;
+#endif
 
 
 /** \enum quadrature_type
@@ -16,20 +18,14 @@ double k = 8.617332478e-5;
  *
  */
 namespace quadrature_types {
-#ifdef HAS_NO_ENUM_CLASS
 enum quadrature_type {
-#else
-enum class quadrature_type {
-#endif
   CCGL=1,   // Complex Contour Gauss-Legendre
   GL=2,     // Gauss-Legendre
   ANPS=3,   // Areshkin-Nikolic Pole Summation
   GC=4,     // Gauss-Chebychev
   //TR=5    // Trapezoidal Rule
 };
-#ifdef HAS_NO_ENUM_CLASS
 } // namespace
-#endif
 
 /** \class Quadrature
  *  
