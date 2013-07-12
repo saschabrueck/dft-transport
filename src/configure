@@ -1801,7 +1801,7 @@ if test "x$with_pardiso" == "xyes"; then
 $as_echo "$as_me: Pardiso enabled." >&6;}
     pardiso=Pardiso.C
 
-    pardiso_so='$(PARDISO)'
+    pardiso_so='$(PARDISO_SO)'
 
 #elif test "$with_pardiso" != ""
 #then

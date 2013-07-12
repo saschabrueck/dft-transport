@@ -15,7 +15,7 @@ CC =
 
 #CFLAGS = -g -Wall -DAdd_ -wd981			# -wd981 is recommended for c++ even by intel
 CFLAGS = -g -DAdd_ -wd981 # -wd981 is recommended for c++ even by intel
-CXXFLAGS = -std=c++0x -openmp $(CFLAGS)
+CXXFLAGS = -I/usr/lib64/ -std=c++0x -openmp $(CFLAGS)
 PARDISO_SO = /home/mauro/sw/pardiso/lib/libpardiso490-INTEL120-X86-64.so
 INTEL_LIB = -L$(IBASE)/Linux-x86_64/mkl/lib/em64t \
 							-lmkl_intel_lp64 -lmkl_scalapack_lp64 -lmkl_blacs_openmpi_lp64 \
@@ -42,3 +42,5 @@ LIBS = -lcp2k_lib -lcp2k_base_lib -lcp2k_dbcsr_lib -lcp2k_fft_lib -lcp2k_ma_lib 
 	 -lmpi_f77 -Wl,-rpath,$(MBASE)/openmpi/intel-2011/lib
 
 PARDISO_LIBS = $(PARDISO_INTEL_LIB) $(PARDISO_SO) -limf -lsvml -liomp5 -lintlc
+
+INCLUDES= -I$(MBASE)/suitesparse/gcc-attelas/include

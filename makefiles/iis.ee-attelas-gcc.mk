@@ -30,3 +30,5 @@ LIBS = -lcp2k_lib -lcp2k_base_lib -lcp2k_dbcsr_lib -lcp2k_fft_lib -lcp2k_ma_lib 
 	 -lscalapack
 
 PARDISO_LIBS = $(PARDISO_INTEL_LIB) $(PARDISO_SO) -limf -lsvml -liomp5 -lintlc
+
+INCLUDES= -I$(MBASE)/suitesparse/gcc-attelas/include
