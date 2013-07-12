@@ -21,13 +21,13 @@ MYEXECUTABLE = mymain
 all: $(SOURCES_CPP) $(SOURCES_C) $(EXECUTABLE)
 
 $(EXECUTABLE): $(MAIN:.cpp=.o) $(OBJECTS)
-	$(CPP) $(CXXFLAGS) $(INCLUDES) -o $@ $(MAIN:.cpp=.o) $(OBJECTS) $(LDFLAGS) $(LIBS)
+	$(CPP) $(CXXFLAGS) $(INCLUDES) -o $@ $(MAIN:.cpp=.o) $(OBJECTS) @pardiso_so@ $(LDFLAGS) $(LIBS)
 
 .cpp.o:
-	$(CPP) $(INCLUDES) $(CXXFLAGS) -c $< -o $@
+	$(CPP) $(INCLUDES) $(CXXFLAGS) -c $< -o $@ $(LDFLAGS)
 
 .C.o:
-	$(CPP) $(INCLUDES) $(CXXFLAGS) -c $< -o $@ $(LDFLAGS) $(LIBS)
+	$(CPP) $(INCLUDES) $(CXXFLAGS) -c $< -o $@ $(LDFLAGS)
 
 $(MYEXECUTABLE): $(MYEXECUTABLE).cc $(SOURCES_CPP) $(SOURCES_C) $(OBJECTS)
 	$(CPP) $(CXXFLAGS) $(INCLUDES) $(MYEXECUTABLE).cc -o $@ $(OBJECTS) @pardiso_so@ $(LDFLAGS) $(LIBS)
