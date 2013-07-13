@@ -4,13 +4,7 @@
 #include <vector>
 #include <iterator>
 #include <iostream>
-
-using namespace std;
-
-template <class T>
-struct Vector1D : public std::vector<T> {};
-template<class T>
-struct Vector2D : public std::vector< std::vector<T> > {};
+#include "vectorTypes.H"
 
 template <class T>
 void print_Vector1D(Vector1D<T>& Vec)

@@ -2,14 +2,6 @@
 #define conversion_H
 
 #include <set>
-#include <iostream>
-//#include <type_traits>
-#include <iterator>
-#include <cstdlib>
-#include <math.h>
-#include <functional>
-#include <algorithm>
-#include <mpi.h>
 
 #include "CSR.H"
 #include "cDBCSR.H"
@@ -18,12 +10,10 @@
 
 #include "array_tools.H"
 
-using namespace std;
-
 #define unused(x) ((void)(x))
 
 /*===============================================================
-the following works on a single node
+this routine might be obsolete. Let me know if you need to use it ..
 ===============================================================*/
 template <class T>
 void cDBCSR_to_CSR_triu(c_DBCSR& dbcsr_mat, TCSR<T>* csr_mat)

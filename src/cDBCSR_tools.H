@@ -3,9 +3,7 @@
 
 #include <numeric>
 #include "cDBCSR.H"
-#include "vector_tools.H"
-
-using namespace std;
+#include "vectorTypes.H"
 
 //template <class T>
 void c_DBCSR_init (c_DBCSR& c_dbcsr_mat, int nblks, int n_nze, int data_area_size,

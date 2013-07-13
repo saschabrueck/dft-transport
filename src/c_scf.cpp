@@ -5,13 +5,14 @@ int greensolver(TCSR<double>*,TCSR<double>*,TCSR<double>*);
 int diagscalapack(TCSR<double>*,TCSR<double>*,TCSR<double>*,int);
 int energyvector(TCSR<double>*,TCSR<double>*,TCSR<double>*,int);
 
-void c_scf_method(int nelectron, c_DBCSR S, c_DBCSR KS, c_DBCSR * P)
+void c_scf_method(c_transport_type transport_env_params, c_DBCSR S, c_DBCSR KS, c_DBCSR * P)
 {
    Vector1D<int> row_block_size, col_block_size, local_rows, row_dist, col_dist, 
                  nblkrows_local_all, nrows_local_all, first_rows;
-   int sendbuf, nrows_local;
-   int num_nodes, rank;
+   int sendbuf, nrows_local, num_nodes, rank;
    int* recvbuf;
+
+   int nocc = transport_env_params.n_occ;
 
    row_block_size.assign(S.row_blk_size, S.row_blk_size + S.nblkrows_total);
    col_block_size.assign(S.col_blk_size, S.col_blk_size + S.nblkcols_total);
@@ -62,21 +63,22 @@ countfile.seekg(ios_base::beg);
 countfile << counter;
 if (counter==6) remove("DoDiag");*/
 
-   ifstream diagfile("DoDiag");
-   ifstream expefile("DoExperimental");
-   ifstream kpoifile("DoKPoint");
-   if (diagfile) {
-      if (!rank) cout << "Starting ScaLaPackDiag" << endl;
-      if (diagscalapack(Overlap,KohnSham,Ps,nelectron)) throw 0;
-   } else if (kpoifile) {
-      if (!rank) cout << "Starting KPointIntegration" << endl;
-      if (kpointintegration(Overlap,KohnSham,Ps,nelectron)) throw 0;
-   } else if (expefile) {
-      if (!rank) cout << "Starting experimental code" << endl;
-      if (greensolver(Overlap,KohnSham,Ps)) throw 0;
-   } else {
-      if (!rank) cout << "Starting Transport" << endl;
-      if (energyvector(Overlap,KohnSham,Ps,nelectron)) throw 0;
+   switch (transport_env_params.method) {
+      case 1:
+         if (!rank) cout << "Starting ScaLaPackDiag" << endl;
+         if (diagscalapack(Overlap,KohnSham,Ps,nocc)) throw 0;
+         break;
+      case 2:
+         if (!rank) cout << "Starting KPointIntegration" << endl;
+         if (kpointintegration(Overlap,KohnSham,Ps,nocc)) throw 0;
+         break;
+     case 3:
+         if (!rank) cout << "Starting experimental code" << endl;
+         if (greensolver(Overlap,KohnSham,Ps)) throw 0;
+         break;
+     default:
+         if (!rank) cout << "Starting Transport" << endl;
+         if (energyvector(Overlap,KohnSham,Ps,nocc)) throw 0;
    }
 
    CSR_to_cDBCSR(Ps, *P, row_block_size, col_block_size, row_dist, col_dist, local_rows, nblkrows_local_all);

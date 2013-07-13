@@ -406,6 +406,16 @@ double eps_decay;
 double eps_singularities;
 };
 
+extern "C"
+{
+    typedef struct{
+           int method, bandwidth, n_cells, n_occ;
+           double  evoltfactor, colzero_threshold,
+                   eps_limit, eps_decay, eps_singularities,
+                   extra_param1;
+           } c_transport_type;
+};
+
 #endif
 
 
