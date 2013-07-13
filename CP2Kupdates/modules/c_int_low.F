@@ -1,6 +1,6 @@
 !-----------------------------------------------------------------------------!
 !   CP2K: A general program to perform molecular dynamics simulations         !
-!   Copyright (C) 2000 - 2012  CP2K developers group                          !
+!   Copyright (C) 2000 - 2013  CP2K developers group                          !
 !-----------------------------------------------------------------------------!
 
 ! *****************************************************************************
@@ -396,7 +396,8 @@ SUBROUTINE cp_c_ext_scf_set_ptr(f_env_id,func,ierr) BIND(C,name="cp_c_ext_scf_se
   IF (.NOT. failure) THEN
      CALL force_env_get(f_env%force_env,in_use=in_use,error=error)
      IF (in_use .EQ. use_qs_force) THEN
-         f_env%force_env%qs_env%ls_scf_env%ext_scf_ptr = func
+!         f_env%force_env%qs_env%ls_scf_env%ext_scf_ptr = func
+         f_env%force_env%qs_env%transport_env%ext_method_ptr = func
      END IF
   END IF
   CALL f_env_rm_defaults(f_env,error,ierr) 

@@ -1,19 +1,9 @@
-#include <iostream>
-//#include <type_traits>
-#include <fstream>
 #include <string.h>
-#include <sstream>
-#include <cstdlib>
-#include <math.h>
 #include <mpi.h>
 #include <assert.h>
-#include <stdlib.h>
-
 #include "c_scf.H"
 
 #define OUTPUT_FILE "./output.out"
-
-using namespace std;
 
 extern "C"
 {
@@ -43,20 +33,20 @@ int main (int argc, char **argv)
    int fcomm, init_mpi, finalize_mpi;
    double e_pot;
    char *input_file;
-   char *output_file = OUTPUT_FILE;
-//   char *output_file;
+   char *output_file;
    double *pos, *force;
 //   int myid, nproc;
    MPI::Intercomm mpi_comm;
 
    std::string inpfile_path = argv[1];
 //   std::string outfile_path = argv[2];
+   std::string outfile_path = OUTPUT_FILE;
    input_file=new char[inpfile_path.size()+1];
    input_file[inpfile_path.size()]=0;
    memcpy(input_file,inpfile_path.c_str(),inpfile_path.size());
-//   output_file=new char[outfile_path.size()+1];
-//   output_file[outfile_path.size()]=0;
-//   memcpy(output_file,outfile_path.c_str(),outfile_path.size());
+   output_file=new char[outfile_path.size()+1];
+   output_file[outfile_path.size()]=0;
+   memcpy(output_file,outfile_path.c_str(),outfile_path.size());
 
    init_mpi = 0;
    finalize_mpi = 0;
@@ -91,6 +81,7 @@ int main (int argc, char **argv)
    delete [] pos;
    delete [] force;
    delete [] input_file;
+   delete [] output_file;
 
    MPI::Finalize();
    return 0;
