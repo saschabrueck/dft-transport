@@ -10,7 +10,6 @@
 MODULE input_cp2k_transport
 
   USE f77_blas
-  USE input_constants
   USE input_keyword_types,             ONLY: keyword_create,&
                                              keyword_release,&
                                              keyword_type
