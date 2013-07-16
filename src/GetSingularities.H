@@ -9,7 +9,7 @@
 
 class Singularities {
 public:
-Singularities(TCSR<double> *,TCSR<double> *,ParameterStruct);
+Singularities(TCSR<double> *,TCSR<double> *,c_transport_type);
 ~Singularities();
 
 /// Number of singularity points
@@ -22,7 +22,7 @@ double energy_gs;
 double energy_vbe;
 
 private:
-int determine_velocities(TCSR<double>*,TCSR<double>*,double,double&,double&,double*,int&,ParameterStruct);
+int determine_velocities(TCSR<double>*,TCSR<double>*,double,double&,double&,double*,int&,c_transport_type);
 };
 
 #endif

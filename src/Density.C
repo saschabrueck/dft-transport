@@ -12,10 +12,10 @@ using namespace std;
 //#include "SuperLU.H"
 #include "Umfpack.H"
 //#include "MUMPS.H"
-//#include "Pardiso.H"
+#include "Pardiso.H"
 #include "Density.H"
 
-int density(TCSR<double> *KohnSham,TCSR<double> *Overlap,TCSR<CPX> *Ps,CPX energy,CPX weight,int method,ParameterStruct parameter_sab)
+int density(TCSR<double> *KohnSham,TCSR<double> *Overlap,TCSR<CPX> *Ps,CPX energy,CPX weight,int method,c_transport_type parameter_sab)
 {
     int iam, nprocs;
     MPI_Comm_size(MPI_COMM_WORLD,&nprocs);
@@ -31,10 +31,10 @@ int density(TCSR<double> *KohnSham,TCSR<double> *Overlap,TCSR<CPX> *Ps,CPX energ
     double sabtime;
     int iinfo=0;
 // get parameters
-    int ncells=parameter_sab.ncells;
+    int ncells=parameter_sab.n_cells;
     int bandwidth=parameter_sab.bandwidth;
     double evoltfactor=parameter_sab.evoltfactor;
-    double colzerothr=parameter_sab.colzerothr;
+    double colzerothr=parameter_sab.colzero_threshold;
     double eps_limit=parameter_sab.eps_limit;
     double eps_decay=parameter_sab.eps_decay;
 // complex or real energy
@@ -687,6 +687,7 @@ int density(TCSR<double> *KohnSham,TCSR<double> *Overlap,TCSR<CPX> *Ps,CPX energ
         delete[] H1cpx;
         delete[] presigmal;
         delete[] presigmar;
+//        Pardiso::sparse_invert(HamSig);
     } else if (method==2) {
         delete[] sigmal;
         delete[] sigmar;

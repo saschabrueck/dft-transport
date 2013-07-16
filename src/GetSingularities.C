@@ -1,6 +1,6 @@
 #include "GetSingularities.H"
 
-Singularities::Singularities(TCSR<double> *KohnSham,TCSR<double> *Overlap,ParameterStruct parameter_sab)
+Singularities::Singularities(TCSR<double> *KohnSham,TCSR<double> *Overlap,c_transport_type parameter_sab)
 /**  \brief Initialize array energies and fill it with n_energies energy points at which there are singularities in the DOS, in addition get integration range
  *
  *   \param KohnSham      H matrix in CSR format collected on one node
@@ -17,7 +17,7 @@ Singularities::Singularities(TCSR<double> *KohnSham,TCSR<double> *Overlap,Parame
     k[0]=0.0;
     if (n_k>1) for (int i=1;i<n_k;i++) k[i]=i*M_PI/(n_k-1);
     int seq_per_cpu=int(ceil(double(n_k)/nprocs));
-    int ndof=Overlap->size_tot/parameter_sab.ncells;
+    int ndof=Overlap->size_tot/parameter_sab.n_cells;
     double *energies_local = new double[ndof*seq_per_cpu];
     int n_energies_local=0;
     int kpos;
@@ -54,7 +54,7 @@ Singularities::~Singularities()
     delete[] energies;
 }
 
-int Singularities::determine_velocities(TCSR<double> *KohnSham,TCSR<double> *Overlap,double k_in,double &energy_gs_k,double &energy_vbe_k,double *energies_k,int &n_energies_k,ParameterStruct parameter_sab)
+int Singularities::determine_velocities(TCSR<double> *KohnSham,TCSR<double> *Overlap,double k_in,double &energy_gs_k,double &energy_vbe_k,double *energies_k,int &n_energies_k,c_transport_type parameter_sab)
 /**  \brief Determine energies where velocity vanishes and their number for a given k
  *
  *   \param KohnSham      H matrix in CSR format collected on one node
@@ -72,14 +72,13 @@ int Singularities::determine_velocities(TCSR<double> *KohnSham,TCSR<double> *Ove
     CPX z_one=CPX(1.0,d_zer);
     CPX kval=exp(CPX(d_zer,k_in));
 
-    int ndof=Overlap->size_tot/parameter_sab.ncells;
-    if (ndof*parameter_sab.ncells!=Overlap->size_tot) return (cerr<<__LINE__<<endl, EXIT_FAILURE);
+    int ndof=Overlap->size_tot/parameter_sab.n_cells;
     int ndofsq=ndof*ndof;
     int bandwidth=parameter_sab.bandwidth;
     int ndofsqbw=ndofsq*(2*bandwidth+1);
     double eps_singularities=parameter_sab.eps_singularities;
     double evoltfactor=parameter_sab.evoltfactor;
-    int noccunitcell=parameter_sab.nocc/parameter_sab.ncells;
+    int noccunitcell=parameter_sab.n_occ/parameter_sab.n_cells;
 
     double *Hreal = new double[ndofsqbw];
     double *Sreal = new double[ndofsqbw];
