@@ -150,7 +150,7 @@ Quadrature::Quadrature(quadrature_types::quadrature_type type, double start,
         n=0;
         while (true) {
           // Construct poles on 'vertical' line through the physical fermi level
-          CPX z=(Ef, (2 * n + 1) * PI * k * T);
+          CPX z(Ef, (2 * n + 1) * PI * k * T);
           residue = -k * T * (1.0 / (1.0 + exp((z - mu_imaginary_cpx) /
                              (k * T_imaginary_cpx)))); // fermi_imaginary
           if (norm(residue) > precision) {
@@ -169,7 +169,7 @@ Quadrature::Quadrature(quadrature_types::quadrature_type type, double start,
         while (true) {
           // Construct poles on 'horizontal' line at height my_imaginary
           // from Ef downwards
-          CPX z=(Ef, (2 * n + 1) * PI * k * T_imaginary, mu_imaginary);
+          CPX z(Ef - (2 * n + 1) * PI * k * T_imaginary, mu_imaginary);
           residue = -k * T_imaginary_cpx *
                          ((1.0 / (1.0 + exp((z - Ef) / (k * T)))) - // fermi
                          (1.0 / (1.0 + exp((z - mu_real) / (k * T_real)))));
@@ -199,7 +199,7 @@ Quadrature::Quadrature(quadrature_types::quadrature_type type, double start,
         while (true) {
           // Construct poles on 'horizontal' line at height my_imaginary
           // from Ef upwards
-          CPX z=(Ef, (2 * n + 1) * PI * k * T_imaginary, mu_imaginary);
+          CPX z(Ef + (2 * n + 1) * PI * k * T_imaginary, mu_imaginary);
           residue = -k * T_imaginary_cpx *
                          ((1.0 / (1.0 + exp((z - Ef) / (k * T)))) -
                          (1.0 / (1.0 + exp((z - mu_real) / (k * T_real)))));
@@ -225,7 +225,7 @@ Quadrature::Quadrature(quadrature_types::quadrature_type type, double start,
         n=0;
         while (true) {
           // Construct poles on 'vertical' line through mu_real
-          CPX z=(mu_real, (2 * n + 1) * PI * k * T);
+          CPX z(mu_real, (2 * n + 1) * PI * k * T);
           residue = -k * T_real * (1.0 / (1.0 + exp((z - mu_imaginary_cpx) /
                              (k * T_imaginary_cpx)))); // fermi_imaginary
           if (norm(residue) > precision) {
