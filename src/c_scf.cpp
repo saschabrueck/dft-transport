@@ -1,9 +1,9 @@
 #include "c_scf.H"
 
-int kpointintegration(TCSR<double>*,TCSR<double>*,TCSR<double>*,int);
+int kpointintegration(TCSR<double>*,TCSR<double>*,TCSR<double>*,c_transport_type);
 int greensolver(TCSR<double>*,TCSR<double>*,TCSR<double>*);
-int diagscalapack(TCSR<double>*,TCSR<double>*,TCSR<double>*,int);
-int energyvector(TCSR<double>*,TCSR<double>*,TCSR<double>*,int);
+int diagscalapack(TCSR<double>*,TCSR<double>*,TCSR<double>*,c_transport_type);
+int energyvector(TCSR<double>*,TCSR<double>*,TCSR<double>*,c_transport_type);
 
 void c_scf_method(c_transport_type transport_env_params, c_DBCSR S, c_DBCSR KS, c_DBCSR * P)
 {
@@ -11,8 +11,6 @@ void c_scf_method(c_transport_type transport_env_params, c_DBCSR S, c_DBCSR KS, 
                  nblkrows_local_all, nrows_local_all, first_rows;
    int sendbuf, nrows_local, num_nodes, rank;
    int* recvbuf;
-
-   int nocc = transport_env_params.n_occ;
 
    row_block_size.assign(S.row_blk_size, S.row_blk_size + S.nblkrows_total);
    col_block_size.assign(S.col_blk_size, S.col_blk_size + S.nblkcols_total);
@@ -55,22 +53,14 @@ void c_scf_method(c_transport_type transport_env_params, c_DBCSR S, c_DBCSR KS, 
    Ps = new TCSR<double>(nrows_local, S.n_nze, 0);
    Ps->copy_index(Overlap);
 
-/*fstream countfile("countfile");
-int counter;
-countfile >> counter;
-counter++;
-countfile.seekg(ios_base::beg);
-countfile << counter;
-if (counter==6) remove("DoDiag");*/
-
    switch (transport_env_params.method) {
       case 1:
          if (!rank) cout << "Starting ScaLaPackDiag" << endl;
-         if (diagscalapack(Overlap,KohnSham,Ps,nocc)) throw 0;
+         if (diagscalapack(Overlap,KohnSham,Ps,transport_env_params)) throw 0;
          break;
       case 2:
          if (!rank) cout << "Starting KPointIntegration" << endl;
-         if (kpointintegration(Overlap,KohnSham,Ps,nocc)) throw 0;
+         if (kpointintegration(Overlap,KohnSham,Ps,transport_env_params)) throw 0;
          break;
      case 3:
          if (!rank) cout << "Starting experimental code" << endl;
@@ -78,7 +68,7 @@ if (counter==6) remove("DoDiag");*/
          break;
      default:
          if (!rank) cout << "Starting Transport" << endl;
-         if (energyvector(Overlap,KohnSham,Ps,nocc)) throw 0;
+         if (energyvector(Overlap,KohnSham,Ps,transport_env_params)) throw 0;
    }
 
    CSR_to_cDBCSR(Ps, *P, row_block_size, col_block_size, row_dist, col_dist, local_rows, nblkrows_local_all);

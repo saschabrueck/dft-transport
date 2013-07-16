@@ -1,11 +1,13 @@
 #include "ScaLapack.H"
 #include "array_tools.H"
 
-int diagscalapack(TCSR<double> *Overlap,TCSR<double> *KohnSham,TCSR<double> *P_Matrix,int nocc)
+int diagscalapack(TCSR<double> *Overlap,TCSR<double> *KohnSham,TCSR<double> *P_Matrix,c_transport_type parameters_transport)
 {
     int iam, nprocs;
     MPI_Comm_size(MPI_COMM_WORLD,&nprocs);
     MPI_Comm_rank(MPI_COMM_WORLD,&iam);
+
+    int nocc=parameters_transport.n_occ;
 
     double sabtime;
     double *OVfull, *KSfull;
