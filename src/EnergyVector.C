@@ -56,7 +56,7 @@ int energyvector(TCSR<double> *Overlap,TCSR<double> *KohnSham,TCSR<double> *P_Ma
     int jpos;
     for (int iseq=0;iseq<seq_per_cpu;iseq++)
         if ( (jpos=iam+iseq*nprocs)<size_energyvector)
-            if (density(KohnShamCollect,OverlapCollect,Ps,energyvector[jpos],stepvector[jpos],transport_methods::WF,transport_params)) return (cerr<<__LINE__<<endl, EXIT_FAILURE);
+            if (density(KohnShamCollect,OverlapCollect,Ps,energyvector[jpos],stepvector[jpos],transport_methods::NEGF,transport_params)) return (cerr<<__LINE__<<endl, EXIT_FAILURE);
 // trPS
     CPX trPScpx=c_ddot(Ps->n_nonzeros,(double*) Ps->nnz,2,OverlapCollect->nnz,1);
     CPX trPScpxSum=CPX(0.0,0.0);
