@@ -53,7 +53,7 @@ CONTAINS
     IF (.NOT. failure) THEN
        CALL section_create(section,"TRANSPORT",&
             description="Specifies the parameters for transport",&
-            n_keywords=10, n_subsections=0, repeats=.FALSE., required=.FALSE.,&
+            n_keywords=15, n_subsections=0, repeats=.FALSE., required=.FALSE.,&
             error=error)
 
        NULLIFY (keyword)
@@ -75,13 +75,43 @@ CONTAINS
 
        CALL keyword_create(keyword, name="BANDWIDTH",&
             description="bandwidth ... ",&
-            usage="BANDWIDTH 3", default_i_val=3,error=error)
+            usage="BANDWIDTH 2", default_i_val=2,error=error)
        CALL section_add_keyword(section,keyword,error=error)
        CALL keyword_release(keyword,error=error)
 
-       CALL keyword_create(keyword, name="NCELLS",&
-            description="ncells ...",&
-            usage="NCELLS 5", default_i_val=5,error=error)
+       CALL keyword_create(keyword, name="N_CELLS",&
+            description="The number of unit cells",&
+            usage="N_CELLS 5", default_i_val=5,error=error)
+       CALL section_add_keyword(section,keyword,error=error)
+       CALL keyword_release(keyword,error=error)
+
+       CALL keyword_create(keyword, name="N_ABSCISSAE",&
+            description="The number of abscissae per integration interval on the real axis",&
+            usage="N_ABSCISSAE 10", default_i_val=10,error=error)
+       CALL section_add_keyword(section,keyword,error=error)
+       CALL keyword_release(keyword,error=error)
+
+       CALL keyword_create(keyword, name="N_KPOINTS",&
+            description="The number of k points for determination of the singularities",&
+            usage="N_KPOINTS 10", default_i_val=10,error=error)
+       CALL section_add_keyword(section,keyword,error=error)
+       CALL keyword_release(keyword,error=error)
+
+       CALL keyword_create(keyword, name="EXTRA_INT_PARAM1",&
+            description="extra integer parameter just in case ",&
+            usage="EXTRA_INT_PARAM1 0", default_i_val=0,error=error)
+       CALL section_add_keyword(section,keyword,error=error)
+       CALL keyword_release(keyword,error=error)
+
+       CALL keyword_create(keyword, name="EXTRA_INT_PARAM2",&
+            description="extra integer parameter just in case ",&
+            usage="EXTRA_INT_PARAM2 0", default_i_val=0,error=error)
+       CALL section_add_keyword(section,keyword,error=error)
+       CALL keyword_release(keyword,error=error)
+
+       CALL keyword_create(keyword, name="EXTRA_INT_PARAM3",&
+            description="extra integer parameter just in case ",&
+            usage="EXTRA_INT_PARAM3 0", default_i_val=0,error=error)
        CALL section_add_keyword(section,keyword,error=error)
        CALL keyword_release(keyword,error=error)
 
@@ -104,7 +134,7 @@ CONTAINS
        CALL keyword_release(keyword,error=error)
 
        CALL keyword_create(keyword, name="EPS_SINGULARITIES",&
-            description="threshold for ...",&
+            description="Threshold for ...",&
             usage="EPS_SINGULARITIES 1.0E-3", default_r_val=1.0E-3_dp,error=error)
        CALL section_add_keyword(section,keyword,error=error)
        CALL keyword_release(keyword,error=error)
@@ -112,6 +142,18 @@ CONTAINS
        CALL keyword_create(keyword, name="EXTRA_PARAM1",&
             description="extra double parameter just in case ",&
             usage="EXTRA_PARAM1 0.0", default_r_val=0.0_dp,error=error)
+       CALL section_add_keyword(section,keyword,error=error)
+       CALL keyword_release(keyword,error=error)
+
+       CALL keyword_create(keyword, name="EXTRA_PARAM2",&
+            description="extra double parameter just in case ",&
+            usage="EXTRA_PARAM2 0.0", default_r_val=0.0_dp,error=error)
+       CALL section_add_keyword(section,keyword,error=error)
+       CALL keyword_release(keyword,error=error)
+
+       CALL keyword_create(keyword, name="EXTRA_PARAM3",&
+            description="extra double parameter just in case ",&
+            usage="EXTRA_PARAM3 0.0", default_r_val=0.0_dp,error=error)
        CALL section_add_keyword(section,keyword,error=error)
        CALL keyword_release(keyword,error=error)
 

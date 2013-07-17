@@ -42,12 +42,20 @@
     &END
     &TRANSPORT
       DENSITY_MATRIX_CONSTRUCTION_METHOD   DIAG
-!      BANDWIDTH  3
-!      NCELLS     5
+!      N_ABSCISSAE    10
+!      N_KPOINTS      10
+!      BANDWIDTH      2
+!      N_CELLS        5
 !      COLZERO_THRESHOLD  1.0E-12
 !      EPS_LIMIT          1.0E-6
 !      EPS_DECAY          1.0E-6
 !      EPS_SINGULARITIES  1.0E-3
+!!      EXTRA_INT_PARAM1   0
+!!      EXTRA_INT_PARAM2   0
+!!      EXTRA_INT_PARAM3   0
+!!      EXTRA_PARAM1       0.0
+!!      EXTRA_PARAM2       0.0
+!!      EXTRA_PARAM3       0.0
     &END
     &SCF
       MAX_SCF    30

@@ -28,17 +28,21 @@ MODULE transport_types
 
   TYPE transport_type
      TYPE(c_funptr)        :: ext_method_ptr
-     INTEGER               :: method, bandwidth, n_cells
+     INTEGER               :: method, bandwidth, n_cells,&
+                              n_abscissae, n_kpoint,&
+                              extra_int_param1, extra_int_param2, extra_int_param3
      REAL(dp)              :: colzero_threshold,&
                               eps_limit, eps_decay, eps_singularities,&
-                              extra_param1
+                              extra_param1, extra_param2, extra_param3
   END TYPE transport_type
 
   TYPE, BIND(C) :: c_transport_type
-     INTEGER(C_INT)    :: method, bandwidth, n_cells, n_occ
+     INTEGER(C_INT)    :: method, bandwidth, n_cells, n_occ,&
+                          n_abscissae, n_kpoint,&
+                          extra_int_param1, extra_int_param2, extra_int_param3
      REAL(C_DOUBLE)    :: evoltfactor, colzero_threshold,&
                           eps_limit, eps_decay, eps_singularities, &
-                          extra_param1
+                          extra_param1, extra_param2, extra_param3
   END TYPE c_transport_type
 
   PUBLIC :: transport_env_release

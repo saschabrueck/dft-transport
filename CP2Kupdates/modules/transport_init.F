@@ -97,12 +97,19 @@ CONTAINS
     ! should come from input
     CALL section_vals_val_get(transport_section,"DENSITY_MATRIX_CONSTRUCTION_METHOD",i_val=transport_env%method,error=error)
     CALL section_vals_val_get(transport_section,"BANDWIDTH",i_val=transport_env%bandwidth,error=error)
-    CALL section_vals_val_get(transport_section,"NCELLS",i_val=transport_env%n_cells,error=error)
+    CALL section_vals_val_get(transport_section,"N_CELLS",i_val=transport_env%n_cells,error=error)
+    CALL section_vals_val_get(transport_section,"N_ABSCISSAE",i_val=transport_env%n_abscissae,error=error)
+    CALL section_vals_val_get(transport_section,"N_KPOINTS",i_val=transport_env%n_kpoint,error=error)
+    CALL section_vals_val_get(transport_section,"EXTRA_INT_PARAM1",i_val=transport_env%extra_int_param1,error=error)
+    CALL section_vals_val_get(transport_section,"EXTRA_INT_PARAM2",i_val=transport_env%extra_int_param2,error=error)
+    CALL section_vals_val_get(transport_section,"EXTRA_INT_PARAM3",i_val=transport_env%extra_int_param3,error=error)
     CALL section_vals_val_get(transport_section,"COLZERO_THRESHOLD",r_val=transport_env%colzero_threshold,error=error)
     CALL section_vals_val_get(transport_section,"EPS_LIMIT",r_val=transport_env%eps_limit,error=error)
     CALL section_vals_val_get(transport_section,"EPS_DECAY",r_val=transport_env%eps_decay,error=error)
     CALL section_vals_val_get(transport_section,"EPS_SINGULARITIES",r_val=transport_env%eps_singularities,error=error)
     CALL section_vals_val_get(transport_section,"EXTRA_PARAM1",r_val=transport_env%extra_param1,error=error)
+    CALL section_vals_val_get(transport_section,"EXTRA_PARAM2",r_val=transport_env%extra_param2,error=error)
+    CALL section_vals_val_get(transport_section,"EXTRA_PARAM3",r_val=transport_env%extra_param3,error=error)
 
     SELECT CASE(transport_env%method)
     CASE(misc_method)
@@ -134,11 +141,18 @@ CONTAINS
     c_transport_env%method=transport_env%method
     c_transport_env%bandwidth=transport_env%bandwidth
     c_transport_env%n_cells=transport_env%n_cells
+    c_transport_env%n_abscissae=transport_env%n_abscissae
+    c_transport_env%n_kpoint=transport_env%n_kpoint
+    c_transport_env%extra_int_param1=transport_env%extra_int_param1
+    c_transport_env%extra_int_param2=transport_env%extra_int_param2
+    c_transport_env%extra_int_param3=transport_env%extra_int_param3
     c_transport_env%colzero_threshold=transport_env%colzero_threshold
     c_transport_env%eps_limit=transport_env%eps_limit
     c_transport_env%eps_decay=transport_env%eps_decay
     c_transport_env%eps_singularities=transport_env%eps_singularities
     c_transport_env%extra_param1=transport_env%extra_param1
+    c_transport_env%extra_param2=transport_env%extra_param2
+    c_transport_env%extra_param3=transport_env%extra_param3
  
     c_transport_env%n_occ = n_occupied
     c_transport_env%evoltfactor = evolt
