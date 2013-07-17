@@ -62,7 +62,7 @@ Quadrature::Quadrature(quadrature_types::quadrature_type type, double start,
   if (start < end) {
     band_start = start;
     band_end = end;
-  } else if (start < end) {
+  } else if (start > end) {
     band_start = end;
     band_end = start;
   } else {
