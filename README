@@ -32,13 +32,20 @@ DENSITY_MATRIX_CONSTRUCTION_METHOD
    EXPER        experimental code                                            3
    TRANSPORT    transport code                                               4 
    MISC         miscellaneous method                                         0 
-BANDWIDTH            INTEGER (int)        default value 3
-NCELLS               INTEGER (int)        default value 5
-COLZERO_THRESHOLD    REAL    (double)     default value 1.0E-12
-EPS_LIMIT            REAL    (double)     default value 1.0E-6
-EPS_DECAY            REAL    (double)     default value 1.0E-6
-EPS_SINGULARITIES    REAL    (double)     default value 1.0E-3
-EXTRA_PARAM1         REAL    (double)     default value 0.0
+BANDWIDTH             INTEGER (int)        default value 2
+N_CELLS               INTEGER (int)        default value 5
+N_ABSCISSAE           INTEGER (int)        default value 10
+N_KPOINTS             INTEGER (int)        default value 10
+COLZERO_THRESHOLD     REAL    (double)     default value 1.0E-12
+EPS_LIMIT             REAL    (double)     default value 1.0E-6
+EPS_DECAY             REAL    (double)     default value 1.0E-6
+EPS_SINGULARITIES     REAL    (double)     default value 1.0E-3
+EXTRA_INT_PARAM1      INTEGER (int)        default value 0
+EXTRA_INT_PARAM2      INTEGER (int)        default value 0
+EXTRA_INT_PARAM3      INTEGER (int)        default value 0
+EXTRA_PARAM1          REAL    (double)     default value 0.0
+EXTRA_PARAM2          REAL    (double)     default value 0.0
+EXTRA_PARAM3          REAL    (double)     default value 0.0
 
 (*)TO DO: keywords to be defined as constants to avoid confusion  
 
