@@ -687,7 +687,9 @@ int density(TCSR<double> *KohnSham,TCSR<double> *Overlap,TCSR<CPX> *Ps,CPX energ
         delete[] H1cpx;
         delete[] presigmal;
         delete[] presigmar;
-//        Pardiso::sparse_invert(HamSig);
+        sabtime=get_time(d_zer);
+        Pardiso::sparse_invert(HamSig);
+        cout << "TIME FOR PARDISO INVERSION " << get_time(sabtime) << endl;
     } else if (method==transport_methods::WF) {
         delete[] sigmal;
         delete[] sigmar;
