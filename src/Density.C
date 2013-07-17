@@ -15,7 +15,7 @@ using namespace std;
 #include "Pardiso.H"
 #include "Density.H"
 
-int density(TCSR<double> *KohnSham,TCSR<double> *Overlap,TCSR<CPX> *Ps,CPX energy,CPX weight,int method,c_transport_type parameter_sab)
+int density(TCSR<double> *KohnSham,TCSR<double> *Overlap,TCSR<CPX> *Ps,CPX energy,CPX weight,transport_methods::transport_method method,c_transport_type parameter_sab)
 {
     int iam, nprocs;
     MPI_Comm_size(MPI_COMM_WORLD,&nprocs);
@@ -40,7 +40,7 @@ int density(TCSR<double> *KohnSham,TCSR<double> *Overlap,TCSR<CPX> *Ps,CPX energ
 // complex or real energy
     int complexenergypoint=0;
     if (imag(energy)) complexenergypoint=1;
-    if (complexenergypoint && method==2) return (cerr<<__LINE__<<endl, EXIT_FAILURE);
+    if (complexenergypoint && method==transport_methods::WF) return (cerr<<__LINE__<<endl, EXIT_FAILURE);
 // inj_sign
     int inj_sign=-1;
 // H-E*S
@@ -643,7 +643,7 @@ int density(TCSR<double> *KohnSham,TCSR<double> *Overlap,TCSR<CPX> *Ps,CPX energ
         delete LeftCorner;
         delete RightCorner;
         delete SumHamC;
-    if (method==0) {
+    if (method==transport_methods::TEST) {
 // this is only a lil debugging thing
         delete[] H1cpx;
         delete[] presigmal;
@@ -682,13 +682,13 @@ int density(TCSR<double> *KohnSham,TCSR<double> *Overlap,TCSR<CPX> *Ps,CPX energ
         cout << "MATRIX MATRIX MULTIPLICATIONS AND TRACE FOR TRANSMISSION " << get_time(sabtime) << endl;
         cout << "Energy " << energy << " Transmission " << real(trace) << endl;
         delete[] H0cpx;
-    } else if (method==1) {
+    } else if (method==transport_methods::NEGF) {
         delete[] H0cpx;
         delete[] H1cpx;
         delete[] presigmal;
         delete[] presigmar;
 //        Pardiso::sparse_invert(HamSig);
-    } else if (method==2) {
+    } else if (method==transport_methods::WF) {
         delete[] sigmal;
         delete[] sigmar;
         sabtime=get_time(d_zer);

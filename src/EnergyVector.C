@@ -27,28 +27,36 @@ int energyvector(TCSR<double> *Overlap,TCSR<double> *KohnSham,TCSR<double> *P_Ma
     if (!iam || iam==nprocs-1)
         step/=2;*/
 // here is the real quadrature
+    Quadrature *gausscheby;
     int num_points_per_interval=transport_params.n_abscissae;
-    int size_energyvector=num_points_per_interval*singularities->n_energies;
+    int size_energyvector;
+    if (singularities->energy_gs<singularities->energies[0])
+        size_energyvector=num_points_per_interval*singularities->n_energies;
+    else
+        size_energyvector=num_points_per_interval*(singularities->n_energies-1);
     CPX *energyvector = new CPX[size_energyvector];
     CPX *stepvector = new CPX[size_energyvector];
-    Quadrature *gausscheby = new Quadrature(quadrature_types::GC,singularities->energy_gs,singularities->energies[0],0.0,singularities->energy_vbe,num_points_per_interval);
-    std::copy(gausscheby->abscissae.begin(),gausscheby->abscissae.end(),energyvector);
-    std::copy(gausscheby->weights.begin(),gausscheby->weights.end(),stepvector);
-    delete gausscheby;
-    for (int i_energies=1;i_energies<singularities->n_energies;i_energies++) {
-        gausscheby = new Quadrature(quadrature_types::GC,singularities->energies[i_energies-1],singularities->energies[i_energies],0.0,singularities->energy_vbe,num_points_per_interval);
-        std::copy(gausscheby->abscissae.begin(),gausscheby->abscissae.end(),&energyvector[i_energies*num_points_per_interval]);
-        std::copy(gausscheby->weights.begin(),gausscheby->weights.end(),&stepvector[i_energies*num_points_per_interval]);
+    int i_start=0;
+    if (singularities->energy_gs<singularities->energies[0]) {
+        gausscheby = new Quadrature(quadrature_types::GC,singularities->energy_gs,singularities->energies[0],0.0,singularities->energy_vbe,num_points_per_interval);
+        std::copy(gausscheby->abscissae.begin(),gausscheby->abscissae.end(),energyvector);
+        std::copy(gausscheby->weights.begin(),gausscheby->weights.end(),stepvector);
+        delete gausscheby;
+        i_start=num_points_per_interval;
+    }
+    for (int i_energies=0;i_energies<singularities->n_energies-1;i_energies++) {
+        gausscheby = new Quadrature(quadrature_types::GC,singularities->energies[i_energies],singularities->energies[i_energies+1],0.0,singularities->energy_vbe,num_points_per_interval);
+        std::copy(gausscheby->abscissae.begin(),gausscheby->abscissae.end(),&energyvector[i_start+i_energies*num_points_per_interval]);
+        std::copy(gausscheby->weights.begin(),gausscheby->weights.end(),&stepvector[i_start+i_energies*num_points_per_interval]);
         delete gausscheby;
     }
     delete singularities;
 // run distributed
-    int method=2;
     int seq_per_cpu=int(ceil(double(size_energyvector)/nprocs));
     int jpos;
     for (int iseq=0;iseq<seq_per_cpu;iseq++)
         if ( (jpos=iam+iseq*nprocs)<size_energyvector)
-            if (density(KohnShamCollect,OverlapCollect,Ps,energyvector[jpos],stepvector[jpos],method,transport_params)) return (cerr<<__LINE__<<endl, EXIT_FAILURE);
+            if (density(KohnShamCollect,OverlapCollect,Ps,energyvector[jpos],stepvector[jpos],transport_methods::WF,transport_params)) return (cerr<<__LINE__<<endl, EXIT_FAILURE);
 // trPS
     CPX trPScpx=c_ddot(Ps->n_nonzeros,(double*) Ps->nnz,2,OverlapCollect->nnz,1);
     CPX trPScpxSum=CPX(0.0,0.0);
