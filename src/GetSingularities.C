@@ -12,7 +12,7 @@ Singularities::Singularities(TCSR<double> *KohnSham,TCSR<double> *Overlap,c_tran
     MPI_Comm_size(MPI_COMM_WORLD,&nprocs);
     MPI_Comm_rank(MPI_COMM_WORLD,&iam); 
 
-    int n_k=10;
+    int n_k=parameter_sab.n_kpoint;
     double *k = new double[n_k];
     k[0]=0.0;
     if (n_k>1) for (int i=1;i<n_k;i++) k[i]=i*M_PI/(n_k-1);
