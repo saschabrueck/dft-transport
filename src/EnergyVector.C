@@ -27,7 +27,7 @@ int energyvector(TCSR<double> *Overlap,TCSR<double> *KohnSham,TCSR<double> *P_Ma
     if (!iam || iam==nprocs-1)
         step/=2;*/
 // here is the real quadrature
-    int num_points_per_interval=10;
+    int num_points_per_interval=transport_params.n_abscissae;
     int size_energyvector=num_points_per_interval*singularities->n_energies;
     CPX *energyvector = new CPX[size_energyvector];
     CPX *stepvector = new CPX[size_energyvector];
