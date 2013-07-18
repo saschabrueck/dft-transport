@@ -117,6 +117,8 @@ Quadrature::Quadrature(quadrature_types::quadrature_type type, double start,
         abscissae.push_back(abscissa);
         if (T != 0) {
           fermi = 1.0 / (exp((abscissa - Ef) / (k * T)) + 1.0);
+        } else if (abscissa > Ef) {
+          fermi = 0.0;
         }
         weights.push_back(weights_precalc[i] * (band_end - band_start) / 2.0 *
                           fermi);
@@ -244,12 +246,14 @@ Quadrature::Quadrature(quadrature_types::quadrature_type type, double start,
       }
       double fermi = 1.0;
       for (uint n = 1; n <= num_abscissae; ++n) {
-        double abscissa = -(cos(PI * (2 * n - 1.0) / (2.0 * num_abscissae)) *
+        double abscissa = (cos(PI * (2 * n - 1.0) / (2.0 * num_abscissae)) *
                         (band_end - band_start) / 2.0 +
                         (band_end + band_start) / 2.0);
         abscissae.push_back(abscissa);
         if (T != 0) {
           fermi = 1.0 / (exp((abscissa - Ef) / (k * T)) + 1.0);
+        } else if (abscissa > Ef) {
+          fermi = 0.0;
         }
         weights.push_back((PI / num_abscissae) * 
                           (band_end - band_start) / 2.0 * fermi);
