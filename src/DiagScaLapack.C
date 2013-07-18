@@ -14,7 +14,7 @@ int diagscalapack(TCSR<double> *Overlap,TCSR<double> *KohnSham,TCSR<double> *P_M
     int iinfo;
 
     int nvec=KohnSham->size_tot;
-    if (nvec!=Overlap->size_tot) return (cerr<<__LINE__<<endl, EXIT_FAILURE);
+    if (nvec!=Overlap->size_tot) return (LOGCERR, EXIT_FAILURE);
 
     TCSR<double> *KohnShamCollect = new TCSR<double>(KohnSham,MPI_COMM_WORLD);
     if (!iam) {
@@ -82,7 +82,7 @@ int diagscalapack(TCSR<double> *Overlap,TCSR<double> *KohnSham,TCSR<double> *P_M
     int *ifail      = new int[nvec];
     int *iclu       = new int[2*nprocs];
     double *dgap    = new double[nprocs];
-    if (nprocs<1) return (cerr<<__LINE__<<endl, EXIT_FAILURE);  
+    if (nprocs<1) return (LOGCERR, EXIT_FAILURE);  
     c_pdsygvx(1,'V','A','U',nvec,KSloc,1,1,descKS,OVloc,1,1,descOV,\
               0.0,0.0,1,1,0.0,&mout,&nzout,eigval,0.0,Zloc,1,1,descZ,\
               workytest,-1,iworkytest,-1,ifail,iclu,dgap,&iinfo);
@@ -96,7 +96,7 @@ int diagscalapack(TCSR<double> *Overlap,TCSR<double> *KohnSham,TCSR<double> *P_M
     c_pdsygvx(1,'V','A','U',nvec,KSloc,1,1,descKS,OVloc,1,1,descOV,\
               0.0,0.0,1,1,0.0,&mout,&nzout,eigval,0.0,Zloc,1,1,descZ,\
               worky,lworky,iworky,liworky,ifail,iclu,dgap,&iinfo);
-    if (iinfo) return (cerr<<__LINE__<<endl, EXIT_FAILURE);
+    if (iinfo) return (LOGCERR, EXIT_FAILURE);
     if (!iam) cout << "Time after Diag " << get_time(sabtime) << endl;
     delete[] worky;
     delete[] iworky;

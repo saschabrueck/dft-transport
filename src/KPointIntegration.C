@@ -8,7 +8,7 @@ int kpointintegration(TCSR<double> *Overlap,TCSR<double> *KohnSham,TCSR<double> 
 
     int size=Overlap->size_tot;
     int ndof=size/ncells;
-    if (ndof*ncells!=size) return (cerr<<__LINE__<<endl, EXIT_FAILURE);
+    if (ndof*ncells!=size) return (LOGCERR, EXIT_FAILURE);
     int sizesq=size*size;
     CPX iunit=CPX(0.0,1.0);
 

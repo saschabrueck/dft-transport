@@ -7,6 +7,8 @@
 #include "Blas.H"
 #include "array_tools.H"
 
+#define LOGCERR std::cerr << "ERROR IN LINE " << __LINE__ << " OF FILE " << __FILE__ << std::endl
+
 class CSR{
 public:
     

@@ -101,7 +101,7 @@ cout<<endl;
         occfile.close();
         cout << "Read Time " << get_time(sabtime) << endl;
         nvec=KohnSham->size_tot;
-        if (nvec!=Overlap->size_tot) cerr<<__LINE__<<endl, exit(EXIT_FAILURE);
+        if (nvec!=Overlap->size_tot) LOGCERR, exit(EXIT_FAILURE);
         KSfull = new double[nvec*nvec];
         OVfull = new double[nvec*nvec];
         KohnSham->sparse_to_full(KSfull,nvec,nvec);
@@ -115,7 +115,7 @@ cout<<endl;
     double sabtime;
     double *OVfull, *KSfull;
         nvec=KohnSham->size_tot;
-        if (nvec!=Overlap->size_tot) cerr<<__LINE__<<endl, exit(EXIT_FAILURE);
+        if (nvec!=Overlap->size_tot) LOGCERR, exit(EXIT_FAILURE);
         KSfull = new double[nvec*nvec];
         OVfull = new double[nvec*nvec];
         KohnSham->sparse_to_full(KSfull,nvec,nvec);
@@ -195,7 +195,7 @@ cout<<endl;
     int *ifail      = new int[nvec];
     int *iclu       = new int[2*nprocs];
     double *dgap    = new double[nprocs];
-    if (nprocs<1) cerr<<__LINE__<<endl, exit(EXIT_FAILURE);  
+    if (nprocs<1) LOGCERR, exit(EXIT_FAILURE);  
     if (!iam) cout<<"Start diagonalization"<<endl;
     c_pdsygvx(1,'V','A','U',nvec,KSloc,1,1,descKS,OVloc,1,1,descOV,\
               0.0,0.0,1,1,0.0,&mout,&nzout,eigval,0.0,Zloc,1,1,descZ,\
@@ -210,7 +210,7 @@ cout<<endl;
               0.0,0.0,1,1,0.0,&mout,&nzout,eigval,0.0,Zloc,1,1,descZ,\
               worky,lworky,iworky,liworky,ifail,iclu,dgap,&iinfo);
     if (iinfo) {
-  cerr<<__LINE__<<endl;
+  LOGCERR;
 cout<<"info "<<iinfo<<endl;  
  exit(EXIT_FAILURE);}
     if (!iam) cout << "Time after diag " << get_time(sabtime) << endl;
@@ -316,7 +316,7 @@ cout<<"whatever"<<endl;
 
 
 //    double energystep;
-    if (bandwidth<1) cerr<<__LINE__<<endl, exit(EXIT_FAILURE);
+    if (bandwidth<1) LOGCERR, exit(EXIT_FAILURE);
 //    if (nprocs==1)
         energy=energystart;
 //    else {
@@ -371,14 +371,14 @@ cout<<"whatever"<<endl;
 
     TCSR<CPX> *SumHamC;
 
-//    if (KohnSham->size_tot!=Overlap->size_tot) cerr<<__LINE__<<endl, exit(EXIT_FAILURE);  delete this line
+//    if (KohnSham->size_tot!=Overlap->size_tot) LOGCERR, exit(EXIT_FAILURE);  delete this line
 // WARNING BECAUSE OF PBC IN HAMILTONIAN IT CANNOT DETERMINE BANDWIDTH
 //    bandwidth=max(KohnSham->get_bandwidth(ndof),Overlap->get_bandwidth(ndof));
         //TCSR<CPX> *SumHamC = new TCSR<CPX>(SumHam->size_tot,SumHam->n_nonzeros,SumHam->findx);
         //SumHamC->copy_contain(SumHam,d_one);
     SumHamC = new TCSR<CPX>(CPX(evoltfactor,d_zer),KohnSham,-CPX(energy,energyimag),Overlap);
     int ncells=SumHamC->size_tot/ndof;										//COPY TO THIS PLACE
-    if (ndof*ncells!=SumHamC->size_tot) cerr<<__LINE__<<endl, exit(EXIT_FAILURE); 				//COPY TO THIS PLACE 
+    if (ndof*ncells!=SumHamC->size_tot) LOGCERR, exit(EXIT_FAILURE); 				//COPY TO THIS PLACE 
 //    delete KohnSham; //delete Overlap later
 
     CPX* KScpx;
@@ -453,9 +453,9 @@ cout<<"whatever"<<endl;
 // the matrix mats is not hermitian for complex energy point i think
             sabtime=get_time(d_zer);
             c_zgetrf(ndof,ndof,mats,ndof,pivarrayn,&iinfo);
-            if (iinfo) cerr<<__LINE__<<endl, exit(EXIT_FAILURE); 
+            if (iinfo) LOGCERR, exit(EXIT_FAILURE); 
             c_zgetrs('N',ndof,ndof*2*bandwidth,mats,ndof,pivarrayn,matb,ndof,&iinfo);
-            if (iinfo) cerr<<__LINE__<<endl, exit(EXIT_FAILURE); 
+            if (iinfo) LOGCERR, exit(EXIT_FAILURE); 
             cout << "TIME FOR CPX INVERSION " << get_time(sabtime) << endl;
         } else {
             sabtime=get_time(d_zer);
@@ -467,7 +467,7 @@ cout<<"whatever"<<endl;
             int lworkyn=int(workyytest);
             double *workyn=new double[lworkyn];
             c_dsysv('U',ndof,ndof*2*bandwidth,matsreal,ndof,pivarrayn,matbreal,ndof,workyn,lworkyn,&iinfo);
-            if (iinfo) cerr<<__LINE__<<endl, exit(EXIT_FAILURE); 
+            if (iinfo) LOGCERR, exit(EXIT_FAILURE); 
             delete[] workyn;
             delete[] matsreal;
             for (int imat=0;imat<2*bandwidth*ndofsq;imat++) matb[imat]=CPX(matbreal[imat],d_zer);
@@ -529,7 +529,7 @@ cout<<"whatever"<<endl;
                         indrzcolvecn[nindrzcoln++]=itriblock;
                 }
             }
-        if (nindzerocoln+nindnzcoln!=2*ntriblock) cerr<<__LINE__<<endl, exit(EXIT_FAILURE); 
+        if (nindzerocoln+nindnzcoln!=2*ntriblock) LOGCERR, exit(EXIT_FAILURE); 
         CPX *matmn=new CPX[nindnzcoln*nindnzcoln];
         CPX *matmr=new CPX[nindnzcoln*nindrzcoln];
         for (int jindnzcol=0;jindnzcol<nindnzcoln;jindnzcol++)
@@ -546,7 +546,7 @@ cout<<"whatever"<<endl;
             if (indnzcolvecn[ipos]>=bandwidth*ndof && blockbwpos==-1) blockbwpos=ipos;
             if (indnzcolvecn[ipos]<=((bandwidth+1)*ndof-1)) blockbwpoe=ipos;
         }
-        if (blockbwpos<0 || blockbwpoe<0) cerr<<__LINE__<<endl, exit(EXIT_FAILURE); 
+        if (blockbwpos<0 || blockbwpoe<0) LOGCERR, exit(EXIT_FAILURE); 
 // get eigenvalues and eigenvectors
         double *eigvalreal=new double[nindnzcoln];
         double *eigvalimag=new double[nindnzcoln];
@@ -560,7 +560,7 @@ cout<<"whatever"<<endl;
             int lworkyc=int(real(workyctest));
             CPX *workyc=new CPX[lworkyc];
             c_zgeev('N','V',nindnzcoln,matmn,nindnzcoln,eigvalcpx,&cdummy,1,eigveccfull,nindnzcoln,workyc,lworkyc,workdouble,&iinfo);
-            if (iinfo) cerr<<__LINE__<<endl, exit(EXIT_FAILURE);
+            if (iinfo) LOGCERR, exit(EXIT_FAILURE);
             cout << "TIME FOR CPX DIAGONALIZATION " << get_time(sabtime) << endl;
             delete[] workdouble;
             delete[] workyc;
@@ -579,7 +579,7 @@ cout<<"whatever"<<endl;
             int lworky=int(workyytest);
             double *worky=new double[lworky];
             c_dgeev('N','V',nindnzcoln,matmnreal,nindnzcoln,eigvalreal,eigvalimag,&dddummy,1,eigvec,nindnzcoln,worky,lworky,&iinfo);
-            if (iinfo) cerr<<__LINE__<<endl, exit(EXIT_FAILURE); 
+            if (iinfo) LOGCERR, exit(EXIT_FAILURE); 
             cout << "TIME FOR REAL DIAGONALIZATION " << get_time(sabtime) << endl;
             delete[] worky;
             delete[] matmnreal;
@@ -598,7 +598,7 @@ cout<<"whatever"<<endl;
                      }
                     iwhile+=2;
                 }
-                else cerr<<__LINE__<<endl, exit(EXIT_FAILURE);
+                else LOGCERR, exit(EXIT_FAILURE);
             } // END WHILE
             delete[] eigvec;
         }
@@ -661,7 +661,7 @@ cout<<"whatever"<<endl;
                    velref[nproref]=abs(velnum);
                    prorefvec[nproref++]=iindnzcoln;
                 } 
-                else cerr<<__LINE__<<endl, exit(EXIT_FAILURE);
+                else LOGCERR, exit(EXIT_FAILURE);
            } // END IF decaying or propagating
            lambdavec[iindnzcoln]=lambda;
         } // END IF k not infinite
@@ -670,8 +670,8 @@ cout<<"whatever"<<endl;
     delete[] eigvalimag;
     delete[] matcdof;
     delete[] vecout;
-    if (nprotra!=nproref) cerr<<__LINE__<<endl, exit(EXIT_FAILURE); 
-    if (ndectra!=ndecref) ndectra=min(ndectra,ndecref);//return (cerr<<__LINE__<<endl, EXIT_FAILURE);
+    if (nprotra!=nproref) LOGCERR, exit(EXIT_FAILURE); 
+    if (ndectra!=ndecref) ndectra=min(ndectra,ndecref);//return (LOGCERR, EXIT_FAILURE);
 // FOR ABOVE CASE I NEED TO IMPLEMENT SORTING OF LAMBDA? OR JUST THROW AWAY SOME VECS OF THE LIST SETTING NDEC TO MIN OF PRO AND REF?
 // ONCE I REMOVE ONE OF THE DIRECTIONS I WILL ALSO REMOVE THE LINE ABOVE
     int neigbas=nprotra+ndectra;
@@ -902,18 +902,18 @@ cout<<"whatever"<<endl;
     full_conjugate_transpose(neigbas,ntriblock,Vtra,matcpx);
     sabtime=get_time(d_zer);
     c_zgetrf(neigbas,neigbas,invgls,neigbas,pivarrayg,&iinfo);
-    if (iinfo) cerr<<__LINE__<<endl, exit(EXIT_FAILURE);  
+    if (iinfo) LOGCERR, exit(EXIT_FAILURE);  
     c_zgetrs('N',neigbas,ntriblock,invgls,neigbas,pivarrayg,matcpx,neigbas,&iinfo);
-    if (iinfo) cerr<<__LINE__<<endl, exit(EXIT_FAILURE); 
+    if (iinfo) LOGCERR, exit(EXIT_FAILURE); 
     cout << "TIME FOR gls INVERSION " << get_time(sabtime) << endl;
     c_zgemm('N','N',ntriblock,ntriblock,neigbas,z_one,Vtra,ntriblock,matcpx,neigbas,z_zer,sigmal,ntriblock);
     sigmar=new CPX[triblocksize];
     full_conjugate_transpose(neigbas,ntriblock,Vref,matcpx);
     sabtime=get_time(d_zer);
     c_zgetrf(neigbas,neigbas,invgrs,neigbas,pivarrayg,&iinfo);
-    if (iinfo) cerr<<__LINE__<<endl, exit(EXIT_FAILURE); 
+    if (iinfo) LOGCERR, exit(EXIT_FAILURE); 
     c_zgetrs('N',neigbas,ntriblock,invgrs,neigbas,pivarrayg,matcpx,neigbas,&iinfo);
-    if (iinfo) cerr<<__LINE__<<endl, exit(EXIT_FAILURE); 
+    if (iinfo) LOGCERR, exit(EXIT_FAILURE); 
     cout << "TIME FOR grs INVERSION " << get_time(sabtime) << endl;
     c_zgemm('N','N',ntriblock,ntriblock,neigbas,z_one,Vref,ntriblock,matcpx,neigbas,z_zer,sigmar,ntriblock);
     delete[] pivarrayg;
@@ -999,13 +999,13 @@ cout<<"whatever"<<endl;
         int *pivarrayd= new int[ntriblock];
         sabtime=get_time(d_zer);
         c_zgetrf(ntriblock,ntriblock,H0cpx,ntriblock,pivarrayd,&iinfo);
-        if (iinfo) cerr<<__LINE__<<endl, exit(EXIT_FAILURE);
+        if (iinfo) LOGCERR, exit(EXIT_FAILURE);
         CPX workytestc;
         c_zgetri(ntriblock,H0cpx,ntriblock,pivarrayd,&workytestc,-1,&iinfo);
         int lworkyd=int(real(workytestc));
         CPX *workyd=new CPX[lworkyd];
         c_zgetri(ntriblock,H0cpx,ntriblock,pivarrayd,workyd,lworkyd,&iinfo);
-        if (iinfo) cerr<<__LINE__<<endl, exit(EXIT_FAILURE); 
+        if (iinfo) LOGCERR, exit(EXIT_FAILURE); 
         cout << "TIME FOR G INVERSION " << get_time(sabtime) << endl;
         delete[] pivarrayd;
         delete[] workyd;
@@ -1247,7 +1247,7 @@ cout <<"SOLVE SOLVER"<<endl;
         cout << "Energy " << energy << " Transmission " << transml << endl;
 */
     } 
-    else cerr<<__LINE__<<endl, exit(EXIT_FAILURE); 
+    else LOGCERR, exit(EXIT_FAILURE); 
 
 /*
 // SAB sets argc to 0 to avoid run
