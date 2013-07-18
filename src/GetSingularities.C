@@ -111,7 +111,7 @@ int Singularities::determine_velocities(TCSR<double> *KohnSham,TCSR<double> *Ove
     int lwork=int(real(twork));
     CPX *work=new CPX[lwork];
     c_zhegv(1,'V','U',ndof,H_Sum_k,ndof,S_Sum_k,ndof,eigval,work,lwork,rwork,&iinfo);
-    if (iinfo) return (cerr<<__LINE__<<endl, EXIT_FAILURE);
+    if (iinfo) return (LOGCERR, EXIT_FAILURE);
     delete[] work;
     delete[] rwork;
     CPX *eigvec = new CPX[ndofsq];

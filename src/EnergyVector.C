@@ -9,7 +9,7 @@ int energyvector(TCSR<double> *Overlap,TCSR<double> *KohnSham,TCSR<double> *P_Ma
     MPI_Comm_size(MPI_COMM_WORLD,&nprocs);
     MPI_Comm_rank(MPI_COMM_WORLD,&iam);
 // check parameters
-    if ( Overlap->size_tot%transport_params.n_cells || transport_params.bandwidth<1 ) return (cerr<<__LINE__<<endl, EXIT_FAILURE);
+    if ( Overlap->size_tot%transport_params.n_cells || transport_params.bandwidth<1 ) return (LOGCERR, EXIT_FAILURE);
 // allocate matrices to gather on every node
     TCSR<double> *KohnShamCollect = new TCSR<double>(KohnSham,MPI_COMM_WORLD);
     TCSR<double> *OverlapCollect = new TCSR<double>(Overlap,MPI_COMM_WORLD);
@@ -58,7 +58,7 @@ int energyvector(TCSR<double> *Overlap,TCSR<double> *KohnSham,TCSR<double> *P_Ma
     for (int iseq=0;iseq<seq_per_cpu;iseq++)
         if ( (jpos=iam+iseq*nprocs)<size_energyvector)
             if (abs(stepvector[jpos])>skip_point_weight_thr)
-                if (density(KohnShamCollect,OverlapCollect,Ps,energyvector[jpos],stepvector[jpos],transport_methods::NEGF,transport_params)) return (cerr<<__LINE__<<endl, EXIT_FAILURE);
+                if (density(KohnShamCollect,OverlapCollect,Ps,energyvector[jpos],stepvector[jpos],transport_methods::NEGF,transport_params)) return (LOGCERR, EXIT_FAILURE);
 // trPS
     CPX trPScpx=c_ddot(Ps->n_nonzeros,(double*) Ps->nnz,2,OverlapCollect->nnz,1);
     CPX trPScpxSum=CPX(0.0,0.0);

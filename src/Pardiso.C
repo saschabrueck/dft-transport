@@ -27,6 +27,11 @@ namespace Pardiso {
  *  \post The input matrix has been replaced by its inverse
  */
 void sparse_invert(TCSR<CPX> *matrix) {
+
+  if (matrix->findx != 1) {
+      matrix->change_findx(1);
+  }
+
   // Input parameters for pardiso (see pardiso documentation)
   int maxfct = 1;
   int mnum = 1;
@@ -73,7 +78,6 @@ void sparse_invert(TCSR<CPX> *matrix) {
       matrix->nnz,matrix->edge_i,matrix->index_j,NULL,&nrhs,iparam,
       &msglvl,NULL,NULL,&error,dparam);
 
-  std::cout << "checkpoint1\n";
   phase = -22;  // sparsity preserving inversion
   iparam[35] = 0;
   fortran_name(pardiso,PARDISO)(handle,&maxfct,&mnum,&mtype,&phase,&n,

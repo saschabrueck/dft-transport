@@ -37,7 +37,7 @@ int density(TCSR<double> *KohnSham,TCSR<double> *Overlap,TCSR<CPX> *Ps,CPX energ
 // complex or real energy
     int complexenergypoint=0;
     if (imag(energy)) complexenergypoint=1;
-    if (complexenergypoint && method==transport_methods::WF) return (cerr<<__LINE__<<endl, EXIT_FAILURE);
+    if (complexenergypoint && method==transport_methods::WF) return (LOGCERR, EXIT_FAILURE);
 // inj_sign
     int inj_sign=-1;
 // H-E*S
@@ -49,7 +49,7 @@ int density(TCSR<double> *KohnSham,TCSR<double> *Overlap,TCSR<CPX> *Ps,CPX energ
     SumHamC = new TCSR<CPX>(CPX(evoltfactor,d_zer),KohnSham,-energy,Overlap);
 // set parameters
     int ndof=SumHamC->size_tot/ncells;
-    if (ndof*ncells!=SumHamC->size_tot) return (cerr<<__LINE__<<endl, EXIT_FAILURE);
+    if (ndof*ncells!=SumHamC->size_tot) return (LOGCERR, EXIT_FAILURE);
     int ndofsq,ndofsqbandwidth;
     ndofsq=ndof*ndof;
     ndofsqbandwidth=ndofsq*(2*bandwidth+1);
@@ -91,9 +91,9 @@ int density(TCSR<double> *KohnSham,TCSR<double> *Overlap,TCSR<CPX> *Ps,CPX energ
 // the matrix mats is not hermitian for complex energy point i think
         sabtime=get_time(d_zer);
         c_zgetrf(ndof,ndof,mats,ndof,pivarrayn,&iinfo);
-        if (iinfo) return (cerr<<__LINE__<<endl, EXIT_FAILURE);
+        if (iinfo) return (LOGCERR, EXIT_FAILURE);
         c_zgetrs('N',ndof,ndof*2*bandwidth,mats,ndof,pivarrayn,matb,ndof,&iinfo);
-        if (iinfo) return (cerr<<__LINE__<<endl, EXIT_FAILURE);
+        if (iinfo) return (LOGCERR, EXIT_FAILURE);
         cout << "TIME FOR CPX INVERSION " << get_time(sabtime) << endl;
     } else {
         sabtime=get_time(d_zer);
@@ -105,7 +105,7 @@ int density(TCSR<double> *KohnSham,TCSR<double> *Overlap,TCSR<CPX> *Ps,CPX energ
         int lworkyn=int(workyytest);
         double *workyn=new double[lworkyn];
         c_dsysv('U',ndof,ndof*2*bandwidth,matsreal,ndof,pivarrayn,matbreal,ndof,workyn,lworkyn,&iinfo);
-        if (iinfo) return (cerr<<__LINE__<<endl, EXIT_FAILURE);
+        if (iinfo) return (LOGCERR, EXIT_FAILURE);
         delete[] workyn;
         delete[] matsreal;
         for (int imat=0;imat<2*bandwidth*ndofsq;imat++) matb[imat]=CPX(matbreal[imat],d_zer);
@@ -146,7 +146,7 @@ int density(TCSR<double> *KohnSham,TCSR<double> *Overlap,TCSR<CPX> *Ps,CPX energ
                     indrzcolvecn[nindrzcoln++]=itriblock;
             }
         }
-    if (nindzerocoln+nindnzcoln!=2*ntriblock) return (cerr<<__LINE__<<endl, EXIT_FAILURE);
+    if (nindzerocoln+nindnzcoln!=2*ntriblock) return (LOGCERR, EXIT_FAILURE);
     CPX *matmn=new CPX[nindnzcoln*nindnzcoln];
     CPX *matmr=new CPX[nindnzcoln*nindrzcoln];
     for (int jindnzcol=0;jindnzcol<nindnzcoln;jindnzcol++)
@@ -162,7 +162,7 @@ int density(TCSR<double> *KohnSham,TCSR<double> *Overlap,TCSR<CPX> *Ps,CPX energ
         if (indnzcolvecn[ipos]>=bandwidth*ndof && blockbwpos==-1) blockbwpos=ipos;
         if (indnzcolvecn[ipos]<=((bandwidth+1)*ndof-1)) blockbwpoe=ipos;
     }
-    if (blockbwpos<0 || blockbwpoe<0) return (cerr<<__LINE__<<endl, EXIT_FAILURE);
+    if (blockbwpos<0 || blockbwpoe<0) return (LOGCERR, EXIT_FAILURE);
 // get eigenvalues and eigenvectors
     double *eigvalreal=new double[nindnzcoln];
     double *eigvalimag=new double[nindnzcoln];
@@ -176,7 +176,7 @@ int density(TCSR<double> *KohnSham,TCSR<double> *Overlap,TCSR<CPX> *Ps,CPX energ
         int lworkyc=int(real(workyctest));
         CPX *workyc=new CPX[lworkyc];
         c_zgeev('N','V',nindnzcoln,matmn,nindnzcoln,eigvalcpx,&cdummy,1,eigveccfull,nindnzcoln,workyc,lworkyc,workdouble,&iinfo);
-        if (iinfo) return (cerr<<__LINE__<<endl, EXIT_FAILURE);
+        if (iinfo) return (LOGCERR, EXIT_FAILURE);
         cout << "TIME FOR CPX DIAGONALIZATION " << get_time(sabtime) << endl;
         delete[] workdouble;
         delete[] workyc;
@@ -195,7 +195,7 @@ int density(TCSR<double> *KohnSham,TCSR<double> *Overlap,TCSR<CPX> *Ps,CPX energ
         int lworky=int(workyytest);
         double *worky=new double[lworky];
         c_dgeev('N','V',nindnzcoln,matmnreal,nindnzcoln,eigvalreal,eigvalimag,&dddummy,1,eigvec,nindnzcoln,worky,lworky,&iinfo);
-        if (iinfo) return (cerr<<__LINE__<<endl, EXIT_FAILURE);
+        if (iinfo) return (LOGCERR, EXIT_FAILURE);
         cout << "TIME FOR REAL DIAGONALIZATION " << get_time(sabtime) << endl;
         delete[] worky;
         delete[] matmnreal;
@@ -214,7 +214,7 @@ int density(TCSR<double> *KohnSham,TCSR<double> *Overlap,TCSR<CPX> *Ps,CPX energ
                 }
                 iwhile+=2;
             }
-            else return (cerr<<__LINE__<<endl, EXIT_FAILURE);
+            else return (LOGCERR, EXIT_FAILURE);
         } // END WHILE
         delete[] eigvec;
     }
@@ -275,7 +275,7 @@ int density(TCSR<double> *KohnSham,TCSR<double> *Overlap,TCSR<CPX> *Ps,CPX energ
                 } else if (velnum*inj_sign<0) {
                    velref[nproref]=abs(velnum);
                    prorefvec[nproref++]=iindnzcoln;
-                } else return (cerr<<__LINE__<<endl, EXIT_FAILURE);
+                } else return (LOGCERR, EXIT_FAILURE);
            } // END IF decaying or propagating
            lambdavec[iindnzcoln]=lambda;
         } // END IF k not infinite
@@ -284,8 +284,8 @@ int density(TCSR<double> *KohnSham,TCSR<double> *Overlap,TCSR<CPX> *Ps,CPX energ
     delete[] eigvalimag;
     delete[] matcdof;
     delete[] vecout;
-    if (nprotra!=nproref) return (cerr<<__LINE__<<endl, EXIT_FAILURE);
-    if (ndectra!=ndecref) ndectra=min(ndectra,ndecref);//return (cerr<<__LINE__<<endl, EXIT_FAILURE);
+    if (nprotra!=nproref) return (LOGCERR, EXIT_FAILURE);
+    if (ndectra!=ndecref) ndectra=min(ndectra,ndecref);//return (LOGCERR, EXIT_FAILURE);
 // FOR ABOVE CASE I NEED TO IMPLEMENT SORTING OF LAMBDA? OR JUST THROW AWAY SOME VECS OF THE LIST SETTING NDEC TO MIN OF PRO AND REF?
 // ONCE I REMOVE ONE OF THE DIRECTIONS I WILL ALSO REMOVE THE LINE ABOVE
     int neigbas=nprotra+ndectra;
@@ -519,18 +519,18 @@ int density(TCSR<double> *KohnSham,TCSR<double> *Overlap,TCSR<CPX> *Ps,CPX energ
     full_conjugate_transpose(neigbas,ntriblock,Vtra,matcpx);
     sabtime=get_time(d_zer);
     c_zgetrf(neigbas,neigbas,invgls,neigbas,pivarrayg,&iinfo);
-    if (iinfo) return (cerr<<__LINE__<<endl, EXIT_FAILURE);
+    if (iinfo) return (LOGCERR, EXIT_FAILURE);
     c_zgetrs('N',neigbas,ntriblock,invgls,neigbas,pivarrayg,matcpx,neigbas,&iinfo);
-    if (iinfo) return (cerr<<__LINE__<<endl, EXIT_FAILURE);
+    if (iinfo) return (LOGCERR, EXIT_FAILURE);
     cout << "TIME FOR gls INVERSION " << get_time(sabtime) << endl;
     c_zgemm('N','N',ntriblock,ntriblock,neigbas,z_one,Vtra,ntriblock,matcpx,neigbas,z_zer,sigmal,ntriblock);
     CPX *sigmar=new CPX[triblocksize];
     full_conjugate_transpose(neigbas,ntriblock,Vref,matcpx);
     sabtime=get_time(d_zer);
     c_zgetrf(neigbas,neigbas,invgrs,neigbas,pivarrayg,&iinfo);
-    if (iinfo) return (cerr<<__LINE__<<endl, EXIT_FAILURE);
+    if (iinfo) return (LOGCERR, EXIT_FAILURE);
     c_zgetrs('N',neigbas,ntriblock,invgrs,neigbas,pivarrayg,matcpx,neigbas,&iinfo);
-    if (iinfo) return (cerr<<__LINE__<<endl, EXIT_FAILURE);
+    if (iinfo) return (LOGCERR, EXIT_FAILURE);
     cout << "TIME FOR grs INVERSION " << get_time(sabtime) << endl;
     c_zgemm('N','N',ntriblock,ntriblock,neigbas,z_one,Vref,ntriblock,matcpx,neigbas,z_zer,sigmar,ntriblock);
     delete[] pivarrayg;
@@ -654,13 +654,13 @@ int density(TCSR<double> *KohnSham,TCSR<double> *Overlap,TCSR<CPX> *Ps,CPX energ
         int *pivarrayd= new int[ntriblock];
         sabtime=get_time(d_zer);
         c_zgetrf(ntriblock,ntriblock,H0cpx,ntriblock,pivarrayd,&iinfo);
-        if (iinfo) return (cerr<<__LINE__<<endl, EXIT_FAILURE);
+        if (iinfo) return (LOGCERR, EXIT_FAILURE);
         CPX workytestc;
         c_zgetri(ntriblock,H0cpx,ntriblock,pivarrayd,&workytestc,-1,&iinfo);
         int lworkyd=int(real(workytestc));
         CPX *workyd=new CPX[lworkyd];
         c_zgetri(ntriblock,H0cpx,ntriblock,pivarrayd,workyd,lworkyd,&iinfo);
-        if (iinfo) return (cerr<<__LINE__<<endl, EXIT_FAILURE);
+        if (iinfo) return (LOGCERR, EXIT_FAILURE);
         cout << "TIME FOR G INVERSION " << get_time(sabtime) << endl;
         delete[] pivarrayd;
         delete[] workyd;
@@ -766,7 +766,7 @@ int density(TCSR<double> *KohnSham,TCSR<double> *Overlap,TCSR<CPX> *Ps,CPX energ
         delete[] Sol;
         delete[] vecoutdof;
         cout << "Energy " << energy << " Transmission " << transml << endl;
-    } else return (cerr<<__LINE__<<endl, EXIT_FAILURE);
+    } else return (LOGCERR, EXIT_FAILURE);
 // maybe delete those earlier
     delete[] KScpx;
     delete[] Vtra;
