@@ -7,6 +7,8 @@ MKLINC       = /usr/pack/intel_compiler-11.1.075-af/Linux-x86_64/mkl/include/em6
 INTLIB       = /usr/pack/intel_compiler-11.1.075-af/Linux-x86_64/lib
 INTINC       = /usr/pack/intel_compiler-11.1.075-af/Linux-x86_64/include
 
+GFORTL       = /usr/zupo/home/mauro/sw/gcc/4.8.1/lib64
+
 # Linear Solvers and Inverters
 UMFLIB       =/home/mauro/sw/suitesparse/intel-2011/lib
 UMFINC       =/home/mauro/sw/suitesparse/intel-2011/include
@@ -28,7 +30,7 @@ DFLAGS = -DAdd_ -DMPICH_IGNORE_CXX_SEEK
 
 INCLUDES = -I$(INTINC) -I$(MKLINC) -I$(UMFINC)
 
-LIBS = -lcp2k_lib -lcp2k_base_lib -lcp2k_dbcsr_lib -lcp2k_fft_lib -lcp2k_ma_lib -lcp2k_elpa_lib -Wl,-rpath,/usr/zupo/home/mauro/sw/gcc/4.8.1/lib64 -L/usr/zupo/home/mauro/sw/gcc/4.8.1/lib64 -lgfortran \
-	-lifcore -lifport -lpthread -limf -lsvml -lintlc -lpthread -lm \
+LIBS = -lcp2k_lib -lcp2k_base_lib -lcp2k_dbcsr_lib -lcp2k_fft_lib -lcp2k_ma_lib -lcp2k_elpa_lib -Wl,-rpath,$(GFORTL) -L$(GFORTL) -lgfortran \
+	-Wl,-rpath,$(INTLIB) -lifcore -lifport -lpthread -limf -lsvml -lintlc -lpthread -lm \
 	-lumfpack -lamd -lcholmod -lcolamd -lrt -lsuitesparseconfig -lcamd -lccolamd -lmetis \
 	$(MKLLIB)/libmkl_scalapack_lp64.a $(MKLLIB)/libmkl_intel_lp64.a $(MKLLIB)/libmkl_intel_thread.a $(MKLLIB)/libmkl_core.a $(MKLLIB)/libmkl_blacs_intelmpi_lp64.a $(MKLLIB)/libmkl_intel_lp64.a $(MKLLIB)/libmkl_intel_thread.a $(MKLLIB)/libmkl_core.a $(MKLLIB)/libmkl_blacs_intelmpi_lp64.a $(MKLLIB)/libmkl_intel_lp64.a $(MKLLIB)/libmkl_intel_thread.a $(MKLLIB)/libmkl_core.a $(MKLLIB)/libmkl_blacs_intelmpi_lp64.a
