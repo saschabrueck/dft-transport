@@ -21,9 +21,6 @@ int density(TCSR<double> *KohnSham,TCSR<double> *Overlap,TCSR<CPX> *Ps,CPX energ
     MPI_Comm_size(MPI_COMM_WORLD,&nprocs);
     MPI_Comm_rank(MPI_COMM_WORLD,&iam);
 
-    ofstream myfile;
-    ifstream myinpfile;
-
     double d_one=1.0;
     double d_zer=0.0;
     CPX z_one=CPX(d_one,d_zer);
@@ -62,8 +59,6 @@ int density(TCSR<double> *KohnSham,TCSR<double> *Overlap,TCSR<CPX> *Ps,CPX energ
 // copy block
     CPX* KScpx=new CPX[ndofsqbandwidth];
     SumHamC->contactunitcell(KScpx,ndof,bandwidth,1);
-    double* KSfull=new double[ndofsqbandwidth];
-    c_dcopy(ndofsqbandwidth,(double*)KScpx,2,KSfull,1);
 // assemble tridiagonalblocks
     CPX* H0cpx=new CPX[triblocksize];
     CPX* H1cpx=new CPX[triblocksize]();
@@ -362,7 +357,7 @@ int density(TCSR<double> *KohnSham,TCSR<double> *Overlap,TCSR<CPX> *Ps,CPX energ
     CPX *KSeig=new CPX[neigbas*neigbas*(2*bandwidth+1)];
     CPX *invgtmp=new CPX[neigbas*neigbas];
     sabtime=get_time(d_zer);
-// KSeig is KSfull in V-base
+// KSeig is KScpx in V-base
     for (int iband=bandwidth;iband<(2*bandwidth+1);iband++) {
         c_zgemm('N','N',ndof,neigbas,ndof,z_one,&KScpx[ndofsq*iband],ndof,Vtra,ntriblock,z_zer,matcpx,ntriblock);
         c_zgemm('C','N',neigbas,neigbas,ndof,z_one,Vtra,ntriblock,matcpx,ntriblock,z_zer,&KSeig[neigbas*neigbas*iband],neigbas);
@@ -430,6 +425,8 @@ int density(TCSR<double> *KohnSham,TCSR<double> *Overlap,TCSR<CPX> *Ps,CPX energ
         double *Vimag=new double[bandwidth*ndof*neigbas];
         double *matdb=new double[bandwidth*ndof*neigbas];
         double *KStmp=new double[neigbas*neigbas];
+        double* KSfull=new double[ndofsqbandwidth];
+        c_dcopy(ndofsqbandwidth,(double*)KScpx,2,KSfull,1);
         for (int ii=0;ii<bandwidth*ndof*neigbas;ii++) {
             Vreal[ii]=real(Vref[ii]);
             Vimag[ii]=imag(Vref[ii]);
@@ -454,6 +451,7 @@ int density(TCSR<double> *KohnSham,TCSR<double> *Overlap,TCSR<CPX> *Ps,CPX energ
         delete[] Vimag;
         delete[] matdb;
         delete[] KStmp;
+        delete[] KSfull;
     }
 // scale h_i with diag(lambda**-i)
     for (int ibandwidth=1;ibandwidth<=bandwidth;ibandwidth++) {
@@ -566,6 +564,8 @@ int density(TCSR<double> *KohnSham,TCSR<double> *Overlap,TCSR<CPX> *Ps,CPX energ
         tau->trans_mat_vec_mult(sigmar,matctri,ntriblock,1);
         full_conjugate_transpose(ntriblock,ntriblock,matctri,sigmar);
         delete[] matctri;
+        delete tauhc;
+        delete tau;
     } else {
         double *sigmad= new double[triblocksize];
         double *sigmai= new double[triblocksize];
@@ -581,6 +581,7 @@ int density(TCSR<double> *KohnSham,TCSR<double> *Overlap,TCSR<CPX> *Ps,CPX energ
     sabtime=get_time(d_zer);
         taureal->trans_mat_vec_mult(sigmad,sigmat,ntriblock,1);
     cout << "SPARSE MATRIX MATRIX MULTIPLICATION FOR REAL SIGMA TRANSP " << get_time(sabtime) << endl;
+        delete taureal;
 //
         for (int imat=0;imat<triblocksize;imat++) {
             sigmad[imat]=real(sigmal[imat]);
@@ -716,6 +717,8 @@ int density(TCSR<double> *KohnSham,TCSR<double> *Overlap,TCSR<CPX> *Ps,CPX energ
         c_zgemm('N','N',ntriblock,nprotra,ntriblock,z_one,H0cpx,ntriblock,Vrefcp,ntriblock,z_one,injr1,ntriblock);
         delete[] H0cpx;
         delete[] H1cpx;
+        delete[] Vtracp;
+        delete[] Vrefcp;
 // add I1 to I0 to form I
         c_zgemm('N','N',ntriblock,nprotra,ntriblock,-z_one,presigmal,ntriblock,injl1,ntriblock,z_one,injl,ntriblock);
         c_zgemm('N','N',ntriblock,nprotra,ntriblock,-z_one,presigmar,ntriblock,injr1,ntriblock,z_one,injr,ntriblock);
@@ -733,6 +736,8 @@ int density(TCSR<double> *KohnSham,TCSR<double> *Overlap,TCSR<CPX> *Ps,CPX energ
         CPX *Inj=new CPX[HamSig->size_tot*2*nprotra]();
         c_zlacpy('A',ntriblock,nprotra,injl,ntriblock,Inj,HamSig->size_tot);
         c_zlacpy('A',ntriblock,nprotra,injr,ntriblock,&Inj[HamSig->size_tot*(nprotra+1)-ntriblock],HamSig->size_tot);
+        delete[] injl;
+        delete[] injr;
         LinearSolver<CPX>* solver;
         solver = new Umfpack<CPX>(HamSig,MPI_COMM_WORLD);
         sabtime=get_time(d_zer);
@@ -762,5 +767,19 @@ int density(TCSR<double> *KohnSham,TCSR<double> *Overlap,TCSR<CPX> *Ps,CPX energ
         delete[] vecoutdof;
         cout << "Energy " << energy << " Transmission " << transml << endl;
     } else return (cerr<<__LINE__<<endl, EXIT_FAILURE);
+// maybe delete those earlier
+    delete[] KScpx;
+    delete[] Vtra;
+    delete[] Vref;
+// lil arrays that do not take much memory
+    delete[] indnzcolvecn;
+    delete[] indrzcolvecn;
+    delete[] lambdavec;
+    delete[] dectravec;
+    delete[] decrefvec;
+    delete[] protravec;
+    delete[] prorefvec;
+    delete[] veltra;
+    delete[] velref;
 return 0;
 }

@@ -29,6 +29,7 @@ int energyvector(TCSR<double> *Overlap,TCSR<double> *KohnSham,TCSR<double> *P_Ma
 // here is the real quadrature
     Quadrature *gausscheby;
     int num_points_per_interval=transport_params.n_abscissae;
+    double skip_point_weight_thr=10E-12;
     int size_energyvector;
     if (singularities->energy_gs<singularities->energies[0])
         size_energyvector=num_points_per_interval*singularities->n_energies;
@@ -56,7 +57,8 @@ int energyvector(TCSR<double> *Overlap,TCSR<double> *KohnSham,TCSR<double> *P_Ma
     int jpos;
     for (int iseq=0;iseq<seq_per_cpu;iseq++)
         if ( (jpos=iam+iseq*nprocs)<size_energyvector)
-            if (density(KohnShamCollect,OverlapCollect,Ps,energyvector[jpos],stepvector[jpos],transport_methods::NEGF,transport_params)) return (cerr<<__LINE__<<endl, EXIT_FAILURE);
+            if (abs(stepvector[jpos])>skip_point_weight_thr)
+                if (density(KohnShamCollect,OverlapCollect,Ps,energyvector[jpos],stepvector[jpos],transport_methods::NEGF,transport_params)) return (cerr<<__LINE__<<endl, EXIT_FAILURE);
 // trPS
     CPX trPScpx=c_ddot(Ps->n_nonzeros,(double*) Ps->nnz,2,OverlapCollect->nnz,1);
     CPX trPScpxSum=CPX(0.0,0.0);
