@@ -1,5 +1,4 @@
-# Add path to old Intel compiler in /usr/local/mpich2/intel/bin 
-# no further environment variables need to be set
+# Old Intel compiler and CP2K compiled with GNU
 
 # Compiler and MKL library paths
 MKLLIB       = /usr/pack/intel_compiler-11.1.075-af/Linux-x86_64/mkl/lib/em64t
@@ -16,7 +15,7 @@ UMFINC       =/home/mauro/sw/suitesparse/intel-2011/include
 # CP2K library path
 CP2KLIB = /usr/zupo/home/bruecks/cp2k/cp2k/lib/iis_ee-x86-64-gcc-openblas-scalapack/popt
 
-CPP = mpicxx
+CPP = /usr/local/mpich2/intel/bin/mpicxx
 CC =
 
 CFLAGS = -g -wd981 # -wd981 is recommended for c++ even by intel
