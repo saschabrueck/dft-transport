@@ -69,23 +69,27 @@ void sparse_invert(TCSR<CPX> *matrix) {
   iparam[24] = 1;
 
   phase = 11;   // reorder and symbolic factorization
+  std::cout << "Pardiso: entering phase " << phase << std::endl;
   fortran_name(pardiso,PARDISO)(handle,&maxfct,&mnum,&mtype,&phase,&n,
       matrix->nnz,matrix->edge_i,matrix->index_j,NULL,&nrhs,iparam,
       &msglvl,NULL,NULL,&error,dparam);
 
   phase = 22;   // factorize
+  std::cout << "Pardiso: entering phase " << phase << std::endl;
   fortran_name(pardiso,PARDISO)(handle,&maxfct,&mnum,&mtype,&phase,&n,
       matrix->nnz,matrix->edge_i,matrix->index_j,NULL,&nrhs,iparam,
       &msglvl,NULL,NULL,&error,dparam);
 
   phase = -22;  // sparsity preserving inversion
   iparam[35] = 0;
+  std::cout << "Pardiso: entering phase " << phase << std::endl;
   fortran_name(pardiso,PARDISO)(handle,&maxfct,&mnum,&mtype,&phase,&n,
       matrix->nnz,matrix->edge_i,matrix->index_j,NULL,&nrhs,iparam,
       &msglvl,NULL,NULL,&error,dparam);
 
   phase = -1;   // clearing the pardiso instance (shouldn't kill
                 // the matrix
+  std::cout << "Pardiso: entering phase " << phase << std::endl;
   fortran_name(pardiso,PARDISO)(handle,&maxfct,&mnum,&mtype,&phase,&n,
       matrix->nnz,matrix->edge_i,matrix->index_j,NULL,&nrhs,iparam,
       &msglvl,NULL,NULL,&error,dparam);
