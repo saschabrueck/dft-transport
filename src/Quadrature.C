@@ -260,7 +260,7 @@ Quadrature::Quadrature(quadrature_types::quadrature_type type, double start,
       }
       break;
     }
-    case default {
+    default: {
       throw excQuadrature("Invalid integral type requested");
     }
   }
