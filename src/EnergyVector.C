@@ -27,8 +27,8 @@ int energyvector(TCSR<double> *Overlap,TCSR<double> *KohnSham,TCSR<double> *P_Ma
     CPX energy=CPX(singularities->energy_gs+iam*step,0.0);
     if (!iam || iam==nprocs-1)
         step/=2;*/
-// here is the real quadrature
-    Quadrature *gausscheby;
+// get integration points along real axis with gauss cheby
+/*    Quadrature *gausscheby;
     int num_points_per_interval=transport_params.n_abscissae;
     double skip_point_weight_thr=10E-12;
     int size_energyvector;
@@ -51,7 +51,17 @@ int energyvector(TCSR<double> *Overlap,TCSR<double> *KohnSham,TCSR<double> *P_Ma
         std::copy(gausscheby->abscissae.begin(),gausscheby->abscissae.end(),&energyvector[i_start+i_energies*num_points_per_interval]);
         std::copy(gausscheby->weights.begin(),gausscheby->weights.end(),&stepvector[i_start+i_energies*num_points_per_interval]);
         delete gausscheby;
-    }
+    }*/
+// get integration points along complex contour with gauss legendre
+    int num_points_on_contour=100;
+    Quadrature gausslegendre(quadrature_types::CCGL,singularities->energy_gs,singularities->energy_vbe,0.0,singularities->energy_vbe,num_points_on_contour);
+    int size_energyvector=num_points_on_contour;
+    CPX *energyvector = new CPX[size_energyvector];
+    CPX *stepvector = new CPX[size_energyvector];
+    std::copy(gausslegendre.abscissae.begin(),gausslegendre.abscissae.end(),energyvector);
+    std::copy(gausslegendre.weights.begin(),gausslegendre.weights.end(),stepvector);
+    double skip_point_weight_thr=0.0;
+// delete singularities
     delete singularities;
 // run distributed
     int seq_per_cpu=int(ceil(double(size_energyvector)/nprocs));
