@@ -9,6 +9,11 @@
 
 #define LOGCERR std::cerr << "ERROR IN LINE " << __LINE__ << " OF FILE " << __FILE__ << std::endl
 
+class CSR_Exception{
+public:
+    CSR_Exception(const int line,const char* file) {std::cerr<<"Error in line "<<line<<" of file "<<file<<std::endl;}
+};
+
 class CSR{
 public:
     
@@ -161,15 +166,15 @@ inline TCSR<T>::TCSR(TCSR<T> *mat)
 template <class T>
 inline TCSR<T>::TCSR(T alphafactor,TCSR<double> *A,T betafactor,TCSR<double> *B)
 {
-    if ( (size       = A->size      )!=B->size      ) throw 0;
-    if ( (size_tot   = A->size_tot  )!=B->size_tot  ) throw 0;
-    if ( (type       = A->type      )!=B->type      ) throw 0;
-    if ( (findx      = A->findx     )!=B->findx     ) throw 0;
-    if ( (first_row  = A->first_row )!=B->first_row ) throw 0;
+    if ( (size       = A->size      )!=B->size      ) throw CSR_Exception(__LINE__,__FILE__);
+    if ( (size_tot   = A->size_tot  )!=B->size_tot  ) throw CSR_Exception(__LINE__,__FILE__);
+    if ( (type       = A->type      )!=B->type      ) throw CSR_Exception(__LINE__,__FILE__);
+    if ( (findx      = A->findx     )!=B->findx     ) throw CSR_Exception(__LINE__,__FILE__);
+    if ( (first_row  = A->first_row )!=B->first_row ) throw CSR_Exception(__LINE__,__FILE__);
 
     int addit  = B->additionalentries(A);
 
-    if (addit<0) throw 0;
+    if (addit<0) throw CSR_Exception(__LINE__,__FILE__);
   
     n_nonzeros = addit+A->n_nonzeros;
 
@@ -296,7 +301,7 @@ inline TCSR<T>::TCSR(TCSR<T> *matlocal,MPI_Comm my_comm)
     int* displc_size=new int[nprocs+1]();
     for (int iii=1;iii<nprocs+1;iii++)
         displc_size[iii]=displc_size[iii-1]+dist_loc_size[iii-1];
-    if (displc_size[iam]!=matlocal->first_row) throw 0;
+    if (displc_size[iam]!=matlocal->first_row) throw CSR_Exception(__LINE__,__FILE__);
 
     n_nonzeros = displc_n_nonzeros[nprocs];
     size_tot   = matlocal->size_tot;
