@@ -35,7 +35,7 @@ void c_scf_method(c_transport_type transport_env_params, c_DBCSR S, c_DBCSR KS, 
    Comm.Allgather(&sendbuf, 1, MPI::INT, recvbuf, 1, MPI::INT);
    nblkrows_local_all.assign(recvbuf, recvbuf+num_nodes);
 
-   TCSR<double> *Overlap, *KohnSham, *Ps;
+   TCSR<double> *Overlap, *KohnSham, *PMat;
    Overlap = new TCSR<double>(nrows_local, S.n_nze, 0);
    KohnSham = new TCSR<double>(nrows_local, KS.n_nze, 0);
    cDBCSR_to_CSR(S, Overlap);
@@ -55,26 +55,26 @@ void c_scf_method(c_transport_type transport_env_params, c_DBCSR S, c_DBCSR KS, 
    if (!rank) Overlap->first_row=0; else Overlap->first_row=first_rows[rank-1]; 
    if (!rank) KohnSham->first_row=0; else KohnSham->first_row=first_rows[rank-1]; 
 
-   Ps = new TCSR<double>(nrows_local, S.n_nze, 0);
-   Ps->copy_index(Overlap);
+   PMat = new TCSR<double>(nrows_local, S.n_nze, 0);
+   PMat->copy_index(Overlap);
 
    switch (transport_env_params.method) {
       case 1:
          if (!rank) cout << "Starting ScaLaPackDiag" << endl;
-         if (diagscalapack(Overlap,KohnSham,Ps,transport_env_params)) throw SCF_Exception(__LINE__,__FILE__);
+         if (diagscalapack(Overlap,KohnSham,PMat,transport_env_params)) throw SCF_Exception(__LINE__,__FILE__);
          break;
       case 2:
          if (!rank) cout << "Starting KPointIntegration" << endl;
-         if (kpointintegration(Overlap,KohnSham,Ps,transport_env_params)) throw SCF_Exception(__LINE__,__FILE__);
+         if (kpointintegration(Overlap,KohnSham,PMat,transport_env_params)) throw SCF_Exception(__LINE__,__FILE__);
          break;
      case 3:
          if (!rank) cout << "Starting experimental code" << endl;
-         if (greensolver(Overlap,KohnSham,Ps)) throw SCF_Exception(__LINE__,__FILE__);
+         if (greensolver(Overlap,KohnSham,PMat)) throw SCF_Exception(__LINE__,__FILE__);
          break;
      default:
          if (!rank) cout << "Starting Transport" << endl;
-         if (energyvector(Overlap,KohnSham,Ps,transport_env_params)) throw SCF_Exception(__LINE__,__FILE__);
+         if (energyvector(Overlap,KohnSham,PMat,transport_env_params)) throw SCF_Exception(__LINE__,__FILE__);
    }
 
-   CSR_to_cDBCSR(Ps, *P, row_block_size, col_block_size, row_dist, col_dist, local_rows, nblkrows_local_all);
+   CSR_to_cDBCSR(PMat, *P, row_block_size, col_block_size, row_dist, col_dist, local_rows, nblkrows_local_all);
 }

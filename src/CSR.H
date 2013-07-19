@@ -74,7 +74,6 @@ public:
     void sparse_to_full(T*,int,int);
     void sparse_to_cmp_full(CPX*,int,int);
     void full_to_sparse(T*,int,int);
-    void tr_full_to_sparse(T*,int,int);
     void cmp_full_to_sparse(CPX*,int,int,CPX);
     void write_CSR(const char*);
     void write(const char*);
@@ -94,9 +93,9 @@ public:
     void reducescatter(TCSR<T>*,MPI_Comm);
     void reducescatterfactorconvert(TCSR<double>*,MPI_Comm,double);
     void reducescatterconvert(TCSR<double>*,MPI_Comm);
-    void psipsidagger(TCSR<double>*,CPX*,int);
-    void psipsidaggerfactoradd(TCSR<double>*,CPX*,int,CPX);
+    void psipsidagger(CPX*,int,CPX);
     void moveawaypbc(T*,T*,int,int);
+    void tr_full_to_sparse(T*,int,int);
 // sab end
     void set_nnz(int,T*);
     void set_index_i(int,int*);
@@ -1339,49 +1338,12 @@ inline void TCSR<CPX>::reducescatterconvert(TCSR<double>*matdist,MPI_Comm my_com
 /************************************************************************************************/
 
 template <>
-inline void TCSR<CPX>::psipsidagger(TCSR<double> *mat,CPX* phi,int nkval)
+inline void TCSR<double>::psipsidagger(CPX* psi,int nkval,CPX factor)
 {
-    size       = mat->size;
-    size_tot   = mat->size_tot;
-    type       = mat->type;
-    n_nonzeros = mat->n_nonzeros;
-    findx      = mat->findx;
-    first_row  = mat->first_row;
-
-    c_icopy(size,mat->index_i,1,index_i,1);
-    c_icopy(n_nonzeros,mat->index_j,1,index_j,1);
-    c_icopy(size+1,mat->edge_i,1,edge_i,1);
-    c_icopy(size,mat->diag_pos,1,diag_pos,1);
-
-    int i,j,element=0;
+    int i,e;
     for(i=0;i<size;i++){
-        for(j=edge_i[i]-findx;j<edge_i[i+1]-findx;j++){
-            nnz[element++]=c_zdotc(nkval,&phi[index_j[j]-findx],size,&phi[i],size);
-        }
-    }
-}
-
-/************************************************************************************************/
-
-template <>
-inline void TCSR<CPX>::psipsidaggerfactoradd(TCSR<double> *mat,CPX* phi,int nkval,CPX factor)
-{
-    size       = mat->size;
-    size_tot   = mat->size_tot;
-    type       = mat->type;
-    n_nonzeros = mat->n_nonzeros;
-    findx      = mat->findx;
-    first_row  = mat->first_row;
-
-    c_icopy(size,mat->index_i,1,index_i,1);
-    c_icopy(n_nonzeros,mat->index_j,1,index_j,1);
-    c_icopy(size+1,mat->edge_i,1,edge_i,1);
-    c_icopy(size,mat->diag_pos,1,diag_pos,1);
-
-    int i,j,element=0;
-    for(i=0;i<size;i++){
-        for(j=edge_i[i]-findx;j<edge_i[i+1]-findx;j++){
-            nnz[element++]+=factor*c_zdotc(nkval,&phi[index_j[j]-findx],size,&phi[i],size);
+        for(e=edge_i[i]-findx;e<edge_i[i+1]-findx;e++){
+            nnz[e]+=real(factor*c_zdotc(nkval,&psi[index_j[e]-findx],size,&psi[i],size));
         }
     }
 }
@@ -1417,36 +1379,7 @@ void TCSR<T>::moveawaypbc(T *left, T *right, int bw, int ndof)
     }
 }
 
-/*SAB*END****************************************************************************************/
-
-template <class T>
-void TCSR<T>::full_to_sparse(T *B,int nrow,int ncol)
-{
-    int i,j;
-
-    size       = nrow;
-    n_nonzeros = 0;
-    
-    for(i=0;i<nrow;i++){
-
-        index_i[i] = 0;
-
-        for(j=0;j<ncol;j++){
-
-	    if(abs(B[i+j*nrow])>tollim){
-
-                index_j[n_nonzeros] = j+findx;
-                nnz[n_nonzeros]     = B[i+j*nrow];
-
-                index_i[i]++;
-                n_nonzeros++;
-            }
-        }
-    }
-    get_row_edge();
-    get_diag_pos();
-}
-
+/************************************************************************************************/
 
 template <class T>
 void TCSR<T>::tr_full_to_sparse(T *B,int nrow,int ncol)
@@ -1476,7 +1409,35 @@ void TCSR<T>::tr_full_to_sparse(T *B,int nrow,int ncol)
     get_diag_pos();
 }
 
+/*SAB*END****************************************************************************************/
 
+template <class T>
+void TCSR<T>::full_to_sparse(T *B,int nrow,int ncol)
+{
+    int i,j;
+
+    size       = nrow;
+    n_nonzeros = 0;
+    
+    for(i=0;i<nrow;i++){
+
+        index_i[i] = 0;
+
+        for(j=0;j<ncol;j++){
+
+	    if(abs(B[i+j*nrow])>tollim){
+
+                index_j[n_nonzeros] = j+findx;
+                nnz[n_nonzeros]     = B[i+j*nrow];
+
+                index_i[i]++;
+                n_nonzeros++;
+            }
+        }
+    }
+    get_row_edge();
+    get_diag_pos();
+}
 
 /************************************************************************************************/
 /*

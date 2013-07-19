@@ -13,7 +13,8 @@ int energyvector(TCSR<double> *Overlap,TCSR<double> *KohnSham,TCSR<double> *P_Ma
 // allocate matrices to gather on every node
     TCSR<double> *KohnShamCollect = new TCSR<double>(KohnSham,MPI_COMM_WORLD);
     TCSR<double> *OverlapCollect = new TCSR<double>(Overlap,MPI_COMM_WORLD);
-    TCSR<CPX> *Ps = new TCSR<CPX>(OverlapCollect->size,OverlapCollect->n_nonzeros,OverlapCollect->findx);
+    TCSR<double> *Ps = new TCSR<double>(OverlapCollect->size,OverlapCollect->n_nonzeros,OverlapCollect->findx);
+    Ps->copy_index(OverlapCollect);
     Ps->init_variable(Ps->nnz,Ps->n_nonzeros);
 // determine singularity stuff
     Singularities *singularities = new Singularities(KohnShamCollect,OverlapCollect,transport_params);
@@ -60,12 +61,15 @@ int energyvector(TCSR<double> *Overlap,TCSR<double> *KohnSham,TCSR<double> *P_Ma
             if (abs(stepvector[jpos])>skip_point_weight_thr)
                 if (density(KohnShamCollect,OverlapCollect,Ps,energyvector[jpos],stepvector[jpos],transport_methods::NEGF,transport_params)) return (LOGCERR, EXIT_FAILURE);
 // trPS
-    CPX trPScpx=c_ddot(Ps->n_nonzeros,(double*) Ps->nnz,2,OverlapCollect->nnz,1);
-    CPX trPScpxSum=CPX(0.0,0.0);
-    MPI_Allreduce(&trPScpx,&trPScpxSum,1,MPI_DOUBLE_COMPLEX,MPI_SUM,MPI_COMM_WORLD);
-    if (!iam) cout << "Number of electrons from density matrix tr(PS) " << real(trPScpxSum) << endl;
+    double trPS=c_ddot(Ps->n_nonzeros,Ps->nnz,1,OverlapCollect->nnz,1);
+    double trPS_Sum;
+    MPI_Allreduce(&trPS,&trPS_Sum,1,MPI_DOUBLE,MPI_SUM,MPI_COMM_WORLD);
+    if (!iam) cout << "Number of electrons from density matrix tr(PS) " << trPS_Sum << endl;
 // sum and scatter to distributed p matrix
-    Ps->reducescatterconvert(P_Matrix,MPI_COMM_WORLD);
+    Ps->reducescatter(P_Matrix,MPI_COMM_WORLD);
+    delete Ps;
+    delete KohnShamCollect;
+    delete OverlapCollect;
 
     return 0;
 }
