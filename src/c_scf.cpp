@@ -5,6 +5,11 @@ int greensolver(TCSR<double>*,TCSR<double>*,TCSR<double>*);
 int diagscalapack(TCSR<double>*,TCSR<double>*,TCSR<double>*,c_transport_type);
 int energyvector(TCSR<double>*,TCSR<double>*,TCSR<double>*,c_transport_type);
 
+class SCF_Exception{
+public:
+    SCF_Exception(const int line,const char* file) {std::cerr<<"Error in line "<<line<<" of file "<<file<<std::endl;}
+};
+
 void c_scf_method(c_transport_type transport_env_params, c_DBCSR S, c_DBCSR KS, c_DBCSR * P)
 {
    Vector1D<int> row_block_size, col_block_size, local_rows, row_dist, col_dist, 
@@ -56,19 +61,19 @@ void c_scf_method(c_transport_type transport_env_params, c_DBCSR S, c_DBCSR KS, 
    switch (transport_env_params.method) {
       case 1:
          if (!rank) cout << "Starting ScaLaPackDiag" << endl;
-         if (diagscalapack(Overlap,KohnSham,Ps,transport_env_params)) throw 0;
+         if (diagscalapack(Overlap,KohnSham,Ps,transport_env_params)) throw SCF_Exception(__LINE__,__FILE__);
          break;
       case 2:
          if (!rank) cout << "Starting KPointIntegration" << endl;
-         if (kpointintegration(Overlap,KohnSham,Ps,transport_env_params)) throw 0;
+         if (kpointintegration(Overlap,KohnSham,Ps,transport_env_params)) throw SCF_Exception(__LINE__,__FILE__);
          break;
      case 3:
          if (!rank) cout << "Starting experimental code" << endl;
-         if (greensolver(Overlap,KohnSham,Ps)) throw 0;
+         if (greensolver(Overlap,KohnSham,Ps)) throw SCF_Exception(__LINE__,__FILE__);
          break;
      default:
          if (!rank) cout << "Starting Transport" << endl;
-         if (energyvector(Overlap,KohnSham,Ps,transport_env_params)) throw 0;
+         if (energyvector(Overlap,KohnSham,Ps,transport_env_params)) throw SCF_Exception(__LINE__,__FILE__);
    }
 
    CSR_to_cDBCSR(Ps, *P, row_block_size, col_block_size, row_dist, col_dist, local_rows, nblkrows_local_all);
