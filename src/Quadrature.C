@@ -260,6 +260,8 @@ Quadrature::Quadrature(quadrature_types::quadrature_type type, double start,
       }
       break;
     }
-    // No default, 'enum class' is strongly typed
+    case default {
+      throw excQuadrature("Invalid integral type requested");
+    }
   }
 };
