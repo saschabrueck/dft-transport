@@ -6,4 +6,4 @@ enum transport_method {
 };
 } // namespace
 
-int density(TCSR<double> *,TCSR<double> *,TCSR<CPX> *,CPX,CPX,transport_methods::transport_method,c_transport_type);
+int density(TCSR<double> *,TCSR<double> *,TCSR<double> *,CPX,CPX,transport_methods::transport_method,c_transport_type);

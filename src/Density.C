@@ -15,7 +15,7 @@ using namespace std;
 #include "Pardiso.H"
 #include "Density.H"
 
-int density(TCSR<double> *KohnSham,TCSR<double> *Overlap,TCSR<CPX> *Ps,CPX energy,CPX weight,transport_methods::transport_method method,c_transport_type parameter_sab)
+int density(TCSR<double> *KohnSham,TCSR<double> *Overlap,TCSR<double> *Ps,CPX energy,CPX weight,transport_methods::transport_method method,c_transport_type parameter_sab)
 {
     int iam, nprocs;
     MPI_Comm_size(MPI_COMM_WORLD,&nprocs);
@@ -691,6 +691,9 @@ int density(TCSR<double> *KohnSham,TCSR<double> *Overlap,TCSR<CPX> *Ps,CPX energ
         sabtime=get_time(d_zer);
         Pardiso::sparse_invert(HamSig);
         cout << "TIME FOR PARDISO INVERSION " << get_time(sabtime) << endl;
+// transform blocks to full and then back to pattern
+// in the middle where the sparsity pattern remains the same do just copy
+
     } else if (method==transport_methods::WF) {
         delete[] sigmal;
         delete[] sigmar;
@@ -752,7 +755,7 @@ int density(TCSR<double> *KohnSham,TCSR<double> *Overlap,TCSR<CPX> *Ps,CPX energ
         //c_zgemm('N','C',ndof*ncells,ndof*ncells,2*nprotra,alphastep/(2*M_PI),Sol,ndof*ncells,Sol,ndof*ncells,z_zer,Pmat,ndof*ncells);
         //cout << "TIME FOR CONSTRUCTION OF FULL DENSITY MATRIX " << get_time(sabtime) << endl;
         sabtime=get_time(d_zer);
-        Ps->psipsidaggerfactoradd(Overlap,Sol,2*nprotra,weight);
+        Ps->psipsidagger(Sol,2*nprotra,weight);
         cout << "TIME FOR CONSTRUCTION OF S-PATTERN DENSITY MATRIX " << get_time(sabtime) << endl;
 // transmission
         CPX *vecoutdof=new CPX[ndof];
