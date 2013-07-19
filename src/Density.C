@@ -683,6 +683,8 @@ int density(TCSR<double> *KohnSham,TCSR<double> *Overlap,TCSR<double> *Ps,CPX en
         cout << "MATRIX MATRIX MULTIPLICATIONS AND TRACE FOR TRANSMISSION " << get_time(sabtime) << endl;
         cout << "Energy " << energy << " Transmission " << real(trace) << endl;
         delete[] H0cpx;
+        delete[] sigmal;
+        delete[] sigmar;
     } else if (method==transport_methods::NEGF) {
         delete[] H0cpx;
         delete[] H1cpx;
@@ -691,9 +693,12 @@ int density(TCSR<double> *KohnSham,TCSR<double> *Overlap,TCSR<double> *Ps,CPX en
         sabtime=get_time(d_zer);
         Pardiso::sparse_invert(HamSig);
         cout << "TIME FOR PARDISO INVERSION " << get_time(sabtime) << endl;
-// transform blocks to full and then back to pattern
-// in the middle where the sparsity pattern remains the same do just copy
-
+        sabtime=get_time(d_zer);
+        Ps->add_imag(HamSig,-weight/M_PI);
+        cout << "TIME FOR COPYING MATRIX " << get_time(sabtime) << endl;
+        delete[] HamSig;
+        delete[] sigmal;
+        delete[] sigmar;
     } else if (method==transport_methods::WF) {
         delete[] sigmal;
         delete[] sigmar;

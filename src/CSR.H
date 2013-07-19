@@ -88,6 +88,8 @@ public:
     void contactunitcell(T*,int,int,int,int);
     void contactunitcell(T*,int,int,int);
     int additionalentries(TCSR<T>*);
+    void add(TCSR<T>*,T);
+    void add_imag(TCSR<CPX>*,CPX);
     void assemble(TCSR<T>*,TCSR<T>*,TCSR<T>*,int,int);
     void assembleshift(TCSR<T>*,TCSR<T>*,TCSR<T>*,int,int);
     void reducescatter(TCSR<T>*,MPI_Comm);
@@ -1196,6 +1198,56 @@ int TCSR<T>::additionalentries(TCSR<T> *mat)
         }
     }
     return additional;
+}
+
+/************************************************************************************************/
+
+template <class T>
+void  TCSR<T>::add(TCSR<T> *A,T factor)
+{
+    if (size      != A->size      ) throw CSR_Exception(__LINE__,__FILE__);
+    if (size_tot  != A->size_tot  ) throw CSR_Exception(__LINE__,__FILE__);
+    if (type      != A->type      ) throw CSR_Exception(__LINE__,__FILE__);
+    if (first_row != A->first_row ) throw CSR_Exception(__LINE__,__FILE__);
+
+    int i,e;
+    T *linefull=new T[size_tot];
+
+    for (i=0;i<size;i++) {
+        init_variable(linefull,size_tot);
+        for (e=A->edge_i[i]-A->findx;e<A->edge_i[i+1]-A->findx;e++) {
+            linefull[A->index_j[e]-A->findx]=factor*A->nnz[e];
+        }
+        for (e=edge_i[i]-findx;e<edge_i[i+1]-findx;e++) {
+            nnz[e]+=linefull[index_j[e]-findx];
+        }
+    }
+    delete[] linefull;
+}
+
+/************************************************************************************************/
+
+template <>
+void  TCSR<double>::add_imag(TCSR<CPX> *A,CPX factor)
+{
+    if (size      != A->size      ) throw CSR_Exception(__LINE__,__FILE__);
+    if (size_tot  != A->size_tot  ) throw CSR_Exception(__LINE__,__FILE__);
+    if (type      != A->type      ) throw CSR_Exception(__LINE__,__FILE__);
+    if (first_row != A->first_row ) throw CSR_Exception(__LINE__,__FILE__);
+
+    int i,e;
+    double *linefull=new double[size_tot];
+
+    for (i=0;i<size;i++) {
+        init_variable(linefull,size_tot);
+        for (e=A->edge_i[i]-A->findx;e<A->edge_i[i+1]-A->findx;e++) {
+            linefull[A->index_j[e]-A->findx]=imag(factor*A->nnz[e]);
+        }
+        for (e=edge_i[i]-findx;e<edge_i[i+1]-findx;e++) {
+            nnz[e]+=linefull[index_j[e]-findx];
+        }
+    }
+    delete[] linefull;
 }
 
 /************************************************************************************************/
