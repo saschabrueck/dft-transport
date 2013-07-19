@@ -1203,7 +1203,7 @@ int TCSR<T>::additionalentries(TCSR<T> *mat)
 /************************************************************************************************/
 
 template <class T>
-void  TCSR<T>::add(TCSR<T> *A,T factor)
+void TCSR<T>::add(TCSR<T> *A,T factor)
 {
     if (size      != A->size      ) throw CSR_Exception(__LINE__,__FILE__);
     if (size_tot  != A->size_tot  ) throw CSR_Exception(__LINE__,__FILE__);
@@ -1228,7 +1228,7 @@ void  TCSR<T>::add(TCSR<T> *A,T factor)
 /************************************************************************************************/
 
 template <>
-void  TCSR<double>::add_imag(TCSR<CPX> *A,CPX factor)
+inline void TCSR<double>::add_imag(TCSR<CPX> *A,CPX factor)
 {
     if (size      != A->size      ) throw CSR_Exception(__LINE__,__FILE__);
     if (size_tot  != A->size_tot  ) throw CSR_Exception(__LINE__,__FILE__);
@@ -1253,7 +1253,7 @@ void  TCSR<double>::add_imag(TCSR<CPX> *A,CPX factor)
 /************************************************************************************************/
 
 template <class T>
-void  TCSR<T>::assemble(TCSR<T> *leftmat,TCSR<T> *middlemat,TCSR<T> *rightmat,int lsize,int rsize)
+void TCSR<T>::assemble(TCSR<T> *leftmat,TCSR<T> *middlemat,TCSR<T> *rightmat,int lsize,int rsize)
 // this is experimental
 {
     int nleft=leftmat->n_nonzeros;
@@ -1293,7 +1293,7 @@ void  TCSR<T>::assemble(TCSR<T> *leftmat,TCSR<T> *middlemat,TCSR<T> *rightmat,in
 /************************************************************************************************/
 
 template <class T>
-void  TCSR<T>::assembleshift(TCSR<T> *leftmat,TCSR<T> *middlemat,TCSR<T> *rightmat,int lrsize,int shift)
+void TCSR<T>::assembleshift(TCSR<T> *leftmat,TCSR<T> *middlemat,TCSR<T> *rightmat,int lrsize,int shift)
 {
     int nleft=leftmat->edge_i[lrsize]-leftmat->findx;
     c_tcopy(nleft,leftmat->nnz,1,nnz,1);
