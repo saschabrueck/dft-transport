@@ -19,6 +19,8 @@ public:
     void vec_mat_mult_add(T*,T*,int);
     void convert_csr(TCSR<T>*);
     void convert_csr(TCSR<T>*,int,int);
+    void imag_transpose(TCSR<double>*,CPX);
+    void add_imag_transpose(TCSR<double>*,CPX);
 
     int size,n_nonzeros,findx;
     T *nnz;
@@ -338,6 +340,50 @@ inline void TCSC<double,int>::vec_mat_mult_add(double *in,double *out,int NR)
     
     delete[] vec;
 
+}
+
+/************************************************************************************************/
+
+template <>
+inline void TCSC<CPX,int>::imag_transpose(TCSR<double> *A,CPX factor)
+{
+    if (size != A->size) throw CSR_Exception(__LINE__,__FILE__);
+
+    int i,e;
+    double *linefull=new double[size];
+
+    for (i=0;i<size;i++) {
+        for (int ii=0;ii<size;ii++) linefull[ii]=0.0;
+        for (e=edge_j[i]-findx;e<edge_j[i+1]-findx;e++) {
+            linefull[index_i[e]-findx]=imag(factor*nnz[e]);
+        }
+        for (e=A->edge_i[i]-A->findx;e<A->edge_i[i+1]-A->findx;e++) {
+            A->nnz[e]=linefull[A->index_j[e]-A->findx];
+        }
+    }
+    delete[] linefull;
+}
+
+/************************************************************************************************/
+
+template <>
+inline void TCSC<CPX,int>::add_imag_transpose(TCSR<double> *A,CPX factor)
+{
+    if (size != A->size) throw CSR_Exception(__LINE__,__FILE__);
+
+    int i,e;
+    double *linefull=new double[size];
+
+    for (i=0;i<size;i++) {
+        for (int ii=0;ii<size;ii++) linefull[ii]=0.0;
+        for (e=edge_j[i]-findx;e<edge_j[i+1]-findx;e++) {
+            linefull[index_i[e]-findx]=imag(factor*nnz[e]);
+        }
+        for (e=A->edge_i[i]-A->findx;e<A->edge_i[i+1]-A->findx;e++) {
+            A->nnz[e]+=linefull[A->index_j[e]-A->findx];
+        }
+    }
+    delete[] linefull;
 }
 
 /************************************************************************************************/
