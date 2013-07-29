@@ -7,7 +7,7 @@
 #include <limits>
 using namespace std;
 #include "ScaLapack.H"
-//#include "CSR.H"
+#include "CSC.H"
 #include "LinearSolver.H"
 //#include "SuperLU.H"
 #include "Umfpack.H"
@@ -15,12 +15,15 @@ using namespace std;
 #include "Pardiso.H"
 #include "Density.H"
 
+extern "C" {
+int ldlt_preprocess__(int *, int *, int *, int *, int *, int *, int *);
+int ldlt_fact__(int *, int *, int *, CPX *);
+int ldlt_free__(int *);
+int ldlt_blkselinv__(int *, int*, int*, CPX *, int*);
+}
+
 int density(TCSR<double> *KohnSham,TCSR<double> *Overlap,TCSR<double> *Ps,CPX energy,CPX weight,transport_methods::transport_method method,c_transport_type parameter_sab)
 {
-    int iam, nprocs;
-    MPI_Comm_size(MPI_COMM_WORLD,&nprocs);
-    MPI_Comm_rank(MPI_COMM_WORLD,&iam);
-
     double d_one=1.0;
     double d_zer=0.0;
     CPX z_one=CPX(d_one,d_zer);
@@ -517,9 +520,21 @@ int density(TCSR<double> *KohnSham,TCSR<double> *Overlap,TCSR<double> *Ps,CPX en
     int *pivarrayg=new int[neigbas];
     CPX *sigmal=new CPX[triblocksize];
     full_conjugate_transpose(neigbas,ntriblock,Vtra,matcpx);
+    double *worknorm=new double[neigbas];
+    double anorm=c_zlange('1',neigbas,neigbas,invgls,neigbas,worknorm);
+    delete[] worknorm;
     sabtime=get_time(d_zer);
     c_zgetrf(neigbas,neigbas,invgls,neigbas,pivarrayg,&iinfo);
     if (iinfo) return (LOGCERR, EXIT_FAILURE);
+    double rcond;
+    CPX *cworkcond=new CPX[2*neigbas];
+    double *dworkcond=new double[2*neigbas];
+    c_zgecon('1',neigbas,invgls,neigbas,anorm,&rcond,cworkcond,dworkcond,&iinfo);
+    if (iinfo) return (LOGCERR, EXIT_FAILURE);
+    delete[] cworkcond;
+    delete[] dworkcond;
+    cout << "Condition number is " << rcond << endl;
+    if (rcond<numeric_limits<double>::epsilon()) return (LOGCERR, EXIT_FAILURE);
     c_zgetrs('N',neigbas,ntriblock,invgls,neigbas,pivarrayg,matcpx,neigbas,&iinfo);
     if (iinfo) return (LOGCERR, EXIT_FAILURE);
     cout << "TIME FOR gls INVERSION " << get_time(sabtime) << endl;
@@ -539,111 +554,60 @@ int density(TCSR<double> *KohnSham,TCSR<double> *Overlap,TCSR<double> *Ps,CPX en
     delete[] matcpx;
     CPX *presigmal= new CPX[triblocksize];
     CPX *presigmar= new CPX[triblocksize];
-    CPX *H1cpxhc = new CPX[triblocksize];
-    full_conjugate_transpose(ntriblock,ntriblock,H1cpx,H1cpxhc);
+    CPX *H1cpxt = new CPX[triblocksize];
+    full_transpose(ntriblock,ntriblock,H1cpx,H1cpxt);
     sabtime=get_time(d_zer);
-    if (complexenergypoint||1) {
-        CPX *matctri= new CPX[triblocksize];
-        TCSR<CPX> *tauhc = new TCSR<CPX>(ntriblock,triblocksize,SumHamC->findx);
-        tauhc->cmp_full_to_sparse(H1cpxhc,ntriblock,ntriblock,z_one);
-        full_transpose(ntriblock,ntriblock,sigmal,matctri);
-        tauhc->trans_mat_vec_mult(matctri,presigmal,ntriblock,1);
-        full_conjugate_transpose(ntriblock,ntriblock,presigmal,matctri);
-        full_transpose(ntriblock,ntriblock,matctri,sigmal);
-        // i think i could replace the two lines above with the two below, but need to test it with complex tau
-        //c_zcopy(triblocksize,presigmal,1,sigmal,1);
-        //c_dscal(triblocksize,-d_one,(double*)sigmal+1,2);
-        tauhc->trans_mat_vec_mult(sigmal,matctri,ntriblock,1);
-        full_conjugate_transpose(ntriblock,ntriblock,matctri,sigmal);
-        TCSR<CPX> *tau = new TCSR<CPX>(ntriblock,triblocksize,SumHamC->findx);
-        tau->cmp_full_to_sparse(H1cpx,ntriblock,ntriblock,z_one);
-        full_transpose(ntriblock,ntriblock,sigmar,matctri);
-        tau->trans_mat_vec_mult(matctri,presigmar,ntriblock,1);
-        full_conjugate_transpose(ntriblock,ntriblock,presigmar,matctri);
-        full_transpose(ntriblock,ntriblock,matctri,sigmar);
-        tau->trans_mat_vec_mult(sigmar,matctri,ntriblock,1);
-        full_conjugate_transpose(ntriblock,ntriblock,matctri,sigmar);
-        delete[] matctri;
-        delete tauhc;
-        delete tau;
-    } else {
-        double *sigmad= new double[triblocksize];
-        double *sigmai= new double[triblocksize];
-        double *sigmat= new double[triblocksize];
-        double *H1    = new double[triblocksize];
-        c_dcopy(ndofsqbandwidth,(double*)H1cpx,2,H1,1);
-//
-        TCSR<double> *taureal = new TCSR<double>(ntriblock,triblocksize,SumHamC->findx);
-        taureal->full_to_sparse(H1,ntriblock,ntriblock);
-    sabtime=get_time(d_zer);
-        taureal->mat_vec_mult(sigmad,sigmat,ntriblock);
-    cout << "SPARSE MATRIX MATRIX MULTIPLICATION FOR REAL SIGMA " << get_time(sabtime) << endl;
-    sabtime=get_time(d_zer);
-        taureal->trans_mat_vec_mult(sigmad,sigmat,ntriblock,1);
-    cout << "SPARSE MATRIX MATRIX MULTIPLICATION FOR REAL SIGMA TRANSP " << get_time(sabtime) << endl;
-        delete taureal;
-//
-        for (int imat=0;imat<triblocksize;imat++) {
-            sigmad[imat]=real(sigmal[imat]);
-            sigmai[imat]=imag(sigmal[imat]);
-        }
-        c_dgemm('T','N',ntriblock,ntriblock,ntriblock,d_one,H1,ntriblock,sigmad,ntriblock,d_zer,sigmat,ntriblock);
-        c_dgemm('N','N',ntriblock,ntriblock,ntriblock,d_one,sigmat,ntriblock,H1,ntriblock,d_zer,sigmad,ntriblock);
-        for (int imat=0;imat<triblocksize;imat++) presigmal[imat]=CPX(sigmat[imat],d_zer);
-        c_dgemm('T','N',ntriblock,ntriblock,ntriblock,d_one,H1,ntriblock,sigmai,ntriblock,d_zer,sigmat,ntriblock);
-        for (int imat=0;imat<triblocksize;imat++) presigmal[imat]+=CPX(d_zer,sigmat[imat]);
-        c_dgemm('N','N',ntriblock,ntriblock,ntriblock,d_one,sigmat,ntriblock,H1,ntriblock,d_zer,sigmai,ntriblock);
-        for (int imat=0;imat<triblocksize;imat++) sigmal[imat]=CPX(sigmad[imat],sigmai[imat]);
-        for (int imat=0;imat<triblocksize;imat++) {
-            sigmad[imat]=real(sigmar[imat]);
-            sigmai[imat]=imag(sigmar[imat]);
-        }
-        c_dgemm('N','N',ntriblock,ntriblock,ntriblock,d_one,H1,ntriblock,sigmad,ntriblock,d_zer,sigmat,ntriblock);
-        c_dgemm('N','T',ntriblock,ntriblock,ntriblock,d_one,sigmat,ntriblock,H1,ntriblock,d_zer,sigmad,ntriblock);
-        for (int imat=0;imat<triblocksize;imat++) presigmar[imat]=CPX(sigmat[imat],d_zer);
-        c_dgemm('N','N',ntriblock,ntriblock,ntriblock,d_one,H1,ntriblock,sigmai,ntriblock,d_zer,sigmat,ntriblock);
-        for (int imat=0;imat<triblocksize;imat++) presigmar[imat]+=CPX(d_zer,sigmat[imat]);
-        c_dgemm('N','T',ntriblock,ntriblock,ntriblock,d_one,sigmat,ntriblock,H1,ntriblock,d_zer,sigmai,ntriblock);
-        for (int imat=0;imat<triblocksize;imat++) sigmar[imat]=CPX(sigmad[imat],sigmai[imat]);
-        delete[] sigmad;
-        delete[] sigmai;
-        delete[] sigmat;
-        delete[] H1;
-    }
+    CPX *matctri = new CPX[triblocksize];
+    TCSR<CPX> *taut = new TCSR<CPX>(ntriblock,triblocksize,SumHamC->findx);
+    taut->cmp_full_to_sparse(H1cpxt,ntriblock,ntriblock,z_one);
+// i wouldnt need all the transpose if g00R, which is contained in sigma, was symmetric
+    full_transpose(ntriblock,ntriblock,sigmal,matctri);
+    taut->trans_mat_vec_mult(matctri,presigmal,ntriblock,1);
+    taut->trans_mat_vec_mult(presigmal,matctri,ntriblock,1);
+    full_transpose(ntriblock,ntriblock,matctri,sigmal);
+    delete taut;
+    TCSR<CPX> *tau = new TCSR<CPX>(ntriblock,triblocksize,SumHamC->findx);
+    tau->cmp_full_to_sparse(H1cpx,ntriblock,ntriblock,z_one);
+    full_transpose(ntriblock,ntriblock,sigmar,matctri);
+    tau->trans_mat_vec_mult(matctri,presigmar,ntriblock,1);
+    tau->trans_mat_vec_mult(presigmar,matctri,ntriblock,1);
+    full_transpose(ntriblock,ntriblock,matctri,sigmar);
+    delete tau;
+    delete[] matctri;
     cout << "MATRIX MATRIX MULTIPLICATIONS FOR SIGMA " << get_time(sabtime) << endl;
 // now add sigma to tridiagonalblocks and convert to sparse
 // warning the current implementation is not good, it assumes that left and right are the same
 // and you need to have that tridiagonalblocks which are however not really needed
 // i could use a version of my moveawaypbc and a new add routine based on assemble instead
-        CPX *Hlcpx = new CPX[4*triblocksize]();
-        CPX *Hrcpx = new CPX[4*triblocksize]();
-        c_zaxpy(triblocksize,-z_one,sigmal,1,H0cpx,1);
-        c_zlacpy('A',ntriblock,ntriblock,H0cpx,ntriblock,Hlcpx,2*ntriblock);
-        c_zlacpy('A',ntriblock,ntriblock,H1cpx,ntriblock,&Hlcpx[2*triblocksize],2*ntriblock);
-        TCSR<CPX> *LeftCorner;
-        LeftCorner = new TCSR<CPX>(2*ntriblock,2*triblocksize,SumHamC->findx);
-        LeftCorner->cmp_full_to_sparse(Hlcpx,2*ntriblock,2*ntriblock,z_one);
-        int nleftcorner=LeftCorner->edge_i[ntriblock]-LeftCorner->findx;
-        c_zaxpy(triblocksize,+z_one,sigmal,1,H0cpx,1);
-        c_zaxpy(triblocksize,-z_one,sigmar,1,H0cpx,1);
-        c_zlacpy('A',ntriblock,ntriblock,H0cpx,ntriblock,&Hrcpx[2*triblocksize],2*ntriblock);
-        c_zlacpy('A',ntriblock,ntriblock,H1cpxhc,ntriblock,Hrcpx,2*ntriblock);
-        TCSR<CPX> *RightCorner;
-        RightCorner = new TCSR<CPX>(2*ntriblock,2*triblocksize,SumHamC->findx);
-        RightCorner->cmp_full_to_sparse(Hrcpx,2*ntriblock,2*ntriblock,z_one);
-        int nrightcorner=RightCorner->edge_i[ntriblock]-RightCorner->findx;
-        c_zaxpy(triblocksize,+z_one,sigmar,1,H0cpx,1);
-        delete[] Hlcpx;
-        delete[] Hrcpx;
-        delete[] H1cpxhc;
+    CPX *Hlcpx = new CPX[4*triblocksize]();
+    CPX *Hrcpx = new CPX[4*triblocksize]();
+    c_zaxpy(triblocksize,-z_one,sigmal,1,H0cpx,1);
+    c_zlacpy('A',ntriblock,ntriblock,H0cpx,ntriblock,Hlcpx,2*ntriblock);
+    c_zlacpy('A',ntriblock,ntriblock,H1cpx,ntriblock,&Hlcpx[2*triblocksize],2*ntriblock);
+    TCSR<CPX> *LeftCorner;
+    LeftCorner = new TCSR<CPX>(2*ntriblock,2*triblocksize,SumHamC->findx);
+    LeftCorner->cmp_full_to_sparse(Hlcpx,2*ntriblock,2*ntriblock,z_one);
+    int nleftcorner=LeftCorner->edge_i[ntriblock]-LeftCorner->findx;
+    c_zaxpy(triblocksize,+z_one,sigmal,1,H0cpx,1);
+    c_zaxpy(triblocksize,-z_one,sigmar,1,H0cpx,1);
+    c_zlacpy('A',ntriblock,ntriblock,H0cpx,ntriblock,&Hrcpx[2*triblocksize],2*ntriblock);
+    c_zlacpy('A',ntriblock,ntriblock,H1cpxt,ntriblock,Hrcpx,2*ntriblock);
+    TCSR<CPX> *RightCorner;
+    RightCorner = new TCSR<CPX>(2*ntriblock,2*triblocksize,SumHamC->findx);
+    RightCorner->cmp_full_to_sparse(Hrcpx,2*ntriblock,2*ntriblock,z_one);
+    int nrightcorner=RightCorner->edge_i[ntriblock]-RightCorner->findx;
+    c_zaxpy(triblocksize,+z_one,sigmar,1,H0cpx,1);
+    delete[] Hlcpx;
+    delete[] Hrcpx;
+    delete[] H1cpxt;
 // replace corners to complete sparse matrix
-        TCSR<CPX> *HamSig;
-        int nhaminterior=SumHamC->edge_i[SumHamC->size_tot-ntriblock]-SumHamC->edge_i[ntriblock];
-        HamSig = new TCSR<CPX>(SumHamC->size_tot,nhaminterior+nleftcorner+nrightcorner,SumHamC->findx);
-        HamSig->assembleshift(LeftCorner,SumHamC,RightCorner,ntriblock,SumHamC->size_tot-2*ntriblock);
-        delete LeftCorner;
-        delete RightCorner;
-        delete SumHamC;
+    TCSR<CPX> *HamSig;
+    int nhaminterior=SumHamC->edge_i[SumHamC->size_tot-ntriblock]-SumHamC->edge_i[ntriblock];
+    HamSig = new TCSR<CPX>(SumHamC->size_tot,nhaminterior+nleftcorner+nrightcorner,SumHamC->findx);
+    HamSig->assembleshift(LeftCorner,SumHamC,RightCorner,ntriblock,SumHamC->size_tot-2*ntriblock);
+    delete LeftCorner;
+    delete RightCorner;
+    delete SumHamC;
     if (method==transport_methods::TEST) {
 // this is only a lil debugging thing
         delete[] H1cpx;
@@ -682,6 +646,7 @@ int density(TCSR<double> *KohnSham,TCSR<double> *Overlap,TCSR<double> *Ps,CPX en
                 trace+=-sigmar[itri*ntriblock+jtri]*sigmal[jtri*ntriblock+itri];
         cout << "MATRIX MATRIX MULTIPLICATIONS AND TRACE FOR TRANSMISSION " << get_time(sabtime) << endl;
         cout << "Energy " << energy << " Transmission " << real(trace) << endl;
+        cout << "Elements of G " << H0cpx[0] << " " << H0cpx[1] << endl;
         delete[] H0cpx;
         delete[] sigmal;
         delete[] sigmar;
@@ -691,10 +656,39 @@ int density(TCSR<double> *KohnSham,TCSR<double> *Overlap,TCSR<double> *Ps,CPX en
         delete[] presigmal;
         delete[] presigmar;
         sabtime=get_time(d_zer);
-        Pardiso::sparse_invert(HamSig);
-        cout << "TIME FOR PARDISO INVERSION " << get_time(sabtime) << endl;
-        Ps->add_imag(HamSig,-weight/M_PI);
+//        TCSR<CPX> * HamSigSave= new TCSR<CPX>(HamSig);
+//        HamSigSave->change_findx(1);
+//        Pardiso::sparse_invert(HamSig);
+//for (int ido=0;ido<HamSig->n_nonzeros;ido++) if (HamSig->index_j[ido]!=HamSigSave->index_j[ido]) cout << "new "<<HamSig->index_j[ido]<<" old "<<HamSigSave->index_j[ido]<<" at "<<ido<<endl;
+//        delete HamSigSave;
+//        Ps->add_imag(HamSig,-weight/M_PI);
+//        delete HamSig;
+//        cout << "TIME FOR SPARSE INVERSION " << get_time(sabtime) << endl;
+//        /*
+        HamSig->change_findx(1);
+        TCSR<CPX> * HamSigTri= new TCSR<CPX>(HamSig->size_tot,HamSig->n_nonzeros/2+HamSig->size_tot,HamSig->findx);
+        HamSigTri->extract_lower_triangle(HamSig);
         delete HamSig;
+        TCSC<CPX,int> *HamSigCSC=new TCSC<CPX,int>(HamSigTri,1);
+        delete HamSigTri;
+        int token=0;
+        int *perm = NULL;
+        int Lnnz;
+        int order=-1;
+        ldlt_preprocess__(&token, &HamSigCSC->size, HamSigCSC->edge_j, HamSigCSC->index_i, &Lnnz, &order, perm);   
+        ldlt_fact__(&token, HamSigCSC->edge_j, HamSigCSC->index_i, HamSigCSC->nnz);
+        delete HamSigCSC;
+        TCSC<CPX,int> *InverseMat=new TCSC<CPX,int>(Overlap->size,Lnnz,1);
+        int dumpL=0;
+        ldlt_blkselinv__(&token, InverseMat->edge_j, InverseMat->index_i, InverseMat->nnz, &dumpL);
+        ldlt_free__(&token);
+        cout << "TIME FOR SPARSE INVERSION " << get_time(sabtime) << endl;
+//        TCSR<double> *Ptmp=new TCSR<double>(Ps->size_tot,Ps->n_nonzeros,Ps->findx);
+//        Ptmp->copy_index(Ps);
+//        InverseMat->imag_transpose(Ptmp,-weight/M_PI);
+        InverseMat->add_imag_transpose(Ps,-weight/M_PI);
+        delete InverseMat;
+//        */
         delete[] sigmal;
         delete[] sigmar;
     } else if (method==transport_methods::WF) {

@@ -98,6 +98,8 @@ public:
     void psipsidagger(CPX*,int,CPX);
     void moveawaypbc(T*,T*,int,int);
     void tr_full_to_sparse(T*,int,int);
+    void extract_lower_triangle(TCSR<T>*);
+    void extract_upper_triangle(TCSR<T>*);
 // sab end
     void set_nnz(int,T*);
     void set_index_i(int,int*);
@@ -1459,6 +1461,56 @@ void TCSR<T>::tr_full_to_sparse(T *B,int nrow,int ncol)
     }
     get_row_edge();
     get_diag_pos();
+}
+
+/************************************************************************************************/
+
+template <class T>
+void TCSR<T>::extract_lower_triangle(TCSR<T> *mat)
+{
+    findx=mat->findx;
+    int i,e;
+    n_nonzeros=0;
+    for(i=0;i<size;i++){
+        index_i[i]=0;
+        for(e=mat->edge_i[i]-mat->findx;e<mat->edge_i[i+1]-mat->findx;e++){
+            if(mat->index_j[e]-mat->findx<=i){
+                index_i[i]++;
+                index_j[n_nonzeros]=mat->index_j[e];
+                nnz[n_nonzeros]=mat->nnz[e];
+                n_nonzeros++;
+            }
+        }
+    }
+    get_row_edge();
+    get_diag_pos();
+
+    if (n_nonzeros!=edge_i[size]-findx) throw CSR_Exception(__LINE__,__FILE__);
+}
+
+/************************************************************************************************/
+
+template <class T>
+void TCSR<T>::extract_upper_triangle(TCSR<T> *mat)
+{
+    findx=mat->findx;
+    int i,e;
+    n_nonzeros=0;
+    for(i=0;i<size;i++){
+        index_i[i]=0;
+        for(e=mat->edge_i[i]-mat->findx;e<mat->edge_i[i+1]-mat->findx;e++){
+            if(mat->index_j[e]-mat->findx>=i){
+                index_i[i]++;
+                index_j[n_nonzeros]=mat->index_j[e];
+                nnz[n_nonzeros]=mat->nnz[e];
+                n_nonzeros++;
+            }
+        }
+    }
+    get_row_edge();
+    get_diag_pos();
+
+    if (n_nonzeros!=edge_i[size]-findx) throw CSR_Exception(__LINE__,__FILE__);
 }
 
 /*SAB*END****************************************************************************************/

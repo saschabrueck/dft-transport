@@ -22,6 +22,8 @@ extern "C" {
     void fortran_name(ztrevc,ZTREVC)(char*,char*,bool*,int*,CPX*,int*,CPX*,int*,CPX*,\
                                      int*,int*,int*,CPX*,double*,int*);
     void fortran_name(dgebal,DGEBAL)(char*,int*,double*,int*,int*,int*,double*,int*);
+    double fortran_name(zlange,ZLANGE)(char*,int*,int*,CPX*,int*,double*);
+    void fortran_name(zgecon,ZGECON)(char*,int*,CPX*,int*,double*,double*,CPX*,double*,int*);
 
     int fortran_name(numroc,NUMROC)(int*,int*,int*,int*,int*);
     int fortran_name(indxg2p,INDXG2P)(int*,int*,int*,int*,int*);
@@ -55,12 +57,12 @@ extern "C" {
     void fortran_name(pzgetrf,PZGETRF)(int*,int*,CPX*,int*,int*,int*,int*,int*);
     void fortran_name(pzgetrs,PZGETRS)(char*,int*,int*,CPX*,int*,int*,int*,int*,CPX*,int*,\
                                        int*,int*,int*);
+    void fortran_name(pdgeadd,PDGEADD)(char*,int*,int*,double*,double*,int*,int*,int*,double*,double*,int*,int*,int*);
     void fortran_name(pdsygvx,PDSYGVX)(int *,char *,char *,char *,int *,double *,\
-                      int *, int *, int *, double *, int *, int *, int *,\
-                      double *, double *, int *, int *, double *, int *,\
-                      int *, double *, double *, double *, int *, int *, int *,\
-                      double *, int *, int *, int *, int *, int *, double *, int *);
-    void fortran_name(pdgeadd,PDGEADD)(char *, int *, int *, double *, double *, int *, int *, int *, double *, double *, int *, int *, int *);
+                                       int *, int *, int *, double *, int *, int *, int *,\
+                                       double *, double *, int *, int *, double *, int *,\
+                                       int *, double *, double *, double *, int *, int *, int *,\
+                                       double *, int *, int *, int *, int *, int *, double *, int *);
 
 
     void fortran_name(blacs_pinfo,BLACS_pinfo)(int*,int*);
@@ -71,13 +73,6 @@ extern "C" {
 }
 
 /*Lapack*****************************************************************************************/
-
-inline void c_pdgeadd(char TRANS, int M, int N, double ALPHA, double *A, int IA, int JA, int *DESCA, double BETA, double *C, int IC, int JC, int *DESCC)
-{
-    fortran_name(pdgeadd,PDGEADD)(&TRANS,&M,&N,&ALPHA,A,&IA,&JA,DESCA,&BETA,C,&IC,&JC,DESCC);
-}
-
-/****/
 
 inline void c_dgehrd(int N,int ILO,int IHI,double *A,int LDA,double *TAU,double *WORK,\
                      int LWORK,int *INFO)
@@ -138,6 +133,21 @@ inline void c_ztrevc(char SIDE,char HOWMNY,bool SELECT,int N,CPX *T,int LDT,CPX 
 inline void c_dgebal(char JOB,int N,double *A,int LDA,int ILO,int IHI,double *SCALE,int *INFO )
 {
     fortran_name(dgebal,DGEBAL)(&JOB,&N,A,&LDA,&ILO,&IHI,SCALE,INFO);
+}
+
+/************************************************************************************************/
+
+inline double c_zlange(char NORM,int M,int N,CPX *A,int LDA,double *WORK)
+{
+    return fortran_name(zlange,ZLANGE)(&NORM,&M,&N,A,&LDA,WORK);
+}
+
+/************************************************************************************************/
+
+inline void c_zgecon(char NORM,int N,CPX *A,int LDA,double ANORM,double *RCOND,\
+                     CPX *WORK,double *RWORK,int *INFO)
+{
+    fortran_name(zgecon,ZGECON)(&NORM,&N,A,&LDA,&ANORM,RCOND,WORK,RWORK,INFO);
 }
 
 /*ScaLapack**************************************************************************************/
@@ -304,6 +314,14 @@ inline void c_pzgetrs(char TRANS,int N,int NRHS,CPX *A,int IA,int JA,int *DESCA,
                       CPX *B,int IB,int JB,int *DESCB,int *INFO)
 {
     fortran_name(pzgetrs,PZGETRS)(&TRANS,&N,&NRHS,A,&IA,&JA,DESCA,IPIV,B,&IB,&JB,DESCB,INFO);
+}
+
+/************************************************************************************************/
+
+inline void c_pdgeadd(char TRANS,int M,int N,double ALPHA,double *A,int IA,int JA,int *DESCA,\
+                      double BETA,double *C,int IC,int JC,int *DESCC)
+{
+    fortran_name(pdgeadd,PDGEADD)(&TRANS,&M,&N,&ALPHA,A,&IA,&JA,DESCA,&BETA,C,&IC,&JC,DESCC);
 }
 
 /************************************************************************************************/
