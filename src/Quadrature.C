@@ -19,7 +19,7 @@ class excQuadrature: public std::exception {
 
 #include "Quadrature_GL.H"
 
-/** \brief Initializer
+/** \brief Constructor
  *
  *  Currently implemented methods for quadrature:
  *    - 'quadrature_type::GL'
@@ -45,14 +45,22 @@ class excQuadrature: public std::exception {
  *                        abscissae/weights are to be loaded or 
  *                        calculated. See above for a list of 
  *                        supported values.
- * \param start Lower bound of range with nonzero state density in [eV]
- * \param end Upper bound of range with nonzero state density in [eV]
- * \param T Temperature in [K]
- * \param Ef Fermi level in [eV]
- * \param num_abscissae For GL, CCGL and GC: How many abscissae to use 
- *                      for the quadrature. For ANPS: exponent specifying
- *                      the precision, base e. Set to n to specify a
- *                      precision of exp(-6).
+ *
+ * \param start           Lower bound of range with nonzero state density 
+ *                        in [eV].
+ *
+ * \param end             Upper bound of range with nonzero state density 
+ *                        in [eV].
+ *
+ * \param T               Temperature in [K].
+ *
+ * \param Ef              Fermi level in [eV].
+ *
+ * \param num_abscissae   For GL, CCGL and GC: How many abscissae to use 
+ *                        for the quadrature. For ANPS: exponent specifying
+ *                        the precision to base e. Example: set to 6 to 
+ *                        specify a precision of exp(-6) ~= 0.0025. Machine
+ *                        precision for a 64bit double is roughly exp(-36).
  */
 Quadrature::Quadrature(quadrature_types::quadrature_type type, double start, 
                        double end, double T, double Ef, 
