@@ -42,10 +42,15 @@ public:
 // sab begin
 // THIS CONSTRUCTOR WILL CREATE A MATRIX BY WEIGHTED SUMMING OF TWO OTHERS
     TCSR(T,TCSR<double>*,T,TCSR<double>*);
+// this is the same but adds an additional matrix C with the SAME SPARSITY PATTERN AS B
+    TCSR(T,TCSR<double>*,T,TCSR<double>*,T,TCSR<double>*);
 // and this will construct the density matrix on the TCSR sparsity pattern
 // WITH THE TRANSPOSED ORBITALS AS INPUT
     TCSR(TCSR<double>*,double*,double,int);
     TCSR(TCSR<double>*,CPX*,CPX,int);
+// this creates a matrix which is the input matrix multiplied by the sum
+// of the input vector elements corresponding to the row and col number
+    TCSR(TCSR<T>*,T*);
 // and this is the gather
     TCSR(TCSR<T>*,MPI_Comm);
 // sab end
@@ -87,6 +92,8 @@ public:
     int get_bandwidth(int);
     void contactunitcell(T*,int,int,int,int);
     void contactunitcell(T*,int,int,int);
+    void addcontact(T*,int,int,int);
+    void contactdensity(int,int);
     int additionalentries(TCSR<T>*);
     void add(TCSR<T>*,T);
     void add_imag(TCSR<CPX>*,CPX);
@@ -218,6 +225,60 @@ inline TCSR<T>::TCSR(T alphafactor,TCSR<double> *A,T betafactor,TCSR<double> *B)
 
 /******************** written by SAB ********************/
 
+template <class T>
+inline TCSR<T>::TCSR(T alphafactor,TCSR<double> *A,T betafactor,TCSR<double> *B,T gammafactor,TCSR<double> *C)
+{
+    if ( (size       = A->size      )!=B->size      ) throw CSR_Exception(__LINE__,__FILE__);
+    if ( (size_tot   = A->size_tot  )!=B->size_tot  ) throw CSR_Exception(__LINE__,__FILE__);
+    if ( (type       = A->type      )!=B->type      ) throw CSR_Exception(__LINE__,__FILE__);
+    if ( (findx      = A->findx     )!=B->findx     ) throw CSR_Exception(__LINE__,__FILE__);
+    if ( (first_row  = A->first_row )!=B->first_row ) throw CSR_Exception(__LINE__,__FILE__);
+
+    if ( B->n_nonzeros != C->n_nonzeros ) throw CSR_Exception(__LINE__,__FILE__);
+
+    int addit  = B->additionalentries(A);
+
+    if (addit<0) throw CSR_Exception(__LINE__,__FILE__);
+  
+    n_nonzeros = addit+A->n_nonzeros;
+
+    index_i    = new int[size];
+    edge_i     = new int[size+1];
+    nnz        = new T[n_nonzeros];
+    index_j    = new int[n_nonzeros];
+    diag_pos   = new int[size];
+
+    int i,j,edgy1,edgy2;
+    int numbercounter=0;
+    T *linefull=new T[size_tot];
+
+    for (i=0;i<size;i++) {
+        init_variable(linefull,size_tot);
+        index_i[i]=0;
+        for (edgy1=A->edge_i[i]-A->findx;edgy1<A->edge_i[i+1]-A->findx;edgy1++) {
+            linefull[A->index_j[edgy1]-A->findx]+=alphafactor*A->nnz[edgy1];
+        }
+        for (edgy2=B->edge_i[i]-B->findx;edgy2<B->edge_i[i+1]-B->findx;edgy2++) {
+            linefull[B->index_j[edgy2]-B->findx]+=betafactor*B->nnz[edgy2]+gammafactor*C->nnz[edgy2];
+        }
+        for (j=0;j<size_tot;j++) {
+            if (abs(linefull[j])) {
+                nnz[numbercounter]=linefull[j];
+                index_j[numbercounter]=j+findx;
+                index_i[i]++;
+                numbercounter++;
+            }
+        }
+    }
+
+    delete[] linefull;
+
+    get_row_edge();
+    get_diag_pos();
+}
+
+/******************** written by SAB ********************/
+
 template <>
 inline TCSR<double>::TCSR(TCSR<double> *mat,double* phi,double factor,int nkval)
 {
@@ -277,6 +338,38 @@ inline TCSR<CPX>::TCSR(TCSR<double> *mat,CPX* phi,CPX factor,int nkval)
     for(i=0;i<size;i++){
         for(j=edge_i[i]-findx;j<edge_i[i+1]-findx;j++){
             nnz[j]=factor*c_zdotc(nkval,&phi[(index_j[j]-findx)*size],1,&phi[i*size],1);
+        }
+    }
+
+}
+
+/******************** written by SAB ********************/
+
+template <class T>
+inline TCSR<T>::TCSR(TCSR<T> *mat,T *vec)
+{
+
+    nnz        = new T[mat->n_nonzeros];
+    index_i    = new int[mat->size];
+    index_j    = new int[mat->n_nonzeros];
+    edge_i     = new int[mat->size+1];
+    diag_pos   = new int[mat->size];
+
+    size       = mat->size;
+    size_tot   = mat->size_tot;
+    type       = mat->type;
+    n_nonzeros = mat->n_nonzeros;
+    findx      = mat->findx;
+    first_row  = mat->first_row;
+    
+    c_icopy(size,mat->index_i,1,index_i,1);
+    c_icopy(n_nonzeros,mat->index_j,1,index_j,1);
+    c_icopy(size+1,mat->edge_i,1,edge_i,1);
+    c_icopy(size,mat->diag_pos,1,diag_pos,1);
+
+    for(int i=0;i<size;i++) {
+        for(int e=edge_i[i]-findx;e<edge_i[i+1]-findx;e++) {
+            nnz[e]=(vec[i]+vec[index_j[e]-findx])/2*mat->nnz[e];
         }
     }
 
@@ -1130,7 +1223,7 @@ void TCSR<T>::contactunitcell(T *contacty,int rows,int ndof,int bandw,int signy)
         for(i=0;i<rows;i++) {
             for(j=edge_i[i]-findx;j<edge_i[i+1]-findx;j++) {
                 if ( (index=index_j[j]-findx) < ndof*(bandw+1) ) {
-                    //contacty[i+index*rows] = nnz[j];
+                    //TRANSPOSED FOR EASY MPI TRANSFER
                     contacty[i*ndof*(bandw+1)+index] = nnz[j];
                 }
             }
@@ -1139,7 +1232,6 @@ void TCSR<T>::contactunitcell(T *contacty,int rows,int ndof,int bandw,int signy)
         for(i=size-ndof;i<size;i++) {
             for(j=edge_i[i]-findx;j<edge_i[i+1]-findx;j++) {
                 if ( (index=index_j[j]-findx) >= size-ndof*(bandw+1) ) {
-                    contacty[i-size+ndof+index*ndof] = nnz[j];
                 }
             }
         }
@@ -1168,13 +1260,79 @@ void TCSR<T>::contactunitcell(T *contacty,int ndof,int bandw,int signy)
         for(i=size-ndof;i<size;i++) {
             for(j=edge_i[i]-findx;j<edge_i[i+1]-findx;j++) {
                 if ( (index=index_j[j]-findx) >= size-ndof*(bandw+1) ) {
-                    contacty[i-size+ndof+index*ndof] = nnz[j];
+                    contacty[i-(size-ndof)+(index-(size-ndof*(bandw+1)))*ndof] = nnz[j];
                 }
             }
         }
         for (int ibw=1;ibw<=bandw;ibw++)
             full_transpose(ndof,ndof,&contacty[(bandw-ibw)*ndof*ndof],&contacty[(bandw+ibw)*ndof*ndof]);
     }
+}
+
+/************************************************************************************************/
+
+template <class T>
+void TCSR<T>::addcontact(T *contacty,int ndof,int bw,int signy)
+{
+    int i,e;
+    int bwndof=bw*ndof;
+    if (signy==1) {
+        for(i=0;i<bwndof;i++) {
+            for(e=edge_i[i]-findx;e<edge_i[i+1]-findx;e++) {
+                if ( index_j[e]-findx-i < bwndof ) {
+                    contacty[i+(index_j[e]-findx)*bwndof] += nnz[e];
+                }
+            }
+        }
+    } else {
+        for(i=size-bwndof;i<size;i++) {
+            for(e=edge_i[i]-findx;e<edge_i[i+1]-findx;e++) {
+                if ( index_j[e]-findx-i > -bwndof ) {
+                    contacty[i-(size-bwndof)+(index_j[e]-findx-(size-2*bwndof))*bwndof] += nnz[e];
+                }
+            }
+        }
+    }
+}
+
+/************************************************************************************************/
+
+template <class T>
+void TCSR<T>::contactdensity(int ndof,int bandw)
+{
+// this is for the serial case to copy the (bandwidth+1)th strip to the ones before
+// assumes same sparsity structure at bw+1 unit cells on left and right
+    int i,e;
+    T *stripe = new T[(size_tot+bandw*ndof)*ndof];
+    init_variable(stripe,(size_tot+bandw*ndof)*ndof);
+    for(i=bandw*ndof;i<bandw*ndof+ndof;i++) {
+        for(e=edge_i[i]-findx;e<edge_i[i+1]-findx;e++) {
+            stripe[i-bandw*ndof+(index_j[e]-findx)*ndof] = nnz[e];
+        }
+    }
+    c_tcopy(bandw*ndof*ndof,stripe,1,&stripe[size_tot*ndof],1);
+    for(int iband=0;iband<bandw;iband++) {
+        for(i=iband*ndof;i<(iband+1)*ndof;i++) {
+            for(e=edge_i[i]-findx;e<edge_i[i+1]-findx;e++) {
+                nnz[e]=stripe[i-iband*ndof+(index_j[e]-findx)*ndof+ndof*ndof*(bandw-iband)];
+            }
+        }
+    }
+    init_variable(stripe,(size_tot+bandw*ndof)*ndof);
+    for(i=size_tot-bandw*ndof-ndof;i<size_tot-bandw*ndof;i++) {
+        for(e=edge_i[i]-findx;e<edge_i[i+1]-findx;e++) {
+            stripe[i-(size_tot-bandw*ndof-ndof)+(index_j[e]-findx+bandw*ndof)*ndof] = nnz[e];
+        }
+    }
+    c_tcopy(bandw*ndof*ndof,&stripe[size_tot*ndof],1,stripe,1);
+    for(int iband=0;iband<bandw;iband++) {
+        for(i=size_tot-bandw*ndof+iband*ndof;i<size_tot-bandw*ndof+(iband+1)*ndof;i++) {
+            for(e=edge_i[i]-findx;e<edge_i[i+1]-findx;e++) {
+                nnz[e]=stripe[i-(size_tot-bandw*ndof+iband*ndof)+(index_j[e]-findx)*ndof+ndof*ndof*(bandw-iband-1)];
+            }
+        }
+    }
+    delete[] stripe;
 }
 
 /************************************************************************************************/

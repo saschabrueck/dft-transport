@@ -404,6 +404,14 @@ extern "C"
            } c_transport_type;
 };
 
+namespace transport_methods {
+enum transport_method {
+  TEST=0,
+  NEGF=1,
+  WF=2,
+};
+} // namespace
+
 #endif
 
 
