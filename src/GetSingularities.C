@@ -36,6 +36,7 @@ Singularities::Singularities(TCSR<double> *KohnSham,TCSR<double> *Overlap,c_tran
     int *n_energies_local_array = new int[nprocs];
     MPI_Allgather(&n_energies_local,1,MPI_INT,n_energies_local_array,1,MPI_INT,MPI_COMM_WORLD);
     MPI_Allreduce(&n_energies_local,&n_energies,1,MPI_INT,MPI_SUM,MPI_COMM_WORLD);
+//n_energies*=2;//this is for two contacts which are the same but shifted
     energies = new double[n_energies];
     int* displc = new int[nprocs+1]();
     for (int i=1;i<nprocs+1;i++) displc[i]=displc[i-1]+n_energies_local_array[i-1];
@@ -44,6 +45,8 @@ Singularities::Singularities(TCSR<double> *KohnSham,TCSR<double> *Overlap,c_tran
     delete[] energies_local;
     delete[] n_energies_local_array;
     int info;
+//c_dcopy(n_energies/2,energies,1,&energies[n_energies/2],1);
+//for (int ien=0;ien<n_energies/2;ien++) energies[ien]+=0.5;
     c_dlasrt('I',n_energies,energies,&info);
 
     delete[] k;
