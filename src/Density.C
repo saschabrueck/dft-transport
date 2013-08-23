@@ -13,6 +13,7 @@ using namespace std;
 #include "Umfpack.H"
 //#include "MUMPS.H"
 #include "Pardiso.H"
+#include "tmprGF.H"
 #include "GetSigma.H"
 #include "Density.H"
 
@@ -146,7 +147,12 @@ cout << "COMPARE SIGMAR " << sigmar[triblocksize-1] << " AND SIGMAR2 " << sigmar
         sabtime=get_time(d_zer);
         int inversion_method=0;
         if (inversion_method==0) {
-// add rgf here like pardiso maybe
+            if (ncells%bandwidth) return (LOGCERR, EXIT_FAILURE);
+            std::vector<int> Bvec(ncells/bandwidth,0);
+            for (int ii=0;ii<ncells/bandwidth;ii++) Bvec[ii]=ii*ntriblock;
+            tmprGF::sparse_invert(HamSig,Bvec);
+            Ps->add_imag(HamSig,-weight/M_PI);
+            delete HamSig;
         } else if (inversion_method==1) {
 #ifdef HAVE_PARDISO            
             Pardiso::sparse_invert(HamSig);

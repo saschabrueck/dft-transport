@@ -1,8 +1,14 @@
+@SET NCELLS 10
 &FORCE_EVAL
   METHOD QS
   &DFT
     &TRANSPORT
       DENSITY_MATRIX_CONSTRUCTION_METHOD TRANSPORT
+      EPS_LIMIT 1.0E-8
+      EPS_DECAY 1.0E-8
+      N_ABSCISSAE 30
+      N_KPOINTS 20
+      N_CELLS ${NCELLS}
     &END
     BASIS_SET_FILE_NAME ../BASIS_ZIJLSTRA 
     POTENTIAL_FILE_NAME ../POTENTIAL 
@@ -40,7 +46,7 @@
       &END
     &END QS
     &LS_SCF
-      MAX_SCF    10
+      MAX_SCF    2
       EPS_FILTER 1.0E-5
       EPS_SCF    1.0E-5
       MU        -0.05
@@ -51,7 +57,7 @@
       PURIFICATION_METHOD TRS4
     &END
     &SCF
-      MAX_SCF    30
+      MAX_SCF    2
       EPS_SCF    1.0E-6
       &OT
       &END
@@ -72,10 +78,10 @@
   &SUBSYS
     &CELL
       ABC 4.26 20 20
-      MULTIPLE_UNIT_CELL 5 1 1
+      MULTIPLE_UNIT_CELL ${NCELLS} 1 1
     &END CELL
     &TOPOLOGY
-      MULTIPLE_UNIT_CELL 5 1 1
+      MULTIPLE_UNIT_CELL ${NCELLS} 1 1
     &END 
     &COORD
 C -9.4369e-14 5.10117 0
