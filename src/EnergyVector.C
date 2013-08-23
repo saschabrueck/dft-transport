@@ -66,7 +66,7 @@ int energyvector(TCSR<double> *Overlap,TCSR<double> *KohnSham,TCSR<double> *P_Ma
     }
 */
 // get integration points along real axis with gauss cheby
-
+/*
     Quadrature *gausscheby;
     int num_points_per_interval=transport_params.n_abscissae;
     double skip_point_weight_thr=10E-12;
@@ -82,39 +82,39 @@ int energyvector(TCSR<double> *Overlap,TCSR<double> *KohnSham,TCSR<double> *P_Ma
     double *stepvectord = new double[size_energyvector]();
     int i_start=0;
     if (singularities->energy_gs<singularities->energies[0]) {
-        cgqf(num_points_per_interval,2,0.0,0.0,singularities->energy_gs,singularities->energies[0],energyvectord,stepvectord);
-        for (int ipoint=0;ipoint<num_points_per_interval;ipoint++)
-            stepvectord [ipoint] *= sqrt ( ( energyvectord[ipoint] - singularities->energy_gs ) * ( singularities->energies[0] - energyvectord[ipoint] ) );
-/*
+//        cgqf(num_points_per_interval,2,0.0,0.0,singularities->energy_gs,singularities->energies[0],energyvectord,stepvectord);
+//        for (int ipoint=0;ipoint<num_points_per_interval;ipoint++)
+//            stepvectord [ipoint] *= sqrt ( ( energyvectord[ipoint] - singularities->energy_gs ) * ( singularities->energies[0] - energyvectord[ipoint] ) );
+
         gausscheby = new Quadrature(quadrature_types::GC,singularities->energy_gs,singularities->energies[0],0.0,singularities->energy_vbe,num_points_per_interval);
         std::copy(gausscheby->abscissae.begin(),gausscheby->abscissae.end(),energyvector);
         std::copy(gausscheby->weights.begin(),gausscheby->weights.end(),stepvector);
         delete gausscheby;
-*/
+
         i_start=num_points_per_interval;
     }
     for (int i_energies=0;i_energies<n_energies_below_vbe-1;i_energies++) {
-        cgqf(num_points_per_interval,2,0.0,0.0,singularities->energies[i_energies],singularities->energies[i_energies+1],&energyvectord[i_start+i_energies*num_points_per_interval],&stepvectord[i_start+i_energies*num_points_per_interval]);
-        for (int ipoint=0;ipoint<num_points_per_interval;ipoint++) {
-            stepvectord [ipoint+i_start+i_energies*num_points_per_interval] *= sqrt ( ( energyvectord[ipoint+i_start+i_energies*num_points_per_interval] - singularities->energies[i_energies] ) * ( singularities->energies[i_energies+1] - energyvectord[ipoint+i_start+i_energies*num_points_per_interval] ) );
-        if (singularities->energies[i_energies+1]-singularities->energies[i_energies]<0.001) stepvectord [ipoint+i_start+i_energies*num_points_per_interval] = 0;
-        }
-/*
+//        cgqf(num_points_per_interval,2,0.0,0.0,singularities->energies[i_energies],singularities->energies[i_energies+1],&energyvectord[i_start+i_energies*num_points_per_interval],&stepvectord[i_start+i_energies*num_points_per_interval]);
+//        for (int ipoint=0;ipoint<num_points_per_interval;ipoint++) {
+//            stepvectord [ipoint+i_start+i_energies*num_points_per_interval] *= sqrt ( ( energyvectord[ipoint+i_start+i_energies*num_points_per_interval] - singularities->energies[i_energies] ) * ( singularities->energies[i_energies+1] - energyvectord[ipoint+i_start+i_energies*num_points_per_interval] ) );
+//        if (singularities->energies[i_energies+1]-singularities->energies[i_energies]<0.001) stepvectord [ipoint+i_start+i_energies*num_points_per_interval] = 0;
+//        }
+
         gausscheby = new Quadrature(quadrature_types::GC,singularities->energies[i_energies],singularities->energies[i_energies+1],0.0,singularities->energy_vbe,num_points_per_interval);
         std::copy(gausscheby->abscissae.begin(),gausscheby->abscissae.end(),&energyvector[i_start+i_energies*num_points_per_interval]);
         std::copy(gausscheby->weights.begin(),gausscheby->weights.end(),&stepvector[i_start+i_energies*num_points_per_interval]);
         delete gausscheby;
-*/
+
     }
     for (int i_evec=0;i_evec<size_energyvector;i_evec++) {
         energyvector[i_evec]=CPX(energyvectord[i_evec],0.0);
         stepvector[i_evec]=CPX(stepvectord[i_evec],0.0);
         methodvector[i_evec]=transport_methods::WF;
     }
-
+*/
 // get integration points along complex contour with gauss legendre
-/*
-    int num_points_on_contour=20;
+
+    int num_points_on_contour=transport_params.n_abscissae;
     Quadrature gausslegendre(quadrature_types::CCGL,singularities->energy_gs,singularities->energy_vbe,0.0,singularities->energy_vbe,num_points_on_contour);
     int size_energyvector=num_points_on_contour;
     transport_methods::transport_method *methodvector = new transport_methods::transport_method[size_energyvector];
@@ -124,7 +124,7 @@ int energyvector(TCSR<double> *Overlap,TCSR<double> *KohnSham,TCSR<double> *P_Ma
     std::copy(gausslegendre.abscissae.begin(),gausslegendre.abscissae.end(),energyvector);
     std::copy(gausslegendre.weights.begin(),gausslegendre.weights.end(),stepvector);
     double skip_point_weight_thr=0.0;
-*/
+
 // delete singularities
     delete singularities;
 // run distributed
