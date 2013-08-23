@@ -91,6 +91,13 @@ extern "C" {
     void fortran_name(zhegv,ZHEGV)(int *itype,char *jobz,char *uplo,int *n,CPX *a,int *lda,CPX *b,int *ldb,\
                     double *w,CPX *work,int *lwork,double *rwork,int *info);
     void fortran_name(dlasrt,DLASRT)(char*,int*,double*,int*);
+
+// MMC
+    void fortran_name(dsterf,DSTERF)(int *N, double *D, double *E, int *INFO);
+    void fortran_name(dsteqr,DSTEQR)(char *COMPZ, int *N, double *D, 
+                                     double *E, double *Z, int *LDZ,
+                                     double *WORK, int *INFO);
+
 }
 
 /*My Blas*******************************************************************************************/
@@ -505,6 +512,23 @@ inline void c_dlasrt(char id,int n,double* d,int *info)
 }
 
 /*SAB*END****************************************************************************************/
+
+/*MMC********************************************************************************************/
+
+inline void c_dsterf(int N, double *D, double *E, int *INFO)
+{
+  fortran_name(dsterf,DSTERF)(&N, D, E, INFO);
+}
+
+inline void c_dsteqr(char COMPZ, int N, double *D, double *E, double *Z, 
+                     int LDZ, double *WORK, int *INFO)
+{
+  fortran_name(dsteqr,DSTEQR)(&COMPZ, &N, D, E, Z, &LDZ, WORK, INFO);
+}
+
+
+
+/*MMC*END***************************************************************************************/
 
 #endif
 
