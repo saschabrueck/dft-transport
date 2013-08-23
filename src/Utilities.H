@@ -66,6 +66,27 @@ int min_active_vec(int,int*,int*);
 
 int max_active_vec(int,int*,int*);
 
+template <typename T>
+void set_to_zero(int, T*);
+
+void set_random(int, int, CPX*);
+
+void write_matrix_to_file(const char*, CPX*, int, int);
+
+int get_csr_rows(const char*);
+
+void read_csr(const char*, int, int, CPX*);
+
+void print_mat(TCSR<CPX>*, int, int);
+
+void print_mat(CPX*, int, int, int);
+
+void print_mat(CPX*, int, int, int, int, int);
+
+void write_mat(CPX*, int, int, const char*);
+
+void write_mat(CPX*, int, int, std::basic_string<char>);
+
 /************************************************************************************************/
 
 template <typename T>
