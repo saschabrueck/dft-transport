@@ -1,3 +1,7 @@
+#include <iostream>
+#include <iomanip>
+#include <sstream>
+#include <string>
 #include "Utilities.H"
 #include "Blas.H"
 
@@ -437,3 +441,187 @@ int max_active_vec(int N,int *vec,int *active)
 }
 
 /************************************************************************************************/
+
+
+// some extra helper functions
+template <typename T>
+void set_to_zero(int length, T *array) {
+  for (int i=0; i < length; ++i) {
+    array[i] = (T)0;
+  }
+}
+
+void set_random(int length, int seed, CPX *array)
+{
+  std::default_random_engine generator(seed);
+  std::uniform_real_distribution<double> distribution(-1.0, 1.0);
+  for (int i=0; i < length; ++i) {
+    double real = distribution(generator);
+    double imag = distribution(generator);
+    array[i] = CPX(real, imag);
+  }
+}
+
+
+/** \brief Write a double complex matrix to a file
+ *
+ *  \param filename Name of the file to write to.
+ *
+ *  \param matrix Array containing the matrix to be written to the file.
+ *
+ *  \param num_rows Number of rows.
+ *
+ *  \param num_cols Number of columns.
+ */
+void write_matrix_to_file(const char *filename, CPX *matrix, int num_rows,
+                          int num_cols)
+{
+    ofstream output_file;
+ 
+    output_file.open(filename);
+    output_file.precision(8);
+    for(int row=0; row < num_rows; ++row){
+        for(int column=0; column < num_cols; ++column){
+            output_file << real(matrix[row + column * num_rows]) << " "
+                   << imag(matrix[row + column * num_rows]) << " ";
+        }
+        output_file<<"\n";
+    }
+    output_file.close();
+}
+
+
+/// Returns the width of a matrix stored in a CSR file
+int get_csr_rows(const char *filename)
+{
+  int size;
+  FILE *f_handle = fopen(filename, "r");
+  fscanf(f_handle, "%i", &size);
+  fclose(f_handle);
+  return size;
+}
+
+
+/// Fills a pre-allocated rows*columns-array with the content of a csr file
+void read_csr(const char *filename, int rows, int columns, CPX *matrix)
+{
+
+  int size;
+  int num_nonzeros;
+  int fortran_index;
+
+  FILE *f_handle = fopen(filename, "r");
+
+  // parsing the first 3 lines
+  fscanf(f_handle, "%i", &size);
+  fscanf(f_handle, "%i", &num_nonzeros);
+  fscanf(f_handle, "%i", &fortran_index);
+
+  set_to_zero(rows * columns, matrix);
+
+  int index_i, index_j;
+  double real, imag;
+  for (int line = 0; line < num_nonzeros; ++line) {
+    fscanf(f_handle, "%i", &index_i);
+    fscanf(f_handle, "%i", &index_j);
+    fscanf(f_handle, "%lg", &real);
+    fscanf(f_handle, "%lg", &imag);
+    matrix[(index_i - fortran_index) * columns + index_j - fortran_index] =
+      CPX(real, imag);
+  }
+  
+  fclose(f_handle);
+   
+}
+
+/// Prints the first 'rows' rows and 'columns' columns of a matrix
+void print_mat(TCSR<CPX> *matrix, int rows, int columns)
+{
+  int u = 0;
+  int field_width = 30;   // adjust to print fields with more or less chars
+  int fortran_index = matrix->findx;
+  for (int i = 0; i < rows; ++i) {
+    int elements_left_in_row = matrix->index_i[i];
+    for (int j = 0; j < columns; ++j) {
+      if (j == matrix->index_j[u] - fortran_index) {
+        std::stringstream number_to_print;
+        number_to_print << real(matrix->nnz[u]) << "+"
+                        << imag(matrix->nnz[u]) << "i";
+        std::cout << std::setw(field_width) << number_to_print.str();
+        // This condition ensures we don't accidentially jump to the next
+        // line if all elements are printed and the next line's element
+        // is at the next j position than the one just printed.
+        if (elements_left_in_row > 1) {
+          --elements_left_in_row;
+          ++u;
+        }
+      }
+      else {
+        std::cout << std::setw(field_width) << "0+0i";
+      }
+    }
+    std::cout << endl;
+    u = u + elements_left_in_row;
+  }
+}
+void print_mat(CPX *matrix, int rows, int columns, int rowlength)
+{
+  int field_width = 30;   // adjust to print fields with more or less chars
+  for (int i=0; i < rows; ++i) {
+    for (int j=0; j < columns; ++j) {
+      int position = i * rowlength + j;
+      std::stringstream number_to_print;
+      number_to_print << real(matrix[position]) << "+" 
+                      << imag(matrix[position]) << "i";
+      std::cout << std::setw(field_width) << number_to_print.str();
+    } 
+    std::cout << endl;
+  }
+}
+void print_mat(CPX *matrix, int rows, int columns, int row_start,
+               int column_start, int rowlength)
+{
+  int field_width = 30;   // adjust to print fields with more or less chars
+  for (int i=row_start; i < row_start + rows; ++i) {
+    for (int j=column_start; j < column_start + columns; ++j) {
+      int pos = i * rowlength + j;
+      std::stringstream number_to_print;
+      number_to_print << real(matrix[pos]) << "+" 
+                      << imag(matrix[pos]) << "i";
+      std::cout << std::setw(field_width) << number_to_print.str();
+    }
+    std::cout << endl;
+  }
+}
+void write_mat(CPX *matrix, int rowlength, int columnlength, 
+               const char *filename)
+{
+  int fortran_index = 1;
+  ofstream outfile;
+  outfile.open(filename);
+  outfile.precision(8);
+  for (int i=0; i < rowlength; ++i) {
+    for (int j=0; j < columnlength; ++j) {
+      int position = i * rowlength + j;
+      outfile << (i + fortran_index) << " " << (j + fortran_index) << " "
+      << real(matrix[position]) << " " << imag(matrix[position]) << "\n";
+    }
+  }
+  outfile.close();
+}
+void write_mat(CPX *matrix, int rowlength, int columnlength, 
+               std::basic_string<char> filename)
+{
+  int fortran_index = 1;
+  ofstream outfile;
+  outfile.open(filename);
+  outfile.precision(8);
+  for (int i=0; i < rowlength; ++i) {
+    for (int j=0; j < columnlength; ++j) {
+      int position = i * rowlength + j;
+      outfile << (i + fortran_index) << " " << (j + fortran_index) << " "
+      << real(matrix[position]) << " " << imag(matrix[position]) << "\n";
+    }
+  }
+  outfile.close();
+}
