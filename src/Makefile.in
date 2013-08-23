@@ -12,7 +12,7 @@ LDFLAGS = $(LFLAGS) $(DFLAGS)
 
 MAIN = main.cpp
 SOURCES_CPP = cDBCSR_tools.cpp c_scf.cpp
-SOURCES_C = array_tools.C Utilities.C CSR.C DiagScaLapack.C Density.C EnergyVector.C Quadrature.C GreenSolver.C KPointIntegration.C GetSingularities.C GetSigma.C rGF.C @pardiso@
+SOURCES_C = array_tools.C Utilities.C CSR.C DiagScaLapack.C Density.C EnergyVector.C Quadrature.C GreenSolver.C KPointIntegration.C GetSingularities.C GetSigma.C rGF.C tmprGF.C @pardiso@
 
 OBJECTS = $(SOURCES_CPP:.cpp=.o) $(SOURCES_C:.C=.o)
 EXECUTABLE = interface
