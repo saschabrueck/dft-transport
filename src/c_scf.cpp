@@ -17,17 +17,21 @@ void c_scf_method(c_transport_type transport_env_params, c_DBCSR S, c_DBCSR KS, 
    int sendbuf, nrows_local, num_nodes, rank;
    int* recvbuf;
 
+   MPI::Intercomm Comm;
+   Comm = MPI::COMM_WORLD;
+   num_nodes = Comm.Get_size();
+   rank = Comm.Get_rank();
+
    row_block_size.assign(S.row_blk_size, S.row_blk_size + S.nblkrows_total);
    col_block_size.assign(S.col_blk_size, S.col_blk_size + S.nblkcols_total);
    local_rows.assign(S.local_rows, S.local_rows + S.nblkrows_local);
    row_dist.assign(S.row_dist, S.row_dist + S.nblkrows_total);
    col_dist.assign(S.col_dist, S.col_dist + S.nblkcols_total);
-   nrows_local = std::accumulate(row_block_size.begin()+local_rows.front()-1,row_block_size.begin()+local_rows.back(),0);
 
-   MPI::Intercomm Comm;
-   Comm = MPI::COMM_WORLD;
-   num_nodes = Comm.Get_size();
-   rank = Comm.Get_rank();
+   if (local_rows.size() != 0) 
+      nrows_local = std::accumulate(row_block_size.begin()+local_rows.front()-1,row_block_size.begin()+local_rows.back(),0);
+   else 
+      nrows_local = 0;
 
    recvbuf = new int[num_nodes];
    std::fill_n(recvbuf, num_nodes, 0);

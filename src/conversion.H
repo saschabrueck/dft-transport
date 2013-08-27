@@ -308,7 +308,6 @@ void CSR_to_cDBCSR(TCSR<T>* csr_mat, c_DBCSR& dbcsr_mat,
 
    Comm = MPI::COMM_WORLD;  
    rank = Comm.Get_rank();
-
    nblkrows_local = nblkrows_local_all[rank];
    row_p_temp.push_back(0);
 
@@ -326,8 +325,16 @@ void CSR_to_cDBCSR(TCSR<T>* csr_mat, c_DBCSR& dbcsr_mat,
    std::copy(csr_mat->edge_i, csr_mat->edge_i+csr_mat->size+1, edge_i.begin());
 
    sum = 0;
-   first_row = local_rows[0]-1;
-   last_row = local_rows[nblkrows_local-1];
+
+   if (local_rows.size() != 0){
+      first_row = local_rows[0]-1;
+      last_row = local_rows[nblkrows_local-1];
+   }
+   else{
+      first_row = 0;
+      last_row = 0;
+   }
+
    for (Vector1D<int>::iterator i = rbs.begin()+first_row; i != rbs.begin()+last_row; i++){ 
       rblk_p.insert(rblk_p.end(),*i, sum);
       sum = sum + *i;
