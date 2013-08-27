@@ -126,15 +126,20 @@ SUBROUTINE cDBCSR_new (dbcsr_mat, c_DBCSR_mat, error)
   c_DBCSR_mat%fullmatrix_nrows = SUM(row_blk_size)
   c_DBCSR_mat%fullmatrix_ncols = SUM(col_blk_size)
 
-  IF (.NOT. C_ASSOCIATED(ptr_to_rowp)) ptr_to_rowp = C_LOC(row_p(1))
-  IF (.NOT. C_ASSOCIATED(ptr_to_coli)) ptr_to_coli = C_LOC(col_i(1))
-  IF (.NOT. C_ASSOCIATED(ptr_to_blkp)) ptr_to_blkp = C_LOC(blk_p(1))
-  IF (.NOT. C_ASSOCIATED(ptr_to_localrows)) ptr_to_localrows = C_LOC(local_rows(1))
+  IF (.NOT. C_ASSOCIATED(ptr_to_rowp) .AND. SIZE(row_p) .NE. 0) ptr_to_rowp = C_LOC(row_p(1))  
+  IF (.NOT. C_ASSOCIATED(ptr_to_coli) .AND. SIZE(col_i) .NE. 0) ptr_to_coli = C_LOC(col_i(1))  
+  IF (.NOT. C_ASSOCIATED(ptr_to_blkp) .AND. SIZE(blk_p) .NE. 0) ptr_to_blkp = C_LOC(blk_p(1))  
+  IF (.NOT. C_ASSOCIATED(ptr_to_localrows) .AND. SIZE(local_rows) .NE. 0) ptr_to_localrows = C_LOC(local_rows(1))  
+  IF (.NOT. C_ASSOCIATED(ptr_to_cblkdata) .AND. SIZE(c_blkdata) .NE. 0) ptr_to_cblkdata = C_LOC(c_blkdata(1))  
+  IF (.NOT. C_ASSOCIATED(ptr_to_rowp) .AND. SIZE(row_p) .EQ. 0) ptr_to_rowp = C_NULL_PTR  
+  IF (.NOT. C_ASSOCIATED(ptr_to_coli) .AND. SIZE(col_i) .EQ. 0) ptr_to_coli = C_NULL_PTR  
+  IF (.NOT. C_ASSOCIATED(ptr_to_blkp) .AND. SIZE(blk_p) .EQ. 0) ptr_to_blkp = C_NULL_PTR  
+  IF (.NOT. C_ASSOCIATED(ptr_to_localrows) .AND. SIZE(local_rows) .EQ. 0) ptr_to_localrows = C_NULL_PTR  
+  IF (.NOT. C_ASSOCIATED(ptr_to_cblkdata) .AND. SIZE(c_blkdata) .EQ. 0) ptr_to_cblkdata = C_NULL_PTR  
   IF (.NOT. C_ASSOCIATED(ptr_to_rowblksize)) ptr_to_rowblksize = C_LOC(row_blk_size(1))
   IF (.NOT. C_ASSOCIATED(ptr_to_colblksize)) ptr_to_colblksize = C_LOC(col_blk_size(1))
   IF (.NOT. C_ASSOCIATED(ptr_to_rowblkoffset)) ptr_to_rowblkoffset = C_LOC(row_blk_offset(1))
   IF (.NOT. C_ASSOCIATED(ptr_to_colblkoffset)) ptr_to_colblkoffset = C_LOC(col_blk_offset(1))
-  IF (.NOT. C_ASSOCIATED(ptr_to_cblkdata)) ptr_to_cblkdata = C_LOC(c_blkdata(1))
   IF (.NOT. C_ASSOCIATED(ptr_to_row_dist)) ptr_to_row_dist = C_LOC(row_dist(1))
   IF (.NOT. C_ASSOCIATED(ptr_to_col_dist)) ptr_to_col_dist = C_LOC(col_dist(1))
 

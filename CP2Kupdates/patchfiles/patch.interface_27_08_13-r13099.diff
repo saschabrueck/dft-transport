@@ -1,0 +1,906 @@
+Index: dbcsr_lib/dbcsr_transformations.F
+===================================================================
+--- dbcsr_lib/dbcsr_transformations.F	(revision 13099)
++++ dbcsr_lib/dbcsr_transformations.F	(working copy)
+@@ -17,6 +17,8 @@
+   USE array_types,                     ONLY: array_data,&
+                                              array_hold,&
+                                              array_i1d_obj,&
++                                             array_new,&
++                                             array_nullify,&
+                                              array_release
+   USE dbcsr_block_access,              ONLY: dbcsr_access_flush,&
+                                              dbcsr_access_start,&
+@@ -53,6 +55,7 @@
+                                              dbcsr_iterator_start,&
+                                              dbcsr_iterator_stop
+   USE dbcsr_kinds,                     ONLY: dp,&
++                                             default_string_length,&
+                                              int_8,&
+                                              sp
+   USE dbcsr_message_passing,           ONLY: mp_allgather,&
+@@ -73,7 +76,8 @@
+        dbcsr_mp_numnodes, dbcsr_mp_pgrid, dbcsr_nblkcols_total, &
+        dbcsr_nblkrows_total, dbcsr_nfullcols_total, dbcsr_nfullrows_total, &
+        dbcsr_release, dbcsr_row_block_sizes, dbcsr_switch_data_area, &
+-       dbcsr_valid_index
++       dbcsr_valid_index, dbcsr_get_info, dbcsr_name, dbcsr_mp_new, &
++       dbcsr_distribution_init, dbcsr_distribution_new
+   USE dbcsr_mp_operations,             ONLY: dbcsr_allgatherv,&
+                                              hybrid_alltoall_any,&
+                                              hybrid_alltoall_c1,&
+@@ -119,6 +123,7 @@
+             dbcsr_redistribute, dbcsr_make_untransposed_blocks
+   PUBLIC :: dbcsr_replicate_all, dbcsr_distribute, dbcsr_datablock_redistribute, dbcsr_replicate
+   PUBLIC :: dbcsr_make_dense, dbcsr_make_undense, dbcsr_make_dense_low
++  PUBLIC :: dbcsr_fill, convert_to_block_row_distributed
+ 
+ CONTAINS
+ 
+@@ -2576,4 +2581,296 @@
+     END SUBROUTINE cumsum_l
+   END SUBROUTINE dbcsr_datablock_redistribute
+ 
++!==========================================================================================================
++!==========================================================================================================
++  SUBROUTINE dbcsr_fill (dblk, row_p, col_i, blk_p, nblks, darea_size, new_matrix, error)
++
++    TYPE(dbcsr_data_obj), INTENT(IN)         :: dblk
++    INTEGER, DIMENSION(:), INTENT(IN), &
++      POINTER                                :: row_p, col_i, blk_p
++    INTEGER                                  :: nblks, darea_size
++    TYPE(dbcsr_obj), INTENT(INOUT)           :: new_matrix
++    TYPE(dbcsr_error_type), INTENT(INOUT)    :: error
++
++    CHARACTER(LEN=*), PARAMETER :: routineN = 'dbcsr_fill', &
++      routineP = moduleN//':'//routineN
++    INTEGER, PARAMETER                       :: metalen = 2
++
++    COMPLEX(KIND=dp), DIMENSION(:), POINTER  :: c_dp
++    COMPLEX(KIND=sp), DIMENSION(:), POINTER  :: c_sp
++    INTEGER :: bcol, blk, blk_ps, blk_size, blks, block_p, brow, col_size, &
++      data_type, dst_p, end_ind, error_handler, meta_l, mp_group, &
++      nblkrows_total, numnodes, row_size, src_p, start_ind, stored_col_new, &
++      stored_row_new
++    INTEGER, ALLOCATABLE, DIMENSION(:)       :: rd_disp, recv_meta, rm_disp, &
++                                                sd_disp, sdp, send_meta, &
++                                                sm_disp, smp
++    INTEGER, ALLOCATABLE, DIMENSION(:, :)    :: recv_count, send_count, &
++                                                total_recv_count, &
++                                                total_send_count
++    INTEGER, DIMENSION(:), POINTER           :: col_blk_size, row_blk_size
++    LOGICAL                                  :: sym_tr, tr
++    REAL(KIND=dp), DIMENSION(:), POINTER     :: r_dp
++    REAL(KIND=sp), DIMENSION(:), POINTER     :: r_sp
++    TYPE(dbcsr_data_obj)                     :: data_block, recv_data, &
++                                                send_data
++    TYPE(dbcsr_distribution_obj)             :: dist
++    TYPE(dbcsr_mp_obj)                       :: mp_env
++
++    CALL dbcsr_error_set(routineN, error_handler, error)
++
++     dist = dbcsr_distribution (new_matrix)
++     mp_env = dbcsr_distribution_mp (dist)
++     numnodes = dbcsr_mp_numnodes (mp_env)
++     mp_group = dbcsr_mp_group (mp_env)
++  
++     data_type = dbcsr_get_data_type(new_matrix)
++     nblkrows_total = dbcsr_nblkrows_total(new_matrix)
++     row_blk_size => array_data (new_matrix%m%row_blk_size)
++     col_blk_size => array_data (new_matrix%m%col_blk_size)
++  
++     ALLOCATE (send_count(2, 0:numnodes-1))
++     ALLOCATE (recv_count(2, 0:numnodes-1))
++     ALLOCATE (total_send_count(2, 0:numnodes-1))
++     ALLOCATE (total_recv_count(2, 0:numnodes-1))
++     ALLOCATE (sdp(0:numnodes-1))
++     ALLOCATE (sd_disp(0:numnodes-1))
++     ALLOCATE (smp(0:numnodes-1))
++     ALLOCATE (sm_disp(0:numnodes-1))
++     ALLOCATE (rd_disp(0:numnodes-1))
++     ALLOCATE (rm_disp(0:numnodes-1))
++     send_count(:,:) = 0
++     dst_p = -1
++  
++     DO brow = 1, nblkrows_total
++        row_size = row_blk_size(brow)
++        DO blk = row_p(brow)+1, row_p(brow+1)
++           bcol = col_i(blk)
++           col_size = col_blk_size(bcol)
++           blk_size = row_size*col_size
++           block_p = ABS(blk_p(blk))
++           sym_tr = .FALSE.
++           CALL dbcsr_get_stored_coordinates (new_matrix%m, brow, bcol, sym_tr, dst_p)
++           send_count(1, dst_p) = send_count(1, dst_p) + 1
++           send_count(2, dst_p) = send_count(2, dst_p) + blk_size
++        END DO
++     END DO
++  
++     CALL mp_alltoall(send_count, recv_count, 2, mp_group)
++     CALL dbcsr_data_init (recv_data)
++     CALL dbcsr_data_new (recv_data, data_type, SUM(recv_count(2, :)))
++     ALLOCATE (recv_meta(metalen*SUM(recv_count(1, :))))
++     CALL dbcsr_data_init (send_data)
++     CALL dbcsr_data_new (send_data, data_type, SUM(send_count(2, :)))
++     ALLOCATE (send_meta(metalen*SUM(send_count(1, :))))
++     DO dst_p = 0, numnodes-1
++        total_send_count(1, dst_p) = send_count (1, dst_p)
++        total_send_count(2, dst_p) = send_count (2, dst_p)
++        total_recv_count(1, dst_p) = recv_count (1, dst_p)
++        total_recv_count(2, dst_p) = recv_count (2, dst_p)
++     END DO
++     sd_disp = -1 ; sm_disp = -1 ; rd_disp = -1 ; rm_disp = -1                                                             
++     sd_disp(0) = 1 ; sm_disp(0) = 1 ; rd_disp(0) = 1 ; rm_disp(0) = 1                        
++     DO dst_p = 1, numnodes-1                               
++        sm_disp(dst_p) = sm_disp(dst_p-1) + metalen*total_send_count(1, dst_p-1)
++        sd_disp(dst_p) = sd_disp(dst_p-1) + total_send_count(2, dst_p-1)
++        rm_disp(dst_p) = rm_disp(dst_p-1) + metalen*total_recv_count(1, dst_p-1)
++        rd_disp(dst_p) = rd_disp(dst_p-1) + total_recv_count(2, dst_p-1)
++     END DO
++     sdp(:) = sd_disp     
++     smp(:) = sm_disp - metalen  
++    
++     SELECT CASE (data_type)
++     CASE (dbcsr_type_real_4)
++          r_sp => dblk%d%r_sp
++     CASE (dbcsr_type_real_8)
++          r_dp => dblk%d%r_dp
++     CASE (dbcsr_type_complex_4)
++          c_sp => dblk%d%c_sp
++     CASE (dbcsr_type_complex_8)
++          c_dp => dblk%d%c_dp
++     END SELECT 
++  
++     CALL dbcsr_data_init (data_block)
++     CALL dbcsr_data_new (data_block, data_type)
++  
++     dst_p = -1
++     DO brow = 1, nblkrows_total
++        row_size = row_blk_size(brow)
++        DO blk = row_p(brow)+1, row_p(brow+1)
++           bcol = col_i(blk)
++           col_size = col_blk_size(bcol)
++           blk_size = row_size*col_size
++           block_p = ABS(blk_p(blk))
++!           block_p = blk_p(blk)
++           sym_tr = .FALSE.
++           CALL dbcsr_get_stored_coordinates(new_matrix%m, brow, bcol, sym_tr, dst_p)
++           smp(dst_p) = smp(dst_p) + metalen
++           start_ind = block_p
++           end_ind = block_p+blk_size-1
++  
++           SELECT CASE (data_type)
++           CASE (dbcsr_type_real_4)
++               data_block%d%r_sp => r_sp(start_ind:end_ind)
++           CASE (dbcsr_type_real_8)
++               data_block%d%r_dp => r_dp(start_ind:end_ind)
++           CASE (dbcsr_type_complex_4)
++               data_block%d%c_sp => c_sp(start_ind:end_ind)
++           CASE (dbcsr_type_complex_8)
++               data_block%d%c_dp => c_dp(start_ind:end_ind)
++           END SELECT
++!           tr = block_p .LT. 0
++           tr = .TRUE.
++           IF (tr) THEN
++              send_meta(smp(dst_p)) = -brow
++           ELSE
++               send_meta(smp(dst_p)) = brow
++           END IF
++           send_meta(smp(dst_p)+1) = bcol 
++           blk_size = dbcsr_data_get_size (data_block)
++  
++           CALL dbcsr_data_set (send_data, lb=sdp(dst_p), data_size=blk_size, src=data_block, source_lb=1)
++           sdp(dst_p) = sdp(dst_p) + blk_size
++        END DO
++     END DO
++  
++     SELECT CASE (data_type)
++     CASE (dbcsr_type_real_4)
++        CALL hybrid_alltoall_s1(&
++            send_data%d%r_sp(:), total_send_count(2,:), sd_disp(:)-1,&
++            recv_data%d%r_sp(:), total_recv_count(2,:), rd_disp(:)-1,&
++            mp_env)
++     CASE (dbcsr_type_real_8)
++        CALL hybrid_alltoall_d1 (&
++           send_data%d%r_dp(:), total_send_count(2,:), sd_disp(:)-1,&
++           recv_data%d%r_dp(:), total_recv_count(2,:), rd_disp(:)-1,&
++           mp_env)
++     CASE (dbcsr_type_complex_4)
++        CALL hybrid_alltoall_c1(&
++           send_data%d%c_sp(:), total_send_count(2,:), sd_disp(:)-1,&
++           recv_data%d%c_sp(:), total_recv_count(2,:), rd_disp(:)-1,&
++           mp_env)
++     CASE (dbcsr_type_complex_8)
++        CALL hybrid_alltoall_z1(&
++          send_data%d%c_dp(:), total_send_count(2,:), sd_disp(:)-1,&
++          recv_data%d%c_dp(:), total_recv_count(2,:), rd_disp(:)-1,&
++          mp_env)
++     END SELECT         
++     CALL hybrid_alltoall_i1(send_meta(:), metalen*total_send_count(1,:), sm_disp(:)-1,&
++                             recv_meta(:), metalen*total_recv_count(1,:), rm_disp(:)-1, mp_env)
++     CALL dbcsr_work_create(new_matrix,SUM(recv_count(1,:)),&
++                            SUM(recv_count(2,:)), work_mutable=.FALSE., n=1, error=error)
++  
++     blk_ps = 1
++     blks = 0
++     DO src_p = 0, numnodes-1
++        DO meta_l = 1, recv_count(1, src_p)
++           brow = recv_meta(rm_disp(src_p)+metalen*(meta_l-1))
++           tr = brow .LT. 0
++           stored_row_new = ABS(brow)
++           stored_col_new = recv_meta(rm_disp(src_p)+metalen*(meta_l-1)+1)
++           blk_size = row_blk_size(stored_row_new) * col_blk_size(stored_col_new)
++  
++           data_block = pointer_view (data_block, recv_data, blk_ps, blk_size)
++           CALL dbcsr_put_block(new_matrix, stored_row_new, stored_col_new, data_block, tr)
++  
++           blk_ps = blk_ps + blk_size
++           blks = blks + 1
++        END DO
++     END DO
++     CALL dbcsr_data_clear_pointer (data_block)
++     DEALLOCATE (data_block%d)
++     CALL dbcsr_finalize(new_matrix, reshuffle=.TRUE., error=error)
++     CALL dbcsr_data_release (recv_data)
++     CALL dbcsr_data_release (send_data)
++  
++     DEALLOCATE(send_count)
++     DEALLOCATE(recv_count)
++     DEALLOCATE(sdp); DEALLOCATE(sd_disp)
++     DEALLOCATE(smp); DEALLOCATE(sm_disp)
++     DEALLOCATE(rd_disp)
++     DEALLOCATE(rm_disp)
++     DEALLOCATE(recv_meta)
++     DEALLOCATE(send_meta)
++  
++    CALL dbcsr_error_stop(error_handler, error)
++  
++  END SUBROUTINE dbcsr_fill
++
++  SUBROUTINE convert_to_block_row_distributed (dbcsr_mat, brd_mat, error)
++  
++  
++    TYPE(dbcsr_obj), INTENT(IN)              :: dbcsr_mat
++    TYPE(dbcsr_obj), INTENT(OUT)             :: brd_mat
++    TYPE(dbcsr_error_type), INTENT(INOUT)    :: error
++
++    CHARACTER(LEN=*), PARAMETER :: &
++      routineN = 'convert_to_block_row_distributed', &
++      routineP = moduleN//':'//routineN
++
++    CHARACTER                                :: matrix_type
++    CHARACTER(LEN=default_string_length)     :: matrix_name
++    INTEGER :: chunk_size, data_type, error_handler, i, mp_group, mynode, &
++      nblkcols_total, nblkrows_total, num_p, remainder, row_index
++    INTEGER, ALLOCATABLE, DIMENSION(:)       :: cdist, rdist
++    INTEGER, ALLOCATABLE, DIMENSION(:, :)    :: pgrid
++    TYPE(array_i1d_obj)                      :: brd_col_dist, brd_row_dist, &
++                                                col_blk_size, row_blk_size
++    TYPE(dbcsr_distribution_obj)             :: dist_current, dist_new
++    TYPE(dbcsr_mp_obj)                       :: mp_obj_current, mp_obj_new
++
++    CALL dbcsr_error_set(routineN, error_handler, error)
++
++    CALL dbcsr_get_info(dbcsr_mat,nblkrows_total=nblkrows_total,nblkcols_total=nblkcols_total,&
++                        row_blk_size = row_blk_size, col_blk_size = col_blk_size, &
++                        matrix_type = matrix_type, data_type = data_type)
++    matrix_name = dbcsr_name(dbcsr_mat)
++  
++    ALLOCATE (rdist(nblkrows_total), cdist(nblkcols_total))
++    CALL array_nullify (brd_row_dist)
++    CALL array_nullify (brd_col_dist)
++  
++    dist_current = dbcsr_distribution(dbcsr_mat)
++    mp_obj_current = dbcsr_distribution_mp(dist_current)
++    mp_group = dbcsr_mp_group(mp_obj_current)
++    num_p = dbcsr_mp_numnodes(mp_obj_current)
++    mynode = dbcsr_mp_mynode(mp_obj_current)
++
++    ALLOCATE (pgrid(num_p,1))
++    cdist = 0
++    rdist = 0 
++    IF (num_p .GT. nblkrows_total) THEN 
++       rdist = (/(i, i = 0, nblkrows_total-1)/)
++    ELSE
++       chunk_size = FLOOR(REAL(nblkrows_total)/num_p)
++       remainder = MOD(nblkrows_total,num_p)
++       row_index = 0
++       DO i = 1, chunk_size*num_p, chunk_size
++         rdist(i:i+chunk_size-1) = row_index
++         row_index = row_index + 1
++       END DO
++       IF (remainder .GT. 0) rdist(chunk_size*num_p+1:nblkrows_total) = row_index-1
++    END IF
++
++    CALL array_new (brd_row_dist, rdist, lb=1)
++    CALL array_new (brd_col_dist, cdist, lb=1)
++    pgrid = RESHAPE((/(i, i = 0, num_p-1),0/),(/num_p,1/))
++
++    CALL dbcsr_mp_new(mp_obj_new, pgrid, mp_group, mynode, numnodes=num_p)
++    CALL dbcsr_distribution_init(dist_new)
++    CALL dbcsr_distribution_new(dist_new,mp_obj_new,brd_row_dist,brd_col_dist)
++  
++    CALL dbcsr_init(brd_mat)
++    CALL dbcsr_create (brd_mat, TRIM(matrix_name)//" row-block distributed", dist_new, matrix_type, &
++                       row_blk_size, col_blk_size, error=error)
++    CALL dbcsr_complete_redistribute(dbcsr_mat,brd_mat,error=error)
++  
++    DEALLOCATE (pgrid)
++    DEALLOCATE (rdist,cdist)
++    CALL array_release(brd_row_dist)
++    CALL array_release(brd_col_dist)  
++    CALL dbcsr_error_stop(error_handler, error)
++
++  END SUBROUTINE convert_to_block_row_distributed
++
+ END MODULE dbcsr_transformations
+Index: dm_ls_scf.F
+===================================================================
+--- dm_ls_scf.F	(revision 13099)
++++ dm_ls_scf.F	(working copy)
+@@ -16,13 +16,16 @@
+                                              Shao2003,&
+                                              VandeVondele2012,&
+                                              cite_reference
++  USE c_dbcsr_methods
++  USE c_dbcsr_types
+   USE cp_control_types,                ONLY: dft_control_type
+   USE cp_dbcsr_interface,              ONLY: &
+        cp_dbcsr_add, cp_dbcsr_add_on_diag, cp_dbcsr_binary_read, &
+        cp_dbcsr_binary_write, cp_dbcsr_checksum, cp_dbcsr_copy, &
+        cp_dbcsr_create, cp_dbcsr_distribution, cp_dbcsr_filter, &
+        cp_dbcsr_frobenius_norm, cp_dbcsr_get_occupation, cp_dbcsr_init, &
+-       cp_dbcsr_multiply, cp_dbcsr_release, cp_dbcsr_scale, cp_dbcsr_set
++       cp_dbcsr_multiply, cp_dbcsr_release, cp_dbcsr_scale, cp_dbcsr_set, &
++       cp_dbcsr_desymmetrize, cp_dbcsr_get_matrix_type, cp_dbcsr_name
+   USE cp_dbcsr_types,                  ONLY: cp_dbcsr_p_type,&
+                                              cp_dbcsr_type
+   USE cp_dbcsr_util,                   ONLY: lanczos_alg_serial
+@@ -73,6 +76,14 @@
+   USE qs_scf_post_gpw,                 ONLY: write_mo_free_results
+   USE timings,                         ONLY: timeset,&
+                                              timestop
++
++  USE, INTRINSIC :: ISO_C_BINDING
++  USE transport_types,                 ONLY: transport_type, c_transport_type 
++  USE transport_init,                  ONLY: c_transport_type_init
++  USE dbcsr_transformations,           ONLY: convert_to_block_row_distributed
++  USE dbcsr_error_handling,            ONLY: dbcsr_error_type
++USE dbcsr_io, ONLY: dbcsr_print
++
+ #include "cp_common_uses.h"
+ 
+   IMPLICIT NONE
+@@ -793,7 +804,7 @@
+                                                 nelectron_spin_real, nspin, &
+                                                 unit_nr
+     LOGICAL                                  :: check_convergence, converged, &
+-                                                should_stop
++                                                do_transport, should_stop
+     REAL(KIND=dp)                            :: energy_diff, energy_new, &
+                                                 energy_old, t1, t2
+     TYPE(cp_dbcsr_p_type), DIMENSION(:), &
+@@ -802,6 +813,8 @@
+       DIMENSION(:)                           :: matrix_ks_deviation, &
+                                                 matrix_mixing_old
+     TYPE(cp_logger_type), POINTER            :: logger
++    TYPE(section_vals_type), POINTER         :: transport_section
++    TYPE(transport_type), POINTER            :: transport_env
+ 
+     CALL timeset(routineN,handle)
+ 
+@@ -833,6 +846,9 @@
+     check_convergence=.TRUE.
+     iscf=0
+ 
++    CALL get_qs_env(qs_env, transport_env=transport_env, error=error)
++    transport_section => section_vals_get_subs_vals(qs_env%input,"DFT%TRANSPORT",error=error)
++    CALL section_vals_get(transport_section,explicit=do_transport,error=error)
+     ! the real SCF loop
+     DO
+ 
+@@ -856,11 +872,9 @@
+          ENDIF
+          CALL cp_dbcsr_filter(ls_scf_env%matrix_ks(ispin),ls_scf_env%eps_filter,error=error)
+       ENDDO
+-      ! run curvy steps if required. Needs an idempotent DM (either perification or restart)
+-      IF((iscf>1.OR.ls_scf_env%scf_history%istore>0).AND.ls_scf_env%curvy_steps)THEN
+-         CALL dm_ls_curvy_optimization(ls_scf_env,energy_old,check_convergence,error)
+-      ELSE
+-         ! turn the KS matrix in a density matrix
++
++     IF (do_transport) THEN
++!         IF (ls_scf_env%has_s_preconditioner) STOP "NOT YET IMPLEMENTED"         
+          DO ispin=1,nspin
+             IF (iscf==1) THEN
+                ! initialize the mixing matrix with the current state if needed
+@@ -872,35 +886,67 @@
+                                  error=error)
+             ENDIF
+ 
+-            ! compute the density matrix that matches it
+-            ! we need the proper number of states
+             nelectron_spin_real=ls_scf_env%nelectron_spin(ispin)
+             IF (ls_scf_env%nspins==1) nelectron_spin_real=nelectron_spin_real/2
+ 
+-            SELECT CASE(ls_scf_env%purification_method)
+-            CASE(ls_scf_ns)
+-              CALL density_matrix_sign(ls_scf_env%matrix_p(ispin),ls_scf_env%mu_spin(ispin), ls_scf_env%fixed_mu, &
+-                                       matrix_mixing_old(ispin),ls_scf_env%matrix_s, ls_scf_env%matrix_s_inv, &
+-                                       nelectron_spin_real,ls_scf_env%eps_filter,error)
+-            CASE(ls_scf_trs4)
+-              CALL density_matrix_trs4(ls_scf_env%matrix_p(ispin), matrix_mixing_old(ispin),  ls_scf_env%matrix_s_sqrt_inv,&
+-                                       nelectron_spin_real, ls_scf_env%eps_filter, ls_scf_env%homo_spin(ispin),&
+-                                       ls_scf_env%lumo_spin(ispin), ls_scf_env%mu_spin(ispin), &
+-                                       dynamic_threshold=ls_scf_env%dynamic_threshold,&
+-                                       matrix_ks_deviation=matrix_ks_deviation(ispin), &
+-                                       eps_lanczos=ls_scf_env%eps_lanczos, max_iter_lanczos=ls_scf_env%max_iter_lanczos,&
+-                                       error=error)
+-            END SELECT
+-                                     
++            ! input the current kohn sham matrix (ks) output matrix_p and should_stop
++            CALL external_scf_method(transport_env, ls_scf_env%matrix_s, matrix_mixing_old(ispin), &
++                                     ls_scf_env%matrix_p(ispin), nelectron_spin_real, error)
++
+             IF (ls_scf_env%has_s_preconditioner) THEN
+                 CALL apply_matrix_preconditioner(ls_scf_env%matrix_p(ispin),"forward", &
+                                ls_scf_env%matrix_bs_sqrt,ls_scf_env%matrix_bs_sqrt_inv,error)
+             ENDIF
+-            CALL cp_dbcsr_filter(ls_scf_env%matrix_p(ispin),ls_scf_env%eps_filter,error=error)
++
++            IF (ls_scf_env%nspins==1) CALL cp_dbcsr_scale(ls_scf_env%matrix_p(ispin),2.0_dp,error=error)
++         END DO
++     ELSE
++         ! run curvy steps if required. Needs an idempotent DM (either perification or restart)
++         IF((iscf>1.OR.ls_scf_env%scf_history%istore>0).AND.ls_scf_env%curvy_steps)THEN
++            CALL dm_ls_curvy_optimization(ls_scf_env,energy_old,check_convergence,error)
++         ELSE
++            ! turn the KS matrix in a density matrix
++            DO ispin=1,nspin
++               IF (iscf==1) THEN
++                  ! initialize the mixing matrix with the current state if needed
++                  CALL cp_dbcsr_copy(matrix_mixing_old(ispin), ls_scf_env%matrix_ks(ispin), error=error)
++               ELSE
++                  ! perform the mixing of ks matrices
++                  CALL cp_dbcsr_add(matrix_mixing_old(ispin), ls_scf_env%matrix_ks(ispin), &
++                                    1.0_dp-ls_scf_env%mixing_fraction,ls_scf_env%mixing_fraction, &
++                                    error=error)
++               ENDIF
+    
+-            IF (ls_scf_env%nspins==1) CALL cp_dbcsr_scale(ls_scf_env%matrix_p(ispin),2.0_dp,error=error)
+-
+-         ENDDO
++               ! compute the density matrix that matches it
++               ! we need the proper number of states
++               nelectron_spin_real=ls_scf_env%nelectron_spin(ispin)
++               IF (ls_scf_env%nspins==1) nelectron_spin_real=nelectron_spin_real/2
++   
++               SELECT CASE(ls_scf_env%purification_method)
++               CASE(ls_scf_ns)
++                 CALL density_matrix_sign(ls_scf_env%matrix_p(ispin),ls_scf_env%mu_spin(ispin), ls_scf_env%fixed_mu, &
++                                          matrix_mixing_old(ispin),ls_scf_env%matrix_s, ls_scf_env%matrix_s_inv, &
++                                          nelectron_spin_real,ls_scf_env%eps_filter,error)
++               CASE(ls_scf_trs4)
++                 CALL density_matrix_trs4(ls_scf_env%matrix_p(ispin), matrix_mixing_old(ispin),  ls_scf_env%matrix_s_sqrt_inv,&
++                                          nelectron_spin_real, ls_scf_env%eps_filter, ls_scf_env%homo_spin(ispin),&
++                                          ls_scf_env%lumo_spin(ispin), ls_scf_env%mu_spin(ispin), &
++                                          dynamic_threshold=ls_scf_env%dynamic_threshold,&
++                                          matrix_ks_deviation=matrix_ks_deviation(ispin), &
++                                          eps_lanczos=ls_scf_env%eps_lanczos, max_iter_lanczos=ls_scf_env%max_iter_lanczos,&
++                                          error=error)
++               END SELECT
++                                        
++               IF (ls_scf_env%has_s_preconditioner) THEN
++                   CALL apply_matrix_preconditioner(ls_scf_env%matrix_p(ispin),"forward", &
++                                  ls_scf_env%matrix_bs_sqrt,ls_scf_env%matrix_bs_sqrt_inv,error)
++               ENDIF
++               CALL cp_dbcsr_filter(ls_scf_env%matrix_p(ispin),ls_scf_env%eps_filter,error=error)
++      
++               IF (ls_scf_env%nspins==1) CALL cp_dbcsr_scale(ls_scf_env%matrix_p(ispin),2.0_dp,error=error)
++   
++            ENDDO
++         END IF
+       END IF
+ 
+       ! compute the corresponding new energy KS matrix and new energy
+@@ -918,6 +964,7 @@
+       ENDIF
+ 
+       ! exit criterium on the energy only for the time being
++!      IF ((check_convergence.AND.ABS(energy_diff)<ls_scf_env%eps_scf*ls_scf_env%nelectron_total) .OR. should_stop) EXIT
+       IF (check_convergence.AND.ABS(energy_diff)<ls_scf_env%eps_scf*ls_scf_env%nelectron_total) EXIT
+ 
+     ENDDO
+@@ -990,7 +1037,6 @@
+ 
+     IF (.TRUE.) CALL post_scf_experiment(ls_scf_env,error)
+ 
+-
+     ! clean up used data
+ 
+     CALL cp_dbcsr_release(ls_scf_env%matrix_s,error=error)
+@@ -1419,4 +1465,130 @@
+ 
+   END SUBROUTINE post_scf_experiment
+ 
++!==================================================================================
++  SUBROUTINE external_csr_write(qs_env,error)
++  
++    INTERFACE c_func_interface
++      SUBROUTINE c_scf_routine(S_matrix_cDBCSR, H_matrix_cDBCSR, P_matrix_cDBCSR) bind(C)
++        IMPORT :: C_INT, C_DOUBLE, C_PTR, c_DBCSR
++        IMPLICIT NONE
++        TYPE(c_DBCSR), VALUE , INTENT(IN)  :: S_matrix_cDBCSR, H_matrix_cDBCSR
++        TYPE(c_DBCSR)  :: P_matrix_cDBCSR
++      END SUBROUTINE c_scf_routine
++    END INTERFACE c_func_interface
++  
++    TYPE(qs_environment_type), POINTER, INTENT(IN)    :: qs_env
++    TYPE(cp_error_type), INTENT(INOUT)     :: error
++    TYPE(dbcsr_error_type)                 :: err
++    TYPE(c_DBCSR)                          :: S_cDBCSR, H_cDBCSR, P_cDBCSR
++    TYPE(cp_dbcsr_type)                    :: matrix_s_brd, matrix_s_nosym, matrix_h_brd, matrix_h_nosym
++    TYPE(cp_logger_type), POINTER          :: logger
++    PROCEDURE(c_scf_routine), POINTER      :: cfun
++    TYPE(C_FUNPTR)                         :: func
++    INTEGER :: handle
++    INTEGER                                :: getval
++  
++    CHARACTER(len=*), PARAMETER :: routineN = 'external_csr_write', &
++        routineP = moduleN//':'//routineN
++  
++    CALL timeset(routineN,handle)
++  
++    logger => cp_error_get_logger(error)
++    func = qs_env%transport_env%ext_method_ptr    
++    CALL C_F_PROCPOINTER(func, cfun) 
++  
++    CALL cp_dbcsr_init (matrix_s_nosym, error=error)
++    CALL cp_dbcsr_create (matrix_s_nosym, template=qs_env%matrix_s(1)%matrix, matrix_type=dbcsr_type_no_symmetry, error=error)
++    CALL cp_dbcsr_desymmetrize(qs_env%matrix_s(1)%matrix,matrix_s_nosym,error)
++    CALL cp_dbcsr_init (matrix_h_nosym, error=error)
++    CALL cp_dbcsr_create (matrix_h_nosym, template=qs_env%matrix_h(1)%matrix, matrix_type=dbcsr_type_no_symmetry, error=error)
++    CALL cp_dbcsr_desymmetrize(qs_env%matrix_h(1)%matrix,matrix_h_nosym,error)
++  
++    CALL convert_to_block_row_distributed (matrix_s_nosym%matrix, matrix_s_brd%matrix, err)
++    CALL convert_to_block_row_distributed (matrix_h_nosym%matrix, matrix_h_brd%matrix, err)
++    CALL cDBCSR_nullify (S_cDBCSR)
++    CALL cDBCSR_nullify (H_cDBCSR)
++    CALL cDBCSR_new (matrix_s_brd, S_cDBCSR, error)
++    CALL cDBCSR_new (matrix_h_brd, H_cDBCSR, error)
++  
++    CALL cfun(S_cDBCSR, H_cDBCSR, P_cDBCSR)
++  
++  ! *** remember cp_dbcsr_release
++    CALL timestop(handle)
++  
++  END SUBROUTINE external_csr_write
++
++!==================================================================================
++   SUBROUTINE external_scf_method(transport_env, matrix_s, matrix_ks, matrix_p, nelectron_spin, error)
++  
++    INTERFACE c_func_interface
++      SUBROUTINE c_scf_routine(c_transport_environment, S_matrix_cDBCSR, KS_matrix_cDBCSR, P_matrix_cDBCSR) bind(C)
++        IMPORT :: C_INT, C_PTR, c_DBCSR, c_transport_type
++        IMPLICIT NONE
++        TYPE(c_transport_type), VALUE, INTENT(IN) :: c_transport_environment
++        TYPE(c_DBCSR), VALUE, INTENT(IN)          :: S_matrix_cDBCSR, KS_matrix_cDBCSR
++        TYPE(c_DBCSR)                             :: P_matrix_cDBCSR
++      END SUBROUTINE c_scf_routine
++    END INTERFACE c_func_interface
++  
++    TYPE(cp_dbcsr_type),INTENT(IN)         :: matrix_s, matrix_ks
++    INTEGER, INTENT(IN)                    :: nelectron_spin
++    TYPE(c_transport_type)                 :: c_transport_env
++    TYPE(cp_error_type), INTENT(INOUT)     :: error
++    TYPE(cp_dbcsr_type),INTENT(INOUT)      :: matrix_p
++    TYPE(dbcsr_error_type)                 :: err
++    TYPE(c_DBCSR)                          :: S_cDBCSR, KS_cDBCSR, P_cDBCSR
++    TYPE(cp_dbcsr_type)                    :: matrix_s_brd, matrix_ks_brd, matrix_s_nosym, matrix_ks_nosym
++    TYPE(cp_dbcsr_type)                    :: matrix_tmp
++    TYPE(cp_logger_type), POINTER          :: logger
++    PROCEDURE(c_scf_routine), POINTER      :: c_method
++    TYPE(transport_type), POINTER          :: transport_env
++    INTEGER :: handle
++  
++    CHARACTER(len=*), PARAMETER :: routineN = 'external_scf_method', &
++        routineP = moduleN//':'//routineN
++
++    TYPE(cp_dbcsr_type)                    :: matrix_p_nosym
++    REAL(dp) :: diff_norm
++  
++    CALL timeset(routineN,handle)
++  
++    logger => cp_error_get_logger(error)
++    CALL C_F_PROCPOINTER(transport_env%ext_method_ptr, c_method) 
++ 
++    CALL c_transport_type_init(transport_env, nelectron_spin, c_transport_env, error) 
++ 
++    CALL cp_dbcsr_init (matrix_s_nosym, error=error)
++    CALL cp_dbcsr_create (matrix_s_nosym, template=matrix_s, matrix_type=dbcsr_type_no_symmetry, error=error)
++    CALL cp_dbcsr_desymmetrize(matrix_s, matrix_s_nosym, error)
++    CALL cp_dbcsr_init (matrix_ks_nosym, error=error)
++    CALL cp_dbcsr_create (matrix_ks_nosym, template=matrix_ks, matrix_type=dbcsr_type_no_symmetry, error=error)
++    CALL cp_dbcsr_desymmetrize(matrix_ks, matrix_ks_nosym, error)
++
++    CALL convert_to_block_row_distributed (matrix_s_nosym%matrix, matrix_s_brd%matrix, err)
++    CALL convert_to_block_row_distributed (matrix_ks_nosym%matrix, matrix_ks_brd%matrix, err)
++    CALL cDBCSR_nullify (S_cDBCSR)
++    CALL cDBCSR_nullify (KS_cDBCSR)
++    CALL cDBCSR_new (matrix_s_brd, S_cDBCSR, error)
++    CALL cDBCSR_new (matrix_ks_brd, KS_cDBCSR, error)
++
++    CALL c_method(c_transport_env, S_cDBCSR, KS_cDBCSR, P_cDBCSR)
++
++    CALL cp_dbcsr_init(matrix_tmp,error=error)
++    CALL cDBCSR_to_dbcsr (P_cDBCSR, matrix_tmp, &
++                          cp_dbcsr_name(matrix_p), cp_dbcsr_get_matrix_type(matrix_s_nosym),&
++                          cp_dbcsr_distribution(matrix_s_nosym), error)
++    CALL cp_dbcsr_copy(matrix_p,matrix_tmp, error=error)
++
++    CALL cp_dbcsr_release(matrix_tmp, error=error)
++    CALL cp_dbcsr_release(matrix_s_nosym, error=error)
++    CALL cp_dbcsr_release(matrix_s_brd, error=error)
++    CALL cp_dbcsr_release(matrix_ks_nosym, error=error)
++    CALL cp_dbcsr_release(matrix_ks_brd, error=error)
++
++! note: probably something like cDBCSR_release is needed    
++    CALL timestop(handle)
++  
++  END SUBROUTINE external_scf_method
++
+ END MODULE dm_ls_scf
+Index: input_cp2k_dft.F
+===================================================================
+--- input_cp2k_dft.F	(revision 13099)
++++ input_cp2k_dft.F	(working copy)
+@@ -31,6 +31,7 @@
+   USE input_cp2k_motion,               ONLY: add_format_keyword
+   USE input_cp2k_poisson,              ONLY: create_poisson_section
+   USE input_cp2k_rsgrid,               ONLY: create_rsgrid_section
++  USE input_cp2k_transport,            ONLY: create_transport_section
+   USE input_cp2k_xc,                   ONLY: create_xc_section
+   USE input_keyword_types,             ONLY: keyword_create,&
+                                              keyword_release,&
+@@ -395,6 +396,10 @@
+     CALL section_add_subsection(section, subsection, error=error)
+     CALL section_release(subsection,error=error)
+ 
++    CALL create_transport_section(subsection,error)
++    CALL section_add_subsection(section, subsection, error=error)
++    CALL section_release(subsection,error=error)
++
+     CALL create_kg_section(subsection,error)
+     CALL section_add_subsection(section, subsection, error=error)
+     CALL section_release(subsection,error=error)
+@@ -2467,6 +2472,13 @@
+        CALL section_add_keyword(section,keyword,error=error)
+        CALL keyword_release(keyword,error=error)
+ 
++       CALL keyword_create(keyword, name="TRANSPORT",&
++            description="Perform transport calculations",&
++            usage="TRANSPORT",lone_keyword_l_val=.TRUE.,&
++            default_l_val=.FALSE.,error=error)
++       CALL section_add_keyword(section,keyword,error=error)
++       CALL keyword_release(keyword,error=error)
++
+        CALL keyword_create(keyword, name="KG_METHOD",&
+             description="Use a Kim-Gordon-like scheme.",&
+             usage="KG_METHOD",lone_keyword_l_val=.TRUE.,&
+Index: OBJECTDEFS
+===================================================================
+--- OBJECTDEFS	(revision 13099)
++++ OBJECTDEFS	(working copy)
+@@ -826,4 +826,10 @@
+  xc_xpbe_hole_t_c_lr.o\
+  xc_xwpbe.o\
+  xml_parser.o\
+- xray_diffraction.o
++ xray_diffraction.o\
++ c_int_low.o\
++ c_dbcsr_types.o\
++ c_dbcsr_methods.o\
++ input_cp2k_transport.o\
++ transport_types.o\
++ transport_init.o
+Index: input_constants.F
+===================================================================
+--- input_constants.F	(revision 13099)
++++ input_constants.F	(working copy)
+@@ -940,4 +940,11 @@
+   INTEGER, PARAMETER, PUBLIC               :: kg_color_dsatur=0,&
+                                               kg_color_greedy=1
+ 
++  ! transport section
++  INTEGER, PARAMETER, PUBLIC               :: misc_method=0,&
++                                              scalapack_diagonalization=1,&
++                                              kpoint_integration=2,&
++                                              exper_code=3,&
++                                              do_transport=4
++
+ END MODULE input_constants
+Index: qs_environment.F
+===================================================================
+--- qs_environment.F	(revision 13099)
++++ qs_environment.F	(working copy)
+@@ -15,7 +15,6 @@
+ !> \author MK (18.05.2000)
+ ! *****************************************************************************
+ MODULE qs_environment
+-  USE atom_kind_orbitals,              ONLY: calculate_atomic_relkin
+   USE atomic_kind_list_types,          ONLY: atomic_kind_list_create,&
+                                              atomic_kind_list_release,&
+                                              atomic_kind_list_type
+@@ -103,10 +102,9 @@
+        do_method_gapw, do_method_gapw_xc, do_method_gpw, do_method_lripaw, &
+        do_method_mndo, do_method_mndod, do_method_ofgpw, do_method_pdg, &
+        do_method_pm3, do_method_pm6, do_method_pnnl, do_method_rm1, &
+-       do_method_scptb, do_multipole_none, general_roks, rel_none, &
+-       rel_trans_atom, restart_guess, use_aux_fit_basis_set, &
+-       vdw_pairpot_dftd2, vdw_pairpot_dftd3, xc_vdw_fun_none, &
+-       xc_vdw_fun_nonloc, xc_vdw_fun_pairpot
++       do_method_scptb, do_multipole_none, general_roks, restart_guess, &
++       use_aux_fit_basis_set, vdw_pairpot_dftd2, vdw_pairpot_dftd3, &
++       xc_vdw_fun_none, xc_vdw_fun_nonloc, xc_vdw_fun_pairpot
+   USE input_section_types,             ONLY: section_vals_get,&
+                                              section_vals_get_subs_vals,&
+                                              section_vals_type,&
+@@ -197,6 +195,7 @@
+   USE timings,                         ONLY: timeset,&
+                                              timestop
+   USE topology,                        ONLY: topology_control
++  USE transport_init,                  ONLY: transport_env_create
+   USE xas_control,                     ONLY: write_xas_control
+ #include "cp_common_uses.h"
+ 
+@@ -238,10 +237,9 @@
+ 
+     INTEGER                                  :: ikind, istat, method_id, &
+                                                 natom, nkind
+-    LOGICAL :: do_et, do_exx, do_hfx, do_hfx_ri, failure, harris_flag, &
+-      mp2_present, my_qmmm, my_qmmm_periodic, use_ref_cell
++    LOGICAL :: do_et, do_exx, do_hfx, do_hfx_ri, do_transport, failure, &
++      harris_flag, mp2_present, my_qmmm, my_qmmm_periodic, use_ref_cell
+     REAL(kind=dp), DIMENSION(3)              :: abc
+-    REAL(KIND=dp), DIMENSION(:, :), POINTER  :: rtmat
+     TYPE(atomic_kind_list_type), POINTER     :: atomic_kinds
+     TYPE(atomic_kind_type), DIMENSION(:), &
+       POINTER                                :: atomic_kind_set
+@@ -261,10 +259,9 @@
+     TYPE(particle_list_type), POINTER        :: particles
+     TYPE(particle_type), DIMENSION(:), &
+       POINTER                                :: particle_set
+-    TYPE(rel_control_type), POINTER          :: rel_control
+     TYPE(section_vals_type), POINTER :: cell_section, colvar_section, &
+       et_coupling_section, harris_section, hfx_ri_section, hfx_section, &
+-      kind_section, mp2_section
++      kind_section, mp2_section, transport_section
+ 
+     failure = .FALSE.
+     NULLIFY(my_subsys, molecule_kind_set, molecule_set, atomic_kind_set,&
+@@ -454,19 +451,10 @@
+        CALL ls_scf_create(qs_env,error)
+     ENDIF
+ 
+-    ! see if we have atomic relativistic corrections
+-    CALL get_qs_env(qs_env,rel_control=rel_control,error=error)
+-    IF (rel_control%rel_method /= rel_none) THEN
+-       IF (rel_control%rel_transformation == rel_trans_atom) THEN
+-          CALL get_qs_env(qs_env=qs_env,atomic_kind_set=atomic_kind_set,error=error)
+-          nkind = SIZE(atomic_kind_set)
+-          DO ikind=1,nkind
+-             atomic_kind => atomic_kind_set(ikind)
+-             NULLIFY(rtmat)
+-             CALL calculate_atomic_relkin (atomic_kind,rel_control,rtmat,error)
+-             IF(ASSOCIATED(rtmat)) atomic_kind%reltmat => rtmat
+-          END DO
+-       END IF
++    transport_section => section_vals_get_subs_vals(qs_env%input,"DFT%TRANSPORT",error=error)
++    CALL section_vals_get(transport_section,explicit=do_transport,error=error)
++    IF (do_transport) THEN
++       CALL transport_env_create(qs_env,error)
+     END IF
+ 
+   END SUBROUTINE qs_init
+Index: dm_ls_scf_types.F
+===================================================================
+--- dm_ls_scf_types.F	(revision 13099)
++++ dm_ls_scf_types.F	(working copy)
+@@ -123,6 +123,7 @@
+      TYPE(chebyshev_type) :: chebyshev
+ 
+      TYPE(cp_para_env_type), POINTER :: para_env
++!     TYPE(c_funptr) :: ext_scf_ptr
+   END TYPE ls_scf_env_type
+ 
+   PUBLIC :: ls_scf_release
+Index: qs_environment_types.F
+===================================================================
+--- qs_environment_types.F	(revision 13099)
++++ qs_environment_types.F	(working copy)
+@@ -186,6 +186,8 @@
+                                              task_list_type
+   USE timings,                         ONLY: timeset,&
+                                              timestop
++  USE transport_types,                 ONLY: transport_env_release,&
++                                             transport_type
+   USE virial_types,                    ONLY: virial_release,&
+                                              virial_retain,&
+                                              virial_type
+@@ -339,6 +341,7 @@
+     INTEGER                                               :: sim_step
+     TYPE(ga_environment_type), POINTER                    :: ga_env
+     TYPE(ls_scf_env_type), POINTER                        :: ls_scf_env
++    TYPE(transport_type), POINTER                         :: transport_env
+     TYPE(cell_type), POINTER                              :: cell, super_cell
+     TYPE(cell_type), POINTER                              :: cell_ref
+     TYPE(dft_control_type), POINTER                       :: dft_control
+@@ -472,7 +475,8 @@
+        neighbor_list_id,linres_control,xas_env,virial,cp_ddapc_env,cp_ddapc_ewald,&
+        outer_scf_history,outer_scf_ihistory,ep_qs_env,x_data,et_coupling,dftb_potential,results,&
+        scp_env,se_taper,se_store_int_env,se_nddo_mpole,se_nonbond_env, admm_env, &
+-       lri_env,lri_density,hfx_ri_env,dispersion_env, vee,mp2_env,kg_env,WannierCentres,ga_env,atprop,ls_scf_env,error)
++       lri_env,lri_density,hfx_ri_env,dispersion_env, vee,mp2_env,kg_env,WannierCentres,ga_env,atprop,ls_scf_env,&
++       transport_env,error)
+     TYPE(qs_environment_type), POINTER       :: qs_env
+     TYPE(atomic_kind_type), DIMENSION(:), &
+       OPTIONAL, POINTER                      :: atomic_kind_set
+@@ -620,6 +624,7 @@
+       POINTER                                :: ga_env
+     TYPE(atprop_type), OPTIONAL, POINTER     :: atprop
+     TYPE(ls_scf_env_type), OPTIONAL, POINTER :: ls_scf_env
++    TYPE(transport_type), OPTIONAL, POINTER  :: transport_env
+     TYPE(cp_error_type), INTENT(INOUT)       :: error
+ 
+     CHARACTER(len=*), PARAMETER :: routineN = 'get_qs_env', &
+@@ -732,6 +737,7 @@
+     IF (PRESENT(run_rtp)) run_rtp=qs_env%run_rtp
+     IF (PRESENT(rtp)) rtp=>qs_env%rtp
+     IF (PRESENT(ls_scf_env)) ls_scf_env=>qs_env%ls_scf_env
++    IF (PRESENT(transport_env)) transport_env=>qs_env%transport_env
+ 
+     IF (PRESENT(rho_atom_set)) &
+        CALL get_local_rho(qs_env%local_rho_set, rho_atom_set=rho_atom_set)
+@@ -809,6 +815,7 @@
+ 
+     NULLIFY (qs_env%blacs_env)
+     NULLIFY (qs_env%ls_scf_env)
++    NULLIFY (qs_env%transport_env)
+     NULLIFY (qs_env%image_matrix)
+     NULLIFY (qs_env%ipiv)
+     NULLIFY (qs_env%image_coeff)
+@@ -966,7 +973,7 @@
+        mo_derivs_aux_fit, mo_loc_history, nelectron_total, nelectron_spin, efield,&
+        neighbor_list_id,linres_control,xas_env,virial,cp_ddapc_env,cp_ddapc_ewald,&
+        outer_scf_history,outer_scf_ihistory,ep_qs_env,x_data,et_coupling,dftb_potential,&
+-       scp_env,se_taper,se_store_int_env,se_nddo_mpole,se_nonbond_env,admm_env,ls_scf_env,&
++       scp_env,se_taper,se_store_int_env,se_nddo_mpole,se_nonbond_env,admm_env,ls_scf_env,transport_env,&
+        lri_env,lri_density,hfx_ri_env,dispersion_env,mp2_env,kg_env,WannierCentres,ga_env,atprop,error)
+ 
+     TYPE(qs_environment_type), POINTER       :: qs_env
+@@ -1076,6 +1083,7 @@
+       POINTER                                :: se_nonbond_env
+     TYPE(admm_type), OPTIONAL, POINTER       :: admm_env
+     TYPE(ls_scf_env_type), OPTIONAL, POINTER :: ls_scf_env
++    TYPE(transport_type), OPTIONAL, POINTER  :: transport_env
+     TYPE(lri_environment_type), OPTIONAL, &
+       POINTER                                :: lri_env
+     TYPE(lri_density_type), OPTIONAL, &
+@@ -1149,6 +1157,7 @@
+     IF (PRESENT(sac_ppl)) qs_env%sac_ppl => sac_ppl
+     IF (PRESENT(sap_ppnl)) qs_env%sap_ppnl => sap_ppnl
+     IF (PRESENT(ls_scf_env)) qs_env%ls_scf_env => ls_scf_env
++    IF (PRESENT(transport_env)) qs_env%transport_env => transport_env
+     IF (PRESENT(sap_oce)) qs_env%sap_oce => sap_oce
+     IF (PRESENT(sab_se)) qs_env%sab_se => sab_se
+     IF (PRESENT(sab_lrc)) qs_env%sab_lrc => sab_lrc
+@@ -1701,6 +1710,9 @@
+           IF (ASSOCIATED(qs_env%ls_scf_env)) THEN
+              CALL ls_scf_release(qs_env%ls_scf_env,error)
+           ENDIF
++          IF (ASSOCIATED(qs_env%transport_env)) THEN
++             CALL transport_env_release(qs_env%transport_env,error)
++          ENDIF
+ 
+           !Only if do_xas_calculation
+           IF(ASSOCIATED(qs_env%xas_env)) THEN
