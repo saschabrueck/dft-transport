@@ -3,10 +3,6 @@
 
 #include "Quadrature.H"
 
-#ifndef PI
-#define PI 3.141592653589793238462
-#endif
-
 class excQuadrature: public std::exception {
  public:
   excQuadrature(std::string input) : 
@@ -93,8 +89,8 @@ Quadrature::Quadrature(quadrature_types::quadrature_type type, double start,
       CPX fermi(1.0, 0.0);
       for (uint i = 0; i <= num_abscissae - 1; ++i) {
         // Shift the precalculated abscissa from [-1 1] to [0, pi] interval
-        double abscissa = abscissae_precalc[i] * (PI - 0.0) / 2.0 +
-                        (PI + 0.0) / 2.0;
+        double abscissa = abscissae_precalc[i] * (M_PI - 0.0) / 2.0 +
+                        (M_PI + 0.0) / 2.0;
         // Calculate point on the contour
         CPX contour_point = radius * CPX(-cos(abscissa), sin(abscissa)) +
                              center;
@@ -105,7 +101,7 @@ Quadrature::Quadrature(quadrature_types::quadrature_type type, double start,
         }
         // Account for length of parametrization, the fermi level, and the 
         // derivative along the contour 
-        weights.push_back(weights_precalc[i] * (PI - 0) / 2.0 * radius *
+        weights.push_back(weights_precalc[i] * (M_PI - 0) / 2.0 * radius *
                           fermi * CPX(sin(abscissa), cos(abscissa)));
       }
       break;
@@ -150,7 +146,7 @@ Quadrature::Quadrature(quadrature_types::quadrature_type type, double start,
         // optimization parameter like vertical_poles.
         double T_real = T;
         double mu_real = band_start - (precision_exponent * k * T_real);
-        double mu_imaginary = 2 * vertical_poles * PI * k * T;
+        double mu_imaginary = 2 * vertical_poles * M_PI * k * T;
         double T_imaginary = mu_imaginary / (precision_exponent * k);
         CPX mu_imaginary_cpx(0.0, mu_imaginary);
         CPX T_imaginary_cpx(0.0, T_imaginary);
@@ -160,7 +156,7 @@ Quadrature::Quadrature(quadrature_types::quadrature_type type, double start,
         n=0;
         while (true) {
           // Construct poles on 'vertical' line through the physical fermi level
-          CPX z(Ef, (2 * n + 1) * PI * k * T);
+          CPX z(Ef, (2 * n + 1) * M_PI * k * T);
           residue = -k * T * (1.0 / (1.0 + exp((z - mu_imaginary_cpx) /
                              (k * T_imaginary_cpx)))); // fermi_imaginary
           if (norm(residue) > precision) {
@@ -179,7 +175,7 @@ Quadrature::Quadrature(quadrature_types::quadrature_type type, double start,
         while (true) {
           // Construct poles on 'horizontal' line at height my_imaginary
           // from Ef downwards
-          CPX z(Ef - (2 * n + 1) * PI * k * T_imaginary, mu_imaginary);
+          CPX z(Ef - (2 * n + 1) * M_PI * k * T_imaginary, mu_imaginary);
           residue = -k * T_imaginary_cpx *
                          ((1.0 / (1.0 + exp((z - Ef) / (k * T)))) - // fermi
                          (1.0 / (1.0 + exp((z - mu_real) / (k * T_real)))));
@@ -209,7 +205,7 @@ Quadrature::Quadrature(quadrature_types::quadrature_type type, double start,
         while (true) {
           // Construct poles on 'horizontal' line at height my_imaginary
           // from Ef upwards
-          CPX z(Ef + (2 * n + 1) * PI * k * T_imaginary, mu_imaginary);
+          CPX z(Ef + (2 * n + 1) * M_PI * k * T_imaginary, mu_imaginary);
           residue = -k * T_imaginary_cpx *
                          ((1.0 / (1.0 + exp((z - Ef) / (k * T)))) -
                          (1.0 / (1.0 + exp((z - mu_real) / (k * T_real)))));
@@ -235,7 +231,7 @@ Quadrature::Quadrature(quadrature_types::quadrature_type type, double start,
         n=0;
         while (true) {
           // Construct poles on 'vertical' line through mu_real
-          CPX z(mu_real, (2 * n + 1) * PI * k * T);
+          CPX z(mu_real, (2 * n + 1) * M_PI * k * T);
           residue = -k * T_real * (1.0 / (1.0 + exp((z - mu_imaginary_cpx) /
                              (k * T_imaginary_cpx)))); // fermi_imaginary
           if (norm(residue) > precision) {
@@ -254,7 +250,7 @@ Quadrature::Quadrature(quadrature_types::quadrature_type type, double start,
       }
       double fermi = 1.0;
       for (uint n = 1; n <= num_abscissae; ++n) {
-        double abscissa = (cos(PI * (2 * n - 1.0) / (2.0 * num_abscissae)) *
+        double abscissa = (cos(M_PI * (2 * n - 1.0) / (2.0 * num_abscissae)) *
                         (band_end - band_start) / 2.0 +
                         (band_end + band_start) / 2.0);
         abscissae.push_back(abscissa);
@@ -263,8 +259,36 @@ Quadrature::Quadrature(quadrature_types::quadrature_type type, double start,
         } else if (abscissa > Ef) {
           fermi = 0.0;
         }
-        weights.push_back((PI / num_abscissae) * 
-                          (band_end - band_start) / 2.0 * fermi);
+        weights.push_back(sqrt((abscissa - band_start) * (band_end - abscissa)) *
+                          M_PI / num_abscissae * fermi);
+      }
+      break;
+    }
+    case quadrature_types::TS: {
+      double step = 6.0 / (num_abscissae + 1);
+      for (uint n = 1; n <= num_abscissae; ++n) {
+        double tau = step / 2.0 * (2 * n - num_abscissae -1);
+        double abscissa = tanh(M_PI / 2.0 * sinh(tau)) *
+                        (band_end - band_start) / 2.0 +
+                        (band_end + band_start) / 2.0;
+        abscissae.push_back(abscissa);
+        double weight = M_PI / 2.0 * step * cosh(tau) /
+                        cosh( M_PI / 2.0 * sinh(tau)) *
+                        cosh( M_PI / 2.0 * sinh(tau)) *
+                        (band_end - band_start) / 2.0;
+        weights.push_back(weight);
+      }
+      break;
+    }
+    case quadrature_types::TR: {
+      double step = (band_end - band_start) / (num_abscissae - 1);
+      for (uint n = 1; n <= num_abscissae; ++n) {
+        abscissae.push_back(band_start + (n - 1) * step);
+        if (n == 1 || n == num_abscissae) { 
+            weights.push_back(step / 2.0);
+        } else {
+            weights.push_back(step);
+        }
       }
       break;
     }

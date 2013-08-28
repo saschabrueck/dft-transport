@@ -23,7 +23,8 @@ enum quadrature_type {
   GL=2,     // Gauss-Legendre
   ANPS=3,   // Areshkin-Nikolic Pole Summation
   GC=4,     // Gauss-Chebychev
-  //TR=5    // Trapezoidal Rule
+  TS=5,    // Tanh-sinh
+  TR=6    // Trapezoidal Rule
 };
 } // namespace
 
