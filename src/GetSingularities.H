@@ -22,7 +22,7 @@ double energy_gs;
 double energy_vbe;
 
 private:
-int determine_velocities(TCSR<double>*,TCSR<double>*,double,double&,double&,double*,int&,c_transport_type);
+int determine_velocities(TCSR<double>*,TCSR<double>*,double,int,double&,double&,double*,int&,c_transport_type);
 };
 
 #endif

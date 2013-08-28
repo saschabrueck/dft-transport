@@ -35,28 +35,13 @@ int density(TCSR<double> *KohnSham,TCSR<double> *Overlap,TCSR<double> *Ps,CPX en
 // get parameters
     int ncells=parameter_sab.n_cells;
     int bandwidth=parameter_sab.bandwidth;
-    double evoltfactor=parameter_sab.evoltfactor;
 // complex or real energy
     int complexenergypoint=0;
     if (imag(energy)) complexenergypoint=1;
     if (complexenergypoint && method==transport_methods::WF) return (LOGCERR, EXIT_FAILURE);
 // H-E*S
     TCSR<CPX> *SumHamC;
-    if (int addpotential=0) {
-        cout << "ADDING POTENTIAL" << endl;
-        double *Vvec = new double[Overlap->size_tot];
-        int na=5;
-        int nb=na+5;
-        int nc=ncells;
-        for (int ivvec=0;          ivvec<na*4*13*12; ivvec++) Vvec[ivvec] =  0.0;
-        for (int ivvec=na*4*13*12; ivvec<nb*4*13*12; ivvec++) Vvec[ivvec] =  1.5;
-        for (int ivvec=nb*4*13*12; ivvec<nc*4*13*12; ivvec++) Vvec[ivvec] =  0.5;
-        TCSR<double> *Pot = new TCSR<double>(Overlap,Vvec);
-        SumHamC = new TCSR<CPX>(CPX(evoltfactor,d_zer),KohnSham,-energy,Overlap,z_one,Pot);
-        delete Pot;
-    } else {
-        SumHamC = new TCSR<CPX>(CPX(evoltfactor,d_zer),KohnSham,-energy,Overlap);
-    }
+    SumHamC = new TCSR<CPX>(z_one,KohnSham,-energy,Overlap);
 // set parameters
     int ndof=SumHamC->size_tot/ncells;
     if (ndof*ncells!=SumHamC->size_tot) return (LOGCERR, EXIT_FAILURE);
@@ -149,7 +134,7 @@ cout << "COMPARE SIGMAR " << sigmar[triblocksize-1] << " AND SIGMAR2 " << sigmar
         if (inversion_method==0) {
             if (ncells%bandwidth) return (LOGCERR, EXIT_FAILURE);
             std::vector<int> Bvec(ncells/bandwidth,0);
-            for (int ii=0;ii<ncells/bandwidth;ii++) Bvec[ii]=ii*ntriblock;
+            for (int ii=0;ii<ncells/bandwidth;ii++) Bvec[ii]=(ii+1)*ntriblock-1;
             tmprGF::sparse_invert(HamSig,Bvec);
             Ps->add_imag(HamSig,-weight/M_PI);
             delete HamSig;

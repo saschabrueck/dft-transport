@@ -27,7 +27,7 @@ Singularities::Singularities(TCSR<double> *KohnSham,TCSR<double> *Overlap,c_tran
     double energy_vbe_current;
     for (int i=0;i<seq_per_cpu;i++)
         if ( (kpos=i+iam*seq_per_cpu)<n_k ) {
-            determine_velocities(KohnSham,Overlap,k[kpos],energy_gs_current,energy_vbe_current,energies_local,n_energies_local,parameter_sab);
+            determine_velocities(KohnSham,Overlap,k[kpos],1,energy_gs_current,energy_vbe_current,energies_local,n_energies_local,parameter_sab);
             energy_gs_local=min(energy_gs_local,energy_gs_current);
             energy_vbe_local=max(energy_vbe_local,energy_vbe_current);
         }
@@ -57,7 +57,7 @@ Singularities::~Singularities()
     delete[] energies;
 }
 
-int Singularities::determine_velocities(TCSR<double> *KohnSham,TCSR<double> *Overlap,double k_in,double &energy_gs_k,double &energy_vbe_k,double *energies_k,int &n_energies_k,c_transport_type parameter_sab)
+int Singularities::determine_velocities(TCSR<double> *KohnSham,TCSR<double> *Overlap,double k_in,int contact,double &energy_gs_k,double &energy_vbe_k,double *energies_k,int &n_energies_k,c_transport_type parameter_sab)
 /**  \brief Determine energies where velocity vanishes and their number for a given k
  *
  *   \param KohnSham      H matrix in CSR format collected on one node
@@ -80,15 +80,14 @@ int Singularities::determine_velocities(TCSR<double> *KohnSham,TCSR<double> *Ove
     int bandwidth=parameter_sab.bandwidth;
     int ndofsqbw=ndofsq*(2*bandwidth+1);
     double eps_singularities=parameter_sab.eps_singularities;
-    double evoltfactor=parameter_sab.evoltfactor;
     int noccunitcell=parameter_sab.n_occ/parameter_sab.n_cells;
 
     double *Hreal = new double[ndofsqbw];
     double *Sreal = new double[ndofsqbw];
     CPX *H = new CPX[ndofsqbw]();
     CPX *S = new CPX[ndofsqbw]();
-    KohnSham->contactunitcell(Hreal,ndof,bandwidth,1);
-    Overlap->contactunitcell(Sreal,ndof,bandwidth,1);
+    KohnSham->contactunitcell(Hreal,ndof,bandwidth,contact);
+    Overlap->contactunitcell(Sreal,ndof,bandwidth,contact);
     c_dcopy(ndofsqbw,Hreal,1,(double*)H,2);
     c_dcopy(ndofsqbw,Sreal,1,(double*)S,2);
     delete[] Hreal;
@@ -119,8 +118,8 @@ int Singularities::determine_velocities(TCSR<double> *KohnSham,TCSR<double> *Ove
     delete[] rwork;
     CPX *eigvec = new CPX[ndofsq];
     c_zcopy(ndofsq,H_Sum_k,1,eigvec,1);
-    energy_gs_k=evoltfactor*eigval[0];
-    energy_vbe_k=evoltfactor*eigval[noccunitcell-1];
+    energy_gs_k=eigval[0];
+    energy_vbe_k=eigval[noccunitcell-1];
 
     c_zcopy(ndofsq,&H[(bandwidth+1)*ndofsq],1,H_Sum_k,1);
     c_zcopy(ndofsq,&S[(bandwidth+1)*ndofsq],1,S_Sum_k,1);
@@ -137,7 +136,7 @@ int Singularities::determine_velocities(TCSR<double> *KohnSham,TCSR<double> *Ove
         c_zgemv('N',ndof,ndof,z_one,H_Sum_k,ndof,&eigvec[ivec*ndof],1,z_zer,vector,1);
         c_zgemv('N',ndof,ndof,CPX(-eigval[ivec],d_zer),S_Sum_k,ndof,&eigvec[ivec*ndof],1,z_one,vector,1);
         velocity=-2.0*imag(z_one/kval*c_zdotc(ndof,&eigvec[ivec*ndof],1,vector,1));
-        if (abs(velocity)<eps_singularities) energies_k[n_energies_k++]=evoltfactor*eigval[ivec];
+        if (abs(velocity)<eps_singularities) energies_k[n_energies_k++]=eigval[ivec];
     }
     delete[] vector;
     delete[] H_Sum_k;
