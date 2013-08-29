@@ -597,9 +597,10 @@ void write_mat(CPX *matrix, int rowlength, int columnlength,
                const char *filename)
 {
   int fortran_index = 1;
+  int precision = 15;
   ofstream outfile;
   outfile.open(filename);
-  outfile.precision(8);
+  outfile.precision(precision);
   for (int i=0; i < rowlength; ++i) {
     for (int j=0; j < columnlength; ++j) {
       int position = i * rowlength + j;
@@ -613,9 +614,10 @@ void write_mat(CPX *matrix, int rowlength, int columnlength,
                std::basic_string<char> filename)
 {
   int fortran_index = 1;
+  int precision = 15;
   ofstream outfile;
   outfile.open(filename);
-  outfile.precision(8);
+  outfile.precision(precision);
   for (int i=0; i < rowlength; ++i) {
     for (int j=0; j < columnlength; ++j) {
       int position = i * rowlength + j;

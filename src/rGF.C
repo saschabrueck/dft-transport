@@ -36,9 +36,17 @@ rGF::~rGF() {}
  *  \param GR Array containing the diagonal blocks of GR (output).
  *
  *
- *  CHECKPOINT:
+ *  M_TODO:
  *    - consider writing a pardiso class like this rGF class
  *    - consider creating a parent class (like Mathieu)
+ *
+ *  Potential optimizations:
+ *    - having Bmin, Bmax, X_start_index and as gR members
+ *    - getting rid of GR and GRNNp1 by writing to the sparse matrix directly
+ *    - having separate threads for
+ *      - calculation of GR
+ *      - calculation of GRNNp1
+ *      - writing to the sparse matrix
  *
  */
 
@@ -53,7 +61,7 @@ void rGF::solve_blocks(std::vector<int> Bmin, std::vector<int> Bmax, CPX *GR,
   // biggest block's size
   int current_diagonal=0;
   int next_diagonal=0;
-  int largest_block=0;
+  int largest_diagonal=0;
   for (int i = 0; i < num_blocks-1; ++i){
     current_diagonal = Bmax[i] - Bmin[i] + 1;
     next_diagonal = Bmax[i+1] - Bmin[i+1] + 1;
@@ -61,57 +69,83 @@ void rGF::solve_blocks(std::vector<int> Bmin, std::vector<int> Bmax, CPX *GR,
                           (current_diagonal * current_diagonal);
     GRNNp1_start_index[i+1] = GRNNp1_start_index[i] +
                               (current_diagonal * next_diagonal);
-    if (current_diagonal > largest_block) {
-      largest_block = current_diagonal;
+    if (current_diagonal > largest_diagonal) {
+      largest_diagonal = current_diagonal;
     }
   }
   GR_start_index[num_blocks] = GR_start_index[num_blocks-1] +
                                (next_diagonal * next_diagonal);
-  if (next_diagonal > largest_block) {
-    largest_block = next_diagonal;
+  if (next_diagonal > largest_diagonal) {
+    largest_diagonal = next_diagonal;
   }
 
   //double time_start = get_time(0.0);
 
-  // rGF, STAGE 1
+  // Allocate working memory
+  sparse_CSR = new TCSR<CPX>(largest_diagonal, largest_diagonal *
+                              largest_diagonal, fortran_index);
+  sparse_CSC = new TCSC<CPX,int>(largest_diagonal, largest_diagonal *
+                                  largest_diagonal, fortran_index);
+  tmp0 = new CPX[largest_diagonal * largest_diagonal];
+  tmp1 = new CPX[largest_diagonal * largest_diagonal];
+  tmp2 = new CPX[largest_diagonal * largest_diagonal];
   CPX *gR = new CPX[GR_start_index[num_blocks]];
 
+  // rGF, STAGE 1
   // last element of the diagonal
-  calculate_gR(num_blocks - 1, Bmin, Bmax, GR_start_index, gR);
+  calculate_gR_init(num_blocks - 1, Bmin, Bmax, GR_start_index, gR);
 
   // Recursion upwards along the diagonal:
   // gR_{i-1} = (E - H_{i-1} - T_{i-1,i} * gR_{i} * T_{i,i-1})^{-1}
-  CPX *sigmaR = new CPX[largest_block * largest_block];
   for (int block = num_blocks - 2; block > 0; --block) {
     //double sub_time_start = get_time(0.0);
-    calculate_sigmaR(block, (char *)"r", Bmin, Bmax, GR_start_index, gR, sigmaR);
-    calculate_gR(block, Bmin, Bmax, GR_start_index, sigmaR, gR);
+    calculate_sigmaR(block, Bmin, Bmax, GR_start_index, gR);
+    calculate_gR_rec(block, Bmin, Bmax, GR_start_index, gR);
     //std::cout << "gR_total_" << block << ": " << get_time(sub_time_start) << "\n";
   }
 
-
-  // rGF STAGE 2
-  //
-  // calculate GR_{0} = (E-H_{0} - T_{0,1} * gR_{1} * T_{1,0})^{-1}
-
-  // 1: calculate sigmaR[0]
+  // gR_0 goes to tmp2 goes to GR, tmp0<->tmp2 for the later recursion
   int diagonal_length = Bmax[0] - Bmin[0] + 1;
   int diagonal_block_size = diagonal_length * diagonal_length;
-  calculate_sigmaR(0, (char *)"r", Bmin, Bmax, GR_start_index, gR, sigmaR);
-
-  // 2: GR_current = gR[0]
-  CPX *GR_current = new CPX[largest_block * largest_block]; // overallocation
-  set_to_unity(largest_block, GR_current);
-  calculate_gR(0, Bmin, Bmax, GR_start_index, sigmaR, GR_current);
+  calculate_sigmaR(0, Bmin, Bmax, GR_start_index, gR);
+  calculate_gR_rec(0, Bmin, Bmax, GR_start_index, tmp2);
+  c_zcopy(diagonal_block_size, tmp2, 1, GR, 1);
+  std::swap(tmp0, tmp2);
 
   //std::cout << "rGF, stage1 total: " << get_time(time_start) << "\n";
   //time_start = get_time(0.0);
 
+
+
+  // rGF STAGE 2
+  //
+  // calculated GR_{0} = (E-H_{0} - T_{0,1} * gR_{1} * T_{1,0})^{-1} = gR_{0}
+
   // M_TODO: technically speaking gR is overallocated by the first block as
   // gR[0] gR[GR_start_index[1]] is never actually used.
 
-  // 6: GR_{0} = GR_current
-  c_zcopy(diagonal_block_size, GR_current, 1, GR, 1);
+
+  /* M_TODO: discuss if this is really not needed
+  // GRN1_current = 1*GRr_current + GRN1_current
+  // M_TODO: since we're not reusing GRN1_current we could allocate tightly
+  CPX GRN1_current = new CPX[largest_diagonal * largest_diagonal]; // overallocation
+  set_to_zero(largest_diagonal * largest_diagonal, GRN1_current);
+  c_zcopy(diagonal_length * diagonal_length, GRr_current, 1, GRN1_current, 1);
+  
+  
+  // tmp = GRN1_current * Gammal
+  CPX tmp1 = new CPX[largest_diagonal * largest_diagonal];
+  c_zgemm('N', 'N', diagonal_length, diagonal_length, diagonal_length,
+          CPX(1.0, 0.0), GRN1_current, diagonal_length, Gammal, 
+          diagonal_length, CPX(0.0, 0.0), tmp1, diagonal_length);
+  
+  // Zl = tmp1 * complexconjugate(GRN1_current);
+  CPX Zl = new CPX[largest_diagonal * largest_diagonal];
+  c_zgemm('N', 'C', diagonal_length, diagonal_length, diagonal_length,
+          CPX(1.0, 0.0), M, diagonal_length, GRN1_current, diagonal_length,
+          CPX(0.0, 0.0), Zl, diagonal_length);
+  */
+   
 
   // recursion along the diagonal (downwards)
   //
@@ -121,27 +155,34 @@ void rGF::solve_blocks(std::vector<int> Bmin, std::vector<int> Bmax, CPX *GR,
   //
   // 1 <= i <= num_blocks
   
-  CPX *GRNNp1_current = new CPX[largest_block * largest_block]; // overallocation
   for (int block = 1; block < num_blocks; ++block) {
-  //for (int block = 1; block < num_blocks-1; ++block) {
     diagonal_length = Bmax[block] - Bmin[block] + 1;
     diagonal_block_size = GR_start_index[block] - GR_start_index[block - 1];
     int upper_off_diagonal_size = GRNNp1_start_index[block] - 
                                   GRNNp1_start_index[block - 1];
-    calculate_GR(block, Bmin, Bmax, &gR[GR_start_index[block]], GR_current, 
-                 GRNNp1_current);
+    calculate_GR(block, Bmin, Bmax, &gR[GR_start_index[block]],
+                 &GR[GR_start_index[block]],
+                 &GRNNp1[GRNNp1_start_index[block -1]]);
 
-    c_zcopy(diagonal_block_size, GR_current, 1,
-            &GR[GR_start_index[block]], 1);
-    c_zcopy(upper_off_diagonal_size, GRNNp1_current, 1,
-            &GRNNp1[GRNNp1_start_index[block - 1]], 1);
-
+    /*
+    std::stringstream filename;
+    filename.str("");
+    filename << "GR_" << block << ".csv";
+    write_mat(&GR[GR_start_index[block]], diagonal_length, diagonal_length, 
+              filename.str());
+    filename.str("");
+    filename << "GRNNp1_" << block << ".csv";
+    write_mat(&GRNNp1[GRNNp1_start_index[block - 1]], Bmax[block - 1] - 
+              Bmin[block - 1] + 1, diagonal_length, filename.str());
+    */
   }
 
+  delete sparse_CSR;
+  delete sparse_CSC;
+  delete[] tmp0;
+  delete[] tmp1;
+  delete[] tmp2;
   delete[] gR;
-  delete[] sigmaR;
-  delete[] GR_current;
-  delete[] GRNNp1_current;
 
   //std::cout << "rGF, stage2 total: " << get_time(time_start) << "\n";
 
@@ -165,8 +206,7 @@ void rGF::solve_blocks(std::vector<int> Bmin, std::vector<int> Bmax, CPX *GR,
  *                       stored (output).
  */
 void rGF::get_diagonal_block(int block, std::vector<int> Bmin,
-                                 std::vector<int> Bmax,
-                                 CPX *diagonal_block)
+                                 std::vector<int> Bmax, CPX *diagonal_block)
 {
   int diagonal_length = Bmax[block] - Bmin[block] + 1;
   assert(diagonal_length <= Bmax[block] + 1);
@@ -210,8 +250,8 @@ void rGF::get_diagonal_block(int block, std::vector<int> Bmin,
  * \param T_iip1 Sparse (CSR) matrix to contain T_{i+1,i} (output).
  */
 void rGF::get_Tip1i_csc_Tiip1_csr(int block, std::vector<int> Bmin,
-                                     std::vector<int> Bmax,
-                                     TCSC<CPX,int> *T_ip1i, TCSR<CPX> *T_iip1)
+                                  std::vector<int> Bmax, TCSC<CPX,int> *T_ip1i, 
+                                  TCSR<CPX> *T_iip1)
 {
   assert(block < (int)(Bmin.size() - 1));
   assert(block >= 0);
@@ -247,7 +287,7 @@ void rGF::get_Tip1i_csc_Tiip1_csr(int block, std::vector<int> Bmin,
         T_iip1->index_i[row]++;
 
         T_ip1i->index_i[new_values_index] = new_values_column + fortran_index;
-        //this works for SmallNW:
+        //Note: this works for SmallNW:
         //T_ip1i->nnz[new_values_index] = conj(matrix->nnz[value_index]);
         T_ip1i->nnz[new_values_index] = matrix->nnz[value_index];
         T_ip1i->index_j[row]++;
@@ -287,8 +327,8 @@ void rGF::get_Tip1i_csc_Tiip1_csr(int block, std::vector<int> Bmin,
  * \param T_iip1 Sparse (CSC) matrix to contain T_{i+1,i} (output).
  */
 void rGF::get_Tip1i_csr_Tiip1_csc(int block, std::vector<int> Bmin,
-                                     std::vector<int> Bmax,
-                                     TCSR<CPX> *T_ip1i, TCSC<CPX,int> *T_iip1)
+                                  std::vector<int> Bmax, TCSR<CPX> *T_ip1i, 
+                                  TCSC<CPX,int> *T_iip1)
 {
   assert(block < (int)(Bmin.size() - 1));
   assert(block >= 0);
@@ -324,7 +364,7 @@ void rGF::get_Tip1i_csr_Tiip1_csc(int block, std::vector<int> Bmin,
         T_ip1i->index_i[row]++;
 
         T_iip1->index_i[new_values_index] = new_values_column + fortran_index;
-        //MARKER: this works for SmallNW:
+        //Note: this works for SmallNW:
         //T_iip1->nnz[new_values_index] = conj(matrix->nnz[value_index]);
         T_iip1->nnz[new_values_index] = matrix->nnz[value_index];
         T_iip1->index_j[row]++;
@@ -343,10 +383,13 @@ void rGF::get_Tip1i_csr_Tiip1_csc(int block, std::vector<int> Bmin,
   T_ip1i->get_row_edge();
 }
 
+
 /** \brief Function to calculate a block of gR
  *
  * Function to calcuate gR = (matrix_{i,i}-SigR)^{-1} for a given subblock i,i
  * of the main matrix.
+ *
+ * \pre sigmaR is stored in tmp0.
  *
  * \param block The index of the block to calculate (input).
  *
@@ -357,15 +400,12 @@ void rGF::get_Tip1i_csr_Tiip1_csc(int block, std::vector<int> Bmin,
  * \param GR_start_index Vector of block start indices within the matrix
  *                       array (input).
  *
- * \param sigmaR Boundary self-energy (optional: if not given, it is assumed
- *               that the main matrix (this->matrix) contains the sigmaR
- *               already) (input).
- *
  * \param gR Array containing gR (output).
  *
  */
-void rGF::calculate_gR(int block, std::vector<int> Bmin, std::vector<int> Bmax, 
-                       std::vector<int> GR_start_index, CPX *sigmaR, CPX *gR)
+void rGF::calculate_gR_rec(int block, std::vector<int> Bmin, 
+                           std::vector<int> Bmax, 
+                           std::vector<int> GR_start_index, CPX *gR)
 {
 
   //double start_time = get_time(0.0);
@@ -373,7 +413,8 @@ void rGF::calculate_gR(int block, std::vector<int> Bmin, std::vector<int> Bmax,
   int diagonal_length = Bmax[block] - Bmin[block] + 1;
   int diagonal_block_size = diagonal_length * diagonal_length;
 
-  CPX *inverted_gR = new CPX[diagonal_block_size];
+  CPX *sigmaR = tmp0;
+  CPX *inverted_gR = tmp1;
   get_diagonal_block(block, Bmin, Bmax, inverted_gR);
 
   // inverted_gR += -1 * sigmaR:
@@ -388,22 +429,46 @@ void rGF::calculate_gR(int block, std::vector<int> Bmin, std::vector<int> Bmax,
   c_zgetrs('N', diagonal_length, diagonal_length, inverted_gR, diagonal_length,
            pivot_vector, &gR[GR_start_index[block]], diagonal_length, &status);
 
-  delete[] inverted_gR;
+  /*
+  std::stringstream gR_filename;
+  gR_filename << "gR_" << block << ".csv";
+  write_mat(&gR[GR_start_index[block]], diagonal_length, diagonal_length,
+            gR_filename.str());
+  */
+
   delete[] pivot_vector;
 
   //std::cout << "gR_inv_" << block << ": " << get_time(start_time) << "\n";
 }
 
-void rGF::calculate_gR(int block, std::vector<int> Bmin, std::vector<int> Bmax, 
-                       std::vector<int> GR_start_index, CPX *gR)
+/** \brief Function to calculate a block of gR
+ *
+ * Function to calcuate gR = (matrix_{i,i})^{-1} for a given subblock i,i
+ * of the main matrix. To be used for the lowest block of gR if the self
+ * energies are already applied to the matrix.
+ *
+ * \param block The index of the block to calculate (input).
+ *
+ * \param Bmin Vector of block start indices along the diagonal (input).
+ *
+ * \param Bmax Vector of block end indices along the diagonal (input).
+ *
+ * \param GR_start_index Vector of block start indices within the matrix
+ *                       array (input).
+ *
+ * \param gR Array containing gR (output).
+ *
+ */
+void rGF::calculate_gR_init(int block, std::vector<int> Bmin, 
+                            std::vector<int> Bmax, 
+                            std::vector<int> GR_start_index, CPX *gR)
 {
 
   //double start_time = get_time(0.0);
 
   int diagonal_length = Bmax[block] - Bmin[block] + 1;
-  int diagonal_block_size = diagonal_length * diagonal_length;
 
-  CPX *inverted_gR = new CPX[diagonal_block_size];
+  CPX *inverted_gR = tmp0;
   get_diagonal_block(block, Bmin, Bmax, inverted_gR);
 
   // gR = inverted_gR^{-1}:
@@ -415,7 +480,13 @@ void rGF::calculate_gR(int block, std::vector<int> Bmin, std::vector<int> Bmax,
   c_zgetrs('N', diagonal_length, diagonal_length, inverted_gR, diagonal_length,
            pivot_vector, &gR[GR_start_index[block]], diagonal_length, &status);
 
-  delete[] inverted_gR;
+  /*
+  std::stringstream gR_filename;
+  gR_filename << "gR_" << block << ".csv";
+  write_mat(&gR[GR_start_index[block]], diagonal_length, diagonal_length,
+            gR_filename.str());
+  */
+
   delete[] pivot_vector;
 
   //std::cout << "gR_inv_" << block << ": " << get_time(start_time) << "\n";
@@ -424,22 +495,13 @@ void rGF::calculate_gR(int block, std::vector<int> Bmin, std::vector<int> Bmax,
 
 /** \brief Function to calculate sigmaR
  *
- * This function calculates sigmaR either from the right or from the left
- * side.
- *
- * For the calculation from the right it calculates
+ * This function calculates sigmaR as
  *
  *  sigmaR_{i} = T_{i,i+1} * gR_{i+1} * T_{i+1,i}
  *
- * whereas from the left side
- *
- *  sigmaR_{i} = T_{i,i-1} * gR_{i-1} * T_{i-1,i}
- *
+ * \post sigmaR will be stored in tmp0 after return.
  *
  * \param block Index of the block of gR to calculate (input).
- *
- * \param side Indicator of the side to calculate gR from, valid values
- *             are "r" for right or "l" for left (input).
  *
  * \param Bmin Vector of block start indices along the diagonal (input).
  *
@@ -451,91 +513,38 @@ void rGF::calculate_gR(int block, std::vector<int> Bmin, std::vector<int> Bmax,
  * \param gR The matrix containing the already calculated blocks of gR
  *           (input).
  *
- * \param sigmaR The matrix containing sigmaR (output).
- *
  */
-void rGF::calculate_sigmaR(int block, char *side,
-                           std::vector<int> Bmin,
+void rGF::calculate_sigmaR(int block, std::vector<int> Bmin,
                            std::vector<int> Bmax,
-                           std::vector<int> GR_start_index, CPX *gR, CPX *sigmaR)
+                           std::vector<int> GR_start_index, CPX *gR)
 {
-  // It seems as if T_iip1 and T_ip1i would not be used afterwards
-  // and therefore can be allocated in this function.
 
   int result_size;
-  int precursor_size; // size of the predecessor in the recusion (size of
-                      // block i+1 for side='r' and size of block i-1 for 
-                      // side='l')
+  int precursor_size;
 
   //double start_time = get_time(0.0);
   
-  if (!strcmp(side, "r")) {
+  assert(block < (int)(Bmin.size() - 1));
+  assert(block >= 0);
 
-    assert(block < (int)(Bmin.size() - 1));
-    assert(block >= 0);
+  result_size = Bmax[block] - Bmin[block] + 1;
+  precursor_size = Bmax[block+1] - Bmin[block+1] + 1;
+  int oversize = result_size;
+  if ( oversize < precursor_size) oversize = precursor_size;
 
-    result_size = Bmax[block] - Bmin[block] + 1;
-    precursor_size = Bmax[block+1] - Bmin[block+1] + 1;
-    int oversize = result_size;
-    if ( oversize < precursor_size) oversize = precursor_size;
+  TCSR<CPX> *T_iip1 = sparse_CSR;
+  TCSC<CPX,int> *T_ip1i = sparse_CSC;
+  CPX *sigmaR = tmp0;
+  CPX *T_iip1_gR_ip1 = tmp1;
 
-    TCSR<CPX> *T_iip1 = new TCSR<CPX>(oversize, oversize * oversize,
-                                      fortran_index);
-    TCSC<CPX,int> *T_ip1i = new TCSC<CPX,int>(oversize , oversize * oversize, 
-                                              fortran_index);
-    CPX *gR_ip1_transposed = new CPX[oversize * oversize];
-    CPX *T_iip1_gR_ip1 = new CPX[oversize * oversize];
-
-    get_Tip1i_csc_Tiip1_csr(block, Bmin, Bmax, T_ip1i, T_iip1);
-    // T_iip1_gR_ip1 =  T_{i,i+1} * gR_{i+1,i+1}
-    transpose_full_matrix(&gR[GR_start_index[block+1]], precursor_size, 
-                          precursor_size, gR_ip1_transposed);
-    T_iip1->trans_mat_vec_mult(gR_ip1_transposed, T_iip1_gR_ip1,
-                              precursor_size, precursor_size);
-    // sigmaR = T_iip1_gR_ip1 * T_ip1i
-    T_ip1i->vec_mat_mult(T_iip1_gR_ip1, sigmaR, result_size);
-
-    delete T_iip1;
-    delete T_ip1i;
-    delete[] gR_ip1_transposed;
-    delete[] T_iip1_gR_ip1;
-
-  }
-  else if (!strcmp(side, "l")) {
-
-    assert(block < (int)(Bmin.size()));
-    assert(block > 0);
-
-    result_size = Bmax[block] - Bmin[block] + 1;
-    precursor_size = Bmax[block-1] - Bmin[block-1] + 1;
-    int oversize = result_size;
-    if ( oversize < precursor_size) oversize = precursor_size;
-
-    TCSR<CPX> *T_iim1 = new TCSR<CPX>(oversize, oversize * oversize,
-                                      fortran_index);
-    TCSC<CPX,int> *T_im1i = new TCSC<CPX,int> (oversize, oversize * oversize, 
-                                               fortran_index);
-    CPX *gR_im1_transposed = new CPX[oversize * oversize];
-    CPX *T_iim1_gR_im1 = new CPX[oversize * oversize];
-
-    get_Tip1i_csr_Tiip1_csc(block - 1, Bmin, Bmax, T_iim1, T_im1i);
-    // T_iim1_gR_im1 = T_{i,i-1} * gR_{i-1,i-1}
-    transpose_full_matrix(&gR[GR_start_index[block-1]],precursor_size,
-                          precursor_size, gR_im1_transposed);
-    T_iim1->trans_mat_vec_mult(gR_im1_transposed, T_iim1_gR_im1,
-                               precursor_size, precursor_size);
-    // sigmaR = T_iim1_gR_im1 * T_im1i
-    T_im1i->vec_mat_mult(T_iim1_gR_im1, sigmaR, result_size);
-
-    delete T_iim1;
-    delete T_im1i;
-    delete[] gR_im1_transposed;
-    delete[] T_iim1_gR_im1;
-
-  }
-  else {
-    // M_TODO: throw exception
-  }
+  get_Tip1i_csc_Tiip1_csr(block, Bmin, Bmax, T_ip1i, T_iip1);
+  // T_iip1_gR_ip1 =  T_{i,i+1} * gR_{i+1,i+1}
+  transpose_full_matrix(&gR[GR_start_index[block+1]], precursor_size, 
+                        precursor_size, sigmaR);
+  T_iip1->trans_mat_vec_mult(sigmaR, T_iip1_gR_ip1,
+                            precursor_size, precursor_size);
+  // sigmaR = T_iip1_gR_ip1 * T_ip1i
+  T_ip1i->vec_mat_mult(T_iip1_gR_ip1, sigmaR, result_size);
 
   //std::cout << "sigmaR_" << block << ": " << get_time(start_time) << "\n";
 
@@ -552,6 +561,12 @@ void rGF::calculate_sigmaR(int block, char *side,
  *
  *   GR_{i-1,i} = -1 * GR_{i-1} * T_{i-1,i} * gR_{i}
  *
+ * \pre tmp0 contains GR_{i-1}
+ *
+ * \post tmp0 contains GR_{i}
+ *
+ * \post tmp1 contains GR_{i-1, i}
+ *
  * \param block Index i of the block GR_{i} to calculate (input).
  *
  * \param Bmin Vector of block start indices along the diagonal (input).
@@ -560,17 +575,12 @@ void rGF::calculate_sigmaR(int block, char *side,
  *
  * \param gR The matrix containing gR_{i} (input).
  *
- * \param GR_block On start: the matrix containing GR_{i-1} (input).
- *                 On exit: the matrix containing GR_{i} (output).
- *
- * \param GRNNp1_block The matrix containing GR_{i-1,i} (output).
- *
  * \note: There's commented out code to calculate blocks of the first column of
  * GR.
  *
  */
 void rGF::calculate_GR(int block, std::vector<int> Bmin, std::vector<int> Bmax, 
-                       CPX *gR, CPX *GR_block, CPX *GRNNp1_block)
+                       CPX *gR, CPX *GR, CPX *GRNNp1)
 {
 
   //double start_time = get_time(0.0);
@@ -581,11 +591,11 @@ void rGF::calculate_GR(int block, std::vector<int> Bmin, std::vector<int> Bmax,
   int oversize = result_size;
   if (oversize < precursor_size) {oversize = precursor_size;}
 
-  // CSR->size = #rows
-  // CSC->size = #cols
-  TCSC<CPX,int> *T_im1i = new TCSC<CPX,int>(oversize, oversize * oversize, 
-                                            fortran_index);
-  TCSR<CPX> *T_iim1 = new TCSR<CPX>(oversize, oversize * oversize, fortran_index);
+  TCSC<CPX,int> *T_im1i = sparse_CSC;
+  TCSR<CPX> *T_iim1 = sparse_CSR;
+  CPX *GR_block = tmp0;
+  CPX *tmp = tmp1;
+
   get_Tip1i_csr_Tiip1_csc(block - 1, Bmin, Bmax, T_iim1, T_im1i);
 
   /* Calculation of GRN1_block
@@ -604,56 +614,230 @@ void rGF::calculate_GR(int block, std::vector<int> Bmin, std::vector<int> Bmax,
   // GR_{i} = gR_{i} + gR_{i} * T_{i,i-1} * GR_{i-1} * T_{i-1,i} * gR_{i}
   // GR_{i-1,i} =                      -1 * GR_{i-1} * T_{i-1,i} * gR_{i}
 
-
-  std::stringstream filename;
-
   // change to fortran memory layout
-  CPX *tmp = new CPX[oversize * oversize];
   transpose_full_matrix(GR_block, precursor_size, precursor_size, tmp);
 
-  // tmp = GR_block * T_{i-1,i}, dim: precursor_size*result_size (but we over-
+  // Check preconditions
+  /*
+  std::stringstream filename;
+  filename.str(""); filename << "GR_" << block-1 << "_it" << block << ".csv";
+  write_mat(tmp, precursor_size, precursor_size, filename.str());
+  filename.str(""); filename << "gR_" << block << "_it" << block << ".csv";
+  write_mat(gR, result_size, result_size, filename.str());
+  filename.str(""); filename << "T_" << block-1 << block << ".csv";
+  const std::string &filename_str = filename.str();
+  const char *cfilename = filename_str.c_str();
+  T_im1i->write(cfilename);
+  */
+
+  ////////////////
+  // previous code
+ 
+  // GR_block = tmp * T_{i-1,i}, dim: precursor_size*result_size (but we over-
   // allocate). The routine produces Fortran-style matrices, i.e. the dimensions
   // are result_size*precursor_size
   // NOTE: vec_mat_mult(in, out, number_of_rows for 'in')
   T_im1i->vec_mat_mult(tmp, GR_block, precursor_size);
+  //filename.str(""); filename << "Z_" << block << ".csv";
+  //write_mat(GR_block, result_size, precursor_size, filename.str());
 
-  // GRNNp1_block = GR_block * tmp1 = GR_{i-1} * T_{i-1,i} * gR_{i}, 
+  // GRNNp1[..] = GR_block * gR_{i} = GR_{i-1} * T_{i-1,i} * gR_{i}, 
   // dim: precursor_size*result_size
   // NOTE: LDA is effectively the stride of the matrix A in BLAS (result_size
   // in our case)
-  //c_zgemm('T', 'T', result_size, precursor_size, result_size, CPX(1.0, 0.0),
   c_zgemm('N', 'T', result_size, precursor_size, result_size, CPX(1.0, 0.0),
-          gR, result_size, GR_block, result_size, CPX(0.0, 0.0), GRNNp1_block, 
+          gR, result_size, GR_block, result_size, CPX(0.0, 0.0), GRNNp1,
           result_size);
+  //filename.str(""); filename << "A_" << block << ".csv";
+  //write_mat(GRNNp1, precursor_size, result_size, filename.str());
 
-  // tmp = T_{i,i-1} * GRNNp1_block = T_{i,i-1} * GR_block * T_{i-1,i} * gR_{i},
+  // tmp = T_{i,i-1} * GRNNp1 = T_{i,i-1} * GR_block * T_{i-1,i} * gR_{i},
   // dim: result_size*result_size
   // NOTE: trans_mat_vec_mult(in, out, cols_of_non_transposed_in, <ignored>)
-  T_iim1->trans_mat_vec_mult(GRNNp1_block, tmp, result_size, result_size);
+  T_iim1->trans_mat_vec_mult(GRNNp1, tmp, result_size, result_size);
+  //filename.str(""); filename << "B_" << block << ".csv";
+  //write_mat(tmp, result_size, result_size, filename.str());
 
-  // GRNNp1_block *= -1, dim: precursor_size*result_size
+  // GRNNp1 *= -1, dim: precursor_size*result_size
   // M_TODO: we could also account for the factor at result construction time
-  c_zscal(precursor_size * result_size, CPX(-1.0, 0.0), GRNNp1_block, 1);
+  c_zscal(precursor_size * result_size, CPX(-1.0, 0.0), GRNNp1, 1);
+  //filename.str(""); filename << "C_" << block << ".csv";
+  //write_mat(GRNNp1, precursor_size, result_size, filename.str());
 
   // GR_block = gR * tmp = gR_{i} * T_{i,i-1} * GR_block * T_{i-1,i} * gR_{i},
   // dim: result_size*result_size
   c_zgemm('T', 'T', result_size, result_size, result_size, CPX(1.0, 0.0),
           tmp, result_size, gR, result_size, CPX(0.0, 0.0), GR_block, 
           result_size);
+  //filename.str(""); filename << "D_" << block << ".csv";
+  //write_mat(GR_block, result_size, result_size, filename.str());
 
   // GR_block += gR = gR_{i} + gR_{i} * T_{i,i-1} * GR_block * T_{i-1,i} * gR_{i},
   // dim: result_size*result_size
-  c_zaxpy(result_size*result_size, CPX(1.0, 0.0), gR, 1, GR_block, 1);
+  c_zaxpy(result_size * result_size, CPX(1.0, 0.0), gR, 1, GR_block, 1);
+  c_zcopy(result_size * result_size, GR_block, 1, GR, 1);
 
-
-  delete[] tmp;
-  delete T_im1i;
-  delete T_iim1;
+  //filename.str(""); filename << "E_" << block << ".csv";
+  //write_mat(GR_block, result_size, result_size, filename.str());
 
   //std::cout << "GR_" << block << ": " << get_time(start_time) << "\n"; */
 
   return;
 
+
+
+
+  /*
+  ////////////////
+  // previous code
+ 
+  // GR_block = tmp * T_{i-1,i}, dim: precursor_size*result_size (but we over-
+  // allocate). The routine produces Fortran-style matrices, i.e. the dimensions
+  // are result_size*precursor_size
+  // NOTE: vec_mat_mult(in, out, number_of_rows for 'in')
+  T_im1i->vec_mat_mult(tmp, GR_block, precursor_size);
+  filename.str(""); filename << "Z_" << block << ".csv";
+  write_mat(GR_block, result_size, precursor_size, filename.str());
+
+  // GRNNp1[..] = GR_block * gR_{i} = GR_{i-1} * T_{i-1,i} * gR_{i}, 
+  // dim: precursor_size*result_size
+  // NOTE: LDA is effectively the stride of the matrix A in BLAS (result_size
+  // in our case)
+  c_zgemm('N', 'T', result_size, precursor_size, result_size, CPX(1.0, 0.0),
+          gR, result_size, GR_block, result_size, CPX(0.0, 0.0), GRNNp1,
+          result_size);
+  filename.str(""); filename << "A_" << block << ".csv";
+  write_mat(GRNNp1, precursor_size, result_size, filename.str());
+
+  // tmp = T_{i,i-1} * GRNNp1 = T_{i,i-1} * GR_block * T_{i-1,i} * gR_{i},
+  // dim: result_size*result_size
+  // NOTE: trans_mat_vec_mult(in, out, cols_of_non_transposed_in, <ignored>)
+  T_iim1->trans_mat_vec_mult(GRNNp1, tmp, result_size, result_size);
+  filename.str(""); filename << "B_" << block << ".csv";
+  write_mat(tmp, result_size, result_size, filename.str());
+
+  // GRNNp1 *= -1, dim: precursor_size*result_size
+  // M_TODO: we could also account for the factor at result construction time
+  c_zscal(precursor_size * result_size, CPX(-1.0, 0.0), GRNNp1, 1);
+  filename.str(""); filename << "C_" << block << ".csv";
+  write_mat(GRNNp1, precursor_size, result_size, filename.str());
+
+  // GR_block = gR * tmp = gR_{i} * T_{i,i-1} * GR_block * T_{i-1,i} * gR_{i},
+  // dim: result_size*result_size
+  c_zgemm('T', 'T', result_size, result_size, result_size, CPX(1.0, 0.0),
+          tmp, result_size, gR, result_size, CPX(0.0, 0.0), GR_block, 
+          result_size);
+  filename.str(""); filename << "D_" << block << ".csv";
+  write_mat(GR_block, result_size, result_size, filename.str());
+
+  // GR_block += gR = gR_{i} + gR_{i} * T_{i,i-1} * GR_block * T_{i-1,i} * gR_{i},
+  // dim: result_size*result_size
+  c_zaxpy(result_size * result_size, CPX(1.0, 0.0), gR, 1, GR_block, 1);
+  c_zcopy(result_size * result_size, GR_block, 1, GR, 1);
+
+  filename.str(""); filename << "E_" << block << ".csv";
+  write_mat(GR_block, result_size, result_size, filename.str());
+  */
+
+  /*
+  ///////////
+  // old code
+  // GR_block = T_{i,i-1} * GR_block * T_{i-1,i}
+  //
+  // GR_block_transposed = transpose(GR_block)
+  // NOTE: GR_block contains 
+  CPX *GR_block_transposed = new CPX[result_size * result_size];
+  // M_TODO: is GR not symmetric anyway?
+  transpose_full_matrix(GR_block, precursor_size, precursor_size,
+                        GR_block_transposed);
+  CPX *M_tmp = new CPX[result_size * result_size];
+  T_iim1->trans_mat_vec_mult(GR_block_transposed, M_tmp, precursor_size,
+                            precursor_size);
+  write_mat(M_tmp, 80, 80, "M_tmp.csr");
+  T_im1i->vec_mat_mult(M_tmp, GR_block, result_size);
+  write_mat(GR_block, 80, 80, "double_err_test.csr");
+
+  // M_tmp = GR_block * gR
+  c_zgemm('N', 'N', result_size, result_size, result_size, CPX(1.0, 0.0),
+          GR_block, result_size, gR, result_size,
+          CPX(0.0, 0.0), M_tmp, result_size);
+  // GR_block = gR * M_tmp = gR * GR_block * gR
+  c_zgemm('N', 'N', result_size, result_size, result_size, CPX(1.0, 0.0),
+          gR, result_size, M_tmp, result_size,
+          CPX(0.0, 0.0), GR_block, result_size);
+
+  // GR_block += gR
+  c_zaxpy(result_size*result_size, CPX(1.0, 0.0), gR,
+          1, GR_block, 1);
+
+  write_mat(GR_block, 80, 80, "GR_old.csv");
+
+  delete[] GR_block_transposed;
+  delete[] M_tmp;
+  delete T_im1i;
+  delete T_iim1;
+  */
+
+  /* split code
+  // GRNNp1
+  /////////
+    // GR_block = tmp * T_{i-1,i}, dim: precursor_size*result_size (but we over-
+    // allocate). The routine produces Fortran-style matrices, i.e. the dimensions
+    // are result_size*precursor_size
+    // NOTE: vec_mat_mult(in, out, number_of_rows for 'in')
+    T_im1i->vec_mat_mult(tmp, GR_block, precursor_size);
+    filename.str(""); filename << "Z_" << block << ".csv";
+    write_mat(GR_block, result_size, precursor_size, filename.str());
+
+    // GRNNp1[..] = GR_block * gR_{i} = GR_{i-1} * T_{i-1,i} * gR_{i}, 
+    // dim: precursor_size*result_size
+    // NOTE: LDA is effectively the stride of the matrix A in BLAS (result_size
+    // in our case)
+    c_zgemm('N', 'T', result_size, precursor_size, result_size, CPX(1.0, 0.0),
+            gR, result_size, GR_block, result_size, CPX(0.0, 0.0), GRNNp1,
+            result_size);
+    filename.str(""); filename << "A_" << block << ".csv";
+    write_mat(GRNNp1, precursor_size, result_size, filename.str());
+
+    // GRNNp1 *= -1, dim: precursor_size*result_size
+    // M_TODO: we could also account for the factor at result construction time
+    c_zscal(precursor_size * result_size, CPX(-1.0, 0.0), GRNNp1, 1);
+    filename.str(""); filename << "C_" << block << ".csv";
+    write_mat(GRNNp1, precursor_size, result_size, filename.str());
+
+  // GR (numberically stable?)
+  /////
+    // GR_block = T_{i,i-1} * tmp = T_{i,i-1} * GR_{i-1}
+    // dim: result_size*result_size
+    // NOTE: trans_mat_vec_mult(in, out, cols_of_non_transposed_in, <ignored>)
+    T_iim1->trans_mat_vec_mult(tmp, GR_block, result_size, result_size);
+    // tmp = GR_block * T_{i-1,i} = T_{i,i-1} * GR_{i-1} * T_{i-1,i}
+    T_im1i->vec_mat_mult(GR_block, tmp, precursor_size);
+    filename.str(""); filename << "B_" << block << ".csv";
+    write_mat(tmp, result_size, result_size, filename.str());
+    
+    // GR_block = tmp * gR_i = T_{i,i-1} * GR_{i-1} * T_{i-1,i} * gR_i
+    c_zgemm('T', 'T', result_size, precursor_size, result_size, CPX(1.0, 0.0),
+            tmp, result_size, gR, result_size, CPX(0.0, 0.0), GR_block,
+            result_size);
+    filename.str(""); filename << "D_" << block << ".csv";
+    write_mat(GR_block, result_size, result_size, filename.str());
+
+    // GR = gR_i * GR_block = gR_i * T_{i,i-1} * GR_{i-1} * T_{i-1,i} * gR_i
+    c_zgemm('T', 'T', result_size, result_size, result_size, CPX(1.0, 0.0),
+            GR_block, result_size, gR, result_size, CPX(1.0, 0.0), GR, 
+            result_size);
+    filename.str(""); filename << "F_" << block << ".csv";
+    write_mat(GR, result_size, result_size, filename.str());
+
+    // GR += gR = gR_i + gR_i * T_{i,i-1} * GR_{i-1} * T_{i-1,i} * gR_i
+    c_zaxpy(result_size * result_size, CPX(1.0, 0.0), gR, 1, GR, 1);
+    filename.str(""); filename << "E_" << block << ".csv";
+    write_mat(GR, result_size, result_size, filename.str());
+
+    // copy to GR_block (=tmp0) for next iteration
+    c_zcopy(result_size * result_size, GR, 1, GR_block, 1);
+  */
 
 }
 
