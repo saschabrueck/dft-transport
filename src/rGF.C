@@ -112,6 +112,9 @@ void rGF::solve_blocks(std::vector<int> Bmin, std::vector<int> Bmax, CPX *GR,
   c_zcopy(diagonal_block_size, tmp2, 1, GR, 1);
   std::swap(tmp0, tmp2);
 
+  // debug
+  //write_mat(GR, diagonal_length, diagonal_length, "GR_0.csv");
+
   //std::cout << "rGF, stage1 total: " << get_time(time_start) << "\n";
   //time_start = get_time(0.0);
 
@@ -158,23 +161,20 @@ void rGF::solve_blocks(std::vector<int> Bmin, std::vector<int> Bmax, CPX *GR,
   for (int block = 1; block < num_blocks; ++block) {
     diagonal_length = Bmax[block] - Bmin[block] + 1;
     diagonal_block_size = GR_start_index[block] - GR_start_index[block - 1];
-    int upper_off_diagonal_size = GRNNp1_start_index[block] - 
-                                  GRNNp1_start_index[block - 1];
     calculate_GR(block, Bmin, Bmax, &gR[GR_start_index[block]],
                  &GR[GR_start_index[block]],
                  &GRNNp1[GRNNp1_start_index[block -1]]);
 
-    /*
-    std::stringstream filename;
-    filename.str("");
-    filename << "GR_" << block << ".csv";
-    write_mat(&GR[GR_start_index[block]], diagonal_length, diagonal_length, 
-              filename.str());
-    filename.str("");
-    filename << "GRNNp1_" << block << ".csv";
-    write_mat(&GRNNp1[GRNNp1_start_index[block - 1]], Bmax[block - 1] - 
-              Bmin[block - 1] + 1, diagonal_length, filename.str());
-    */
+    // debug
+    //std::stringstream filename;
+    //filename.str("");
+    //filename << "GR_" << block << ".csv";
+    //write_mat(&GR[GR_start_index[block]], diagonal_length, diagonal_length, 
+    //          filename.str());
+    //filename.str("");
+    //filename << "GRNNp1_" << block << ".csv";
+    //write_mat(&GRNNp1[GRNNp1_start_index[block - 1]], Bmax[block - 1] - 
+    //          Bmin[block - 1] + 1, diagonal_length, filename.str());
   }
 
   delete sparse_CSR;
@@ -429,12 +429,11 @@ void rGF::calculate_gR_rec(int block, std::vector<int> Bmin,
   c_zgetrs('N', diagonal_length, diagonal_length, inverted_gR, diagonal_length,
            pivot_vector, &gR[GR_start_index[block]], diagonal_length, &status);
 
-  /*
-  std::stringstream gR_filename;
-  gR_filename << "gR_" << block << ".csv";
-  write_mat(&gR[GR_start_index[block]], diagonal_length, diagonal_length,
-            gR_filename.str());
-  */
+  // debug
+  //std::stringstream gR_filename;
+  //gR_filename << "gR_" << block << ".csv";
+  //write_mat(&gR[GR_start_index[block]], diagonal_length, diagonal_length,
+  //          gR_filename.str());
 
   delete[] pivot_vector;
 
@@ -480,12 +479,11 @@ void rGF::calculate_gR_init(int block, std::vector<int> Bmin,
   c_zgetrs('N', diagonal_length, diagonal_length, inverted_gR, diagonal_length,
            pivot_vector, &gR[GR_start_index[block]], diagonal_length, &status);
 
-  /*
-  std::stringstream gR_filename;
-  gR_filename << "gR_" << block << ".csv";
-  write_mat(&gR[GR_start_index[block]], diagonal_length, diagonal_length,
-            gR_filename.str());
-  */
+  // debug
+  //std::stringstream gR_filename;
+  //gR_filename << "gR_" << block << ".csv";
+  //write_mat(&gR[GR_start_index[block]], diagonal_length, diagonal_length,
+  //          gR_filename.str());
 
   delete[] pivot_vector;
 
@@ -617,8 +615,8 @@ void rGF::calculate_GR(int block, std::vector<int> Bmin, std::vector<int> Bmax,
   // change to fortran memory layout
   transpose_full_matrix(GR_block, precursor_size, precursor_size, tmp);
 
-  // Check preconditions
   /*
+  // Debug: Check preconditions
   std::stringstream filename;
   filename.str(""); filename << "GR_" << block-1 << "_it" << block << ".csv";
   write_mat(tmp, precursor_size, precursor_size, filename.str());
@@ -630,9 +628,6 @@ void rGF::calculate_GR(int block, std::vector<int> Bmin, std::vector<int> Bmax,
   T_im1i->write(cfilename);
   */
 
-  ////////////////
-  // previous code
- 
   // GR_block = tmp * T_{i-1,i}, dim: precursor_size*result_size (but we over-
   // allocate). The routine produces Fortran-style matrices, i.e. the dimensions
   // are result_size*precursor_size
@@ -684,160 +679,6 @@ void rGF::calculate_GR(int block, std::vector<int> Bmin, std::vector<int> Bmax,
 
   return;
 
-
-
-
-  /*
-  ////////////////
-  // previous code
- 
-  // GR_block = tmp * T_{i-1,i}, dim: precursor_size*result_size (but we over-
-  // allocate). The routine produces Fortran-style matrices, i.e. the dimensions
-  // are result_size*precursor_size
-  // NOTE: vec_mat_mult(in, out, number_of_rows for 'in')
-  T_im1i->vec_mat_mult(tmp, GR_block, precursor_size);
-  filename.str(""); filename << "Z_" << block << ".csv";
-  write_mat(GR_block, result_size, precursor_size, filename.str());
-
-  // GRNNp1[..] = GR_block * gR_{i} = GR_{i-1} * T_{i-1,i} * gR_{i}, 
-  // dim: precursor_size*result_size
-  // NOTE: LDA is effectively the stride of the matrix A in BLAS (result_size
-  // in our case)
-  c_zgemm('N', 'T', result_size, precursor_size, result_size, CPX(1.0, 0.0),
-          gR, result_size, GR_block, result_size, CPX(0.0, 0.0), GRNNp1,
-          result_size);
-  filename.str(""); filename << "A_" << block << ".csv";
-  write_mat(GRNNp1, precursor_size, result_size, filename.str());
-
-  // tmp = T_{i,i-1} * GRNNp1 = T_{i,i-1} * GR_block * T_{i-1,i} * gR_{i},
-  // dim: result_size*result_size
-  // NOTE: trans_mat_vec_mult(in, out, cols_of_non_transposed_in, <ignored>)
-  T_iim1->trans_mat_vec_mult(GRNNp1, tmp, result_size, result_size);
-  filename.str(""); filename << "B_" << block << ".csv";
-  write_mat(tmp, result_size, result_size, filename.str());
-
-  // GRNNp1 *= -1, dim: precursor_size*result_size
-  // M_TODO: we could also account for the factor at result construction time
-  c_zscal(precursor_size * result_size, CPX(-1.0, 0.0), GRNNp1, 1);
-  filename.str(""); filename << "C_" << block << ".csv";
-  write_mat(GRNNp1, precursor_size, result_size, filename.str());
-
-  // GR_block = gR * tmp = gR_{i} * T_{i,i-1} * GR_block * T_{i-1,i} * gR_{i},
-  // dim: result_size*result_size
-  c_zgemm('T', 'T', result_size, result_size, result_size, CPX(1.0, 0.0),
-          tmp, result_size, gR, result_size, CPX(0.0, 0.0), GR_block, 
-          result_size);
-  filename.str(""); filename << "D_" << block << ".csv";
-  write_mat(GR_block, result_size, result_size, filename.str());
-
-  // GR_block += gR = gR_{i} + gR_{i} * T_{i,i-1} * GR_block * T_{i-1,i} * gR_{i},
-  // dim: result_size*result_size
-  c_zaxpy(result_size * result_size, CPX(1.0, 0.0), gR, 1, GR_block, 1);
-  c_zcopy(result_size * result_size, GR_block, 1, GR, 1);
-
-  filename.str(""); filename << "E_" << block << ".csv";
-  write_mat(GR_block, result_size, result_size, filename.str());
-  */
-
-  /*
-  ///////////
-  // old code
-  // GR_block = T_{i,i-1} * GR_block * T_{i-1,i}
-  //
-  // GR_block_transposed = transpose(GR_block)
-  // NOTE: GR_block contains 
-  CPX *GR_block_transposed = new CPX[result_size * result_size];
-  // M_TODO: is GR not symmetric anyway?
-  transpose_full_matrix(GR_block, precursor_size, precursor_size,
-                        GR_block_transposed);
-  CPX *M_tmp = new CPX[result_size * result_size];
-  T_iim1->trans_mat_vec_mult(GR_block_transposed, M_tmp, precursor_size,
-                            precursor_size);
-  write_mat(M_tmp, 80, 80, "M_tmp.csr");
-  T_im1i->vec_mat_mult(M_tmp, GR_block, result_size);
-  write_mat(GR_block, 80, 80, "double_err_test.csr");
-
-  // M_tmp = GR_block * gR
-  c_zgemm('N', 'N', result_size, result_size, result_size, CPX(1.0, 0.0),
-          GR_block, result_size, gR, result_size,
-          CPX(0.0, 0.0), M_tmp, result_size);
-  // GR_block = gR * M_tmp = gR * GR_block * gR
-  c_zgemm('N', 'N', result_size, result_size, result_size, CPX(1.0, 0.0),
-          gR, result_size, M_tmp, result_size,
-          CPX(0.0, 0.0), GR_block, result_size);
-
-  // GR_block += gR
-  c_zaxpy(result_size*result_size, CPX(1.0, 0.0), gR,
-          1, GR_block, 1);
-
-  write_mat(GR_block, 80, 80, "GR_old.csv");
-
-  delete[] GR_block_transposed;
-  delete[] M_tmp;
-  delete T_im1i;
-  delete T_iim1;
-  */
-
-  /* split code
-  // GRNNp1
-  /////////
-    // GR_block = tmp * T_{i-1,i}, dim: precursor_size*result_size (but we over-
-    // allocate). The routine produces Fortran-style matrices, i.e. the dimensions
-    // are result_size*precursor_size
-    // NOTE: vec_mat_mult(in, out, number_of_rows for 'in')
-    T_im1i->vec_mat_mult(tmp, GR_block, precursor_size);
-    filename.str(""); filename << "Z_" << block << ".csv";
-    write_mat(GR_block, result_size, precursor_size, filename.str());
-
-    // GRNNp1[..] = GR_block * gR_{i} = GR_{i-1} * T_{i-1,i} * gR_{i}, 
-    // dim: precursor_size*result_size
-    // NOTE: LDA is effectively the stride of the matrix A in BLAS (result_size
-    // in our case)
-    c_zgemm('N', 'T', result_size, precursor_size, result_size, CPX(1.0, 0.0),
-            gR, result_size, GR_block, result_size, CPX(0.0, 0.0), GRNNp1,
-            result_size);
-    filename.str(""); filename << "A_" << block << ".csv";
-    write_mat(GRNNp1, precursor_size, result_size, filename.str());
-
-    // GRNNp1 *= -1, dim: precursor_size*result_size
-    // M_TODO: we could also account for the factor at result construction time
-    c_zscal(precursor_size * result_size, CPX(-1.0, 0.0), GRNNp1, 1);
-    filename.str(""); filename << "C_" << block << ".csv";
-    write_mat(GRNNp1, precursor_size, result_size, filename.str());
-
-  // GR (numberically stable?)
-  /////
-    // GR_block = T_{i,i-1} * tmp = T_{i,i-1} * GR_{i-1}
-    // dim: result_size*result_size
-    // NOTE: trans_mat_vec_mult(in, out, cols_of_non_transposed_in, <ignored>)
-    T_iim1->trans_mat_vec_mult(tmp, GR_block, result_size, result_size);
-    // tmp = GR_block * T_{i-1,i} = T_{i,i-1} * GR_{i-1} * T_{i-1,i}
-    T_im1i->vec_mat_mult(GR_block, tmp, precursor_size);
-    filename.str(""); filename << "B_" << block << ".csv";
-    write_mat(tmp, result_size, result_size, filename.str());
-    
-    // GR_block = tmp * gR_i = T_{i,i-1} * GR_{i-1} * T_{i-1,i} * gR_i
-    c_zgemm('T', 'T', result_size, precursor_size, result_size, CPX(1.0, 0.0),
-            tmp, result_size, gR, result_size, CPX(0.0, 0.0), GR_block,
-            result_size);
-    filename.str(""); filename << "D_" << block << ".csv";
-    write_mat(GR_block, result_size, result_size, filename.str());
-
-    // GR = gR_i * GR_block = gR_i * T_{i,i-1} * GR_{i-1} * T_{i-1,i} * gR_i
-    c_zgemm('T', 'T', result_size, result_size, result_size, CPX(1.0, 0.0),
-            GR_block, result_size, gR, result_size, CPX(1.0, 0.0), GR, 
-            result_size);
-    filename.str(""); filename << "F_" << block << ".csv";
-    write_mat(GR, result_size, result_size, filename.str());
-
-    // GR += gR = gR_i + gR_i * T_{i,i-1} * GR_{i-1} * T_{i-1,i} * gR_i
-    c_zaxpy(result_size * result_size, CPX(1.0, 0.0), gR, 1, GR, 1);
-    filename.str(""); filename << "E_" << block << ".csv";
-    write_mat(GR, result_size, result_size, filename.str());
-
-    // copy to GR_block (=tmp0) for next iteration
-    c_zcopy(result_size * result_size, GR, 1, GR_block, 1);
-  */
 
 }
 
