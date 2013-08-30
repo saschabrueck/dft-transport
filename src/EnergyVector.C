@@ -50,67 +50,52 @@ int energyvector(TCSR<double> *Overlap,TCSR<double> *KohnSham,TCSR<double> *P_Ma
     sabtime=get_time(0.0);
     Singularities *singularities = new Singularities(KohnShamCollect,OverlapCollect,transport_params);
     cout << "TIME FOR SINGULARITIES " << get_time(sabtime) << endl;
-    int n_energies_below_vbe=0;
-    int start_energy_wf_method=0;
-    double muvec[2];
+    double Temp=0.0;
+    int n_mu=2;
+    double *muvec = new double[n_mu];
     muvec[0]=singularities->energy_vbe;
 //    muvec[1]=singularities->energy_vbe+0.5;
     muvec[1]=singularities->energy_vbe;
-    while(singularities->energies[n_energies_below_vbe++]<=muvec[1]);
-//    while(singularities->energies[start_energy_wf_method++]<=muvec[0]); // I HAVE TO CHECK IF THIS IS RIGHT OR IF IT IS TOO HIGH
-    if (!iam) cout << n_energies_below_vbe-start_energy_wf_method << " computed, " << n_energies_below_vbe << " below, " << singularities->n_energies << " total" << endl;
-    if (!iam) for (int iii=0;iii<n_energies_below_vbe;iii++) cout << singularities->energies[iii] << endl;
+// determine elements in nonequilibrium range
+    double k_b=K_BOLTZMANN;
+    double nonequi_start=muvec[0]-35.0*k_b*Temp;
+    double nonequi_end=muvec[n_mu-1]+35.0*k_b*Temp;
+    std::vector<double> energylist;
+    energylist.push_back(nonequi_start);
+    for (int i_energies=0;i_energies<singularities->n_energies;i_energies++)
+        if (singularities->energies[i_energies]>nonequi_start && singularities->energies[i_energies]<nonequi_end)
+            energylist.push_back(singularities->energies[i_energies]);
+    energylist.push_back(nonequi_end);
+    if (!iam) cout << energylist.size() << " energies in nonequilibrium range from a total of " << singularities->n_energies << " singularity points" << endl;
+// get integration points along complex contour with gauss legendre
+    int num_points_on_contour=transport_params.n_abscissae;
+    Quadrature gausslegendre(quadrature_types::CCGL,singularities->energy_gs,nonequi_start,Temp,muvec[0],num_points_on_contour);
+    std::vector<CPX> energyvector(gausslegendre.abscissae);
+    std::vector<CPX> stepvector(gausslegendre.weights);
+    std::vector<transport_methods::transport_method> methodvector(num_points_on_contour,transport_methods::NEGF);
 // get integration points along real axis with gauss cheby
-    Quadrature *gausscheby;
     int num_points_per_interval=transport_params.n_abscissae;
-    double skip_point_weight_thr=10E-12;
-    int size_energyvector;
-    if (singularities->energy_gs<singularities->energies[0])
-        size_energyvector=num_points_per_interval*singularities->n_energies;
-    else
-        size_energyvector=num_points_per_interval*(singularities->n_energies-1);
-    CPX *energyvector = new CPX[size_energyvector]();
-    CPX *stepvector = new CPX[size_energyvector]();
-    transport_methods::transport_method *methodvector = new transport_methods::transport_method[size_energyvector];
-    int i_start=0;
-    double smallest_energy_distance=0.001;
-    if (singularities->energy_gs<singularities->energies[0]-smallest_energy_distance) {
-        gausscheby = new Quadrature(quadrature_types::TS,singularities->energy_gs,singularities->energies[0],0.0,singularities->energy_vbe,num_points_per_interval);
-        std::copy(gausscheby->abscissae.begin(),gausscheby->abscissae.end(),energyvector);
-        std::copy(gausscheby->weights.begin(),gausscheby->weights.end(),stepvector);
-        delete gausscheby;
-        i_start=num_points_per_interval;
-    }
-    for (int i_energies=0;i_energies<n_energies_below_vbe-1;i_energies++) {
-        if (singularities->energies[i_energies]<singularities->energies[i_energies+1]-smallest_energy_distance) {
-            gausscheby = new Quadrature(quadrature_types::TS,singularities->energies[i_energies],singularities->energies[i_energies+1],0.0,singularities->energy_vbe,num_points_per_interval);
-            std::copy(gausscheby->abscissae.begin(),gausscheby->abscissae.end(),&energyvector[i_start+i_energies*num_points_per_interval]);
-            std::copy(gausscheby->weights.begin(),gausscheby->weights.end(),&stepvector[i_start+i_energies*num_points_per_interval]);
+    std::vector<transport_methods::transport_method> methodblock(num_points_per_interval,transport_methods::WF);
+    Quadrature *gausscheby;
+    double smallest_energy_distance=transport_params.extra_param1;
+    for (uint i_energies=1;i_energies<energylist.size();i_energies++) {
+        if (energylist[i_energies-1]<energylist[i_energies]-smallest_energy_distance) {
+            gausscheby = new Quadrature(quadrature_types::GC,energylist[i_energies-1],energylist[i_energies],0.0,0.0,num_points_per_interval);
+            energyvector.insert(energyvector.end(),gausscheby->abscissae.begin(),gausscheby->abscissae.end());
+            stepvector.insert(stepvector.end(),gausscheby->weights.begin(),gausscheby->weights.end());
+            methodvector.insert(methodvector.end(),methodblock.begin(),methodblock.end());
             delete gausscheby;
         }
     }
-    std::fill_n(methodvector,size_energyvector,transport_methods::WF);
-// get integration points along complex contour with gauss legendre
-/*
-    int num_points_on_contour=transport_params.n_abscissae;
-    Quadrature gausslegendre(quadrature_types::CCGL,singularities->energy_gs,singularities->energy_vbe,0.0,singularities->energy_vbe,num_points_on_contour);
-    int size_energyvector=num_points_on_contour;
-    transport_methods::transport_method *methodvector = new transport_methods::transport_method[size_energyvector];
-    CPX *energyvector = new CPX[size_energyvector];
-    CPX *stepvector = new CPX[size_energyvector];
-    std::fill_n(methodvector,size_energyvector,transport_methods::NEGF);
-    std::copy(gausslegendre.abscissae.begin(),gausslegendre.abscissae.end(),energyvector);
-    std::copy(gausslegendre.weights.begin(),gausslegendre.weights.end(),stepvector);
-    double skip_point_weight_thr=0.0;
-*/
     delete singularities;
+    cout << "Size of Energyvector " << energyvector.size() << endl;
 // run distributed
-    int seq_per_cpu=int(ceil(double(size_energyvector)/nprocs));
-    int jpos;
-    for (int iseq=0;iseq<seq_per_cpu;iseq++)
-        if ( (jpos=iam+iseq*nprocs)<size_energyvector)
+    double skip_point_weight_thr=0.0;
+    uint jpos;
+    for (int iseq=0;iseq<int(ceil(double(energyvector.size())/nprocs));iseq++)
+        if ( (jpos=iam+iseq*nprocs)<energyvector.size())
             if (abs(stepvector[jpos])>skip_point_weight_thr)
-                if (density(KohnShamCollect,OverlapCollect,Ps,energyvector[jpos],stepvector[jpos],muvec,2,methodvector[jpos],transport_params)) return (LOGCERR, EXIT_FAILURE);
+                if (density(KohnShamCollect,OverlapCollect,Ps,energyvector[jpos],stepvector[jpos],muvec,n_mu,methodvector[jpos],transport_params)) return (LOGCERR, EXIT_FAILURE);
 // copy density to corners
 //    Ps->contactdensity(ndof,bw);
 // trPS
@@ -138,6 +123,7 @@ int energyvector(TCSR<double> *Overlap,TCSR<double> *KohnSham,TCSR<double> *P_Ma
     delete Ps;
     delete KohnShamCollect;
     delete OverlapCollect;
+    delete[] muvec;
 
     return 0;
 }

@@ -248,39 +248,39 @@ Quadrature::Quadrature(quadrature_types::quadrature_type type, double start,
       if (num_abscissae <= 1) {
         throw excQuadrature("Invalid number of abscissae");
       }
-      double fermi = 1.0;
       for (uint n = 1; n <= num_abscissae; ++n) {
         double abscissa = (cos(M_PI * (2 * n - 1.0) / (2.0 * num_abscissae)) *
                         (band_end - band_start) / 2.0 +
                         (band_end + band_start) / 2.0);
         abscissae.push_back(abscissa);
-        if (T != 0) {
-          fermi = 1.0 / (exp((abscissa - Ef) / (k * T)) + 1.0);
-        } else if (abscissa > Ef) {
-          fermi = 0.0;
-        }
         weights.push_back(sqrt((abscissa - band_start) * (band_end - abscissa)) *
-                          M_PI / num_abscissae * fermi);
+                          M_PI / num_abscissae);
       }
       break;
     }
     case quadrature_types::TS: {
+      if (num_abscissae <= 1) {
+        throw excQuadrature("Invalid number of abscissae");
+      }
       double step = 6.0 / (num_abscissae + 1);
       for (uint n = 1; n <= num_abscissae; ++n) {
-        double tau = step / 2.0 * (2 * n - num_abscissae -1);
+        double tau = step / 2.0 * (2 * n - num_abscissae - 1);
         double abscissa = tanh(M_PI / 2.0 * sinh(tau)) *
                         (band_end - band_start) / 2.0 +
                         (band_end + band_start) / 2.0;
         abscissae.push_back(abscissa);
         double weight = M_PI / 2.0 * step * cosh(tau) /
-                        cosh( M_PI / 2.0 * sinh(tau)) *
-                        cosh( M_PI / 2.0 * sinh(tau)) *
+                        (cosh( M_PI / 2.0 * sinh(tau)) *
+                        cosh( M_PI / 2.0 * sinh(tau))) *
                         (band_end - band_start) / 2.0;
         weights.push_back(weight);
       }
       break;
     }
     case quadrature_types::TR: {
+      if (num_abscissae <= 1) {
+        throw excQuadrature("Invalid number of abscissae");
+      }
       double step = (band_end - band_start) / (num_abscissae - 1);
       for (uint n = 1; n <= num_abscissae; ++n) {
         abscissae.push_back(band_start + (n - 1) * step);
