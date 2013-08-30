@@ -138,14 +138,14 @@ cout << "COMPARE SIGMAR " << sigmar[triblocksize-1] << " AND SIGMAR2 " << sigmar
             tmprGF::sparse_invert(HamSig,Bvec);
             Ps->add_imag(HamSig,-weight/M_PI);
             delete HamSig;
-        } else if (inversion_method==1) {
 #ifdef HAVE_PARDISO            
+        } else if (inversion_method==1) {
             Pardiso::sparse_invert(HamSig);
             Ps->add_imag(HamSig,-weight/M_PI);
             delete HamSig;
 #endif
-        } else if (inversion_method==2) {
 #ifdef HAVE_SELINV            
+        } else if (inversion_method==2) {
             HamSig->change_findx(1);
             TCSR<CPX> * HamSigTri= new TCSR<CPX>(HamSig->size_tot,HamSig->n_nonzeros/2+HamSig->size_tot,HamSig->findx);
             HamSigTri->extract_lower_triangle(HamSig);

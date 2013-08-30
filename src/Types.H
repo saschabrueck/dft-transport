@@ -11,6 +11,11 @@ using namespace std;
 #define PI 3.14159265358979
 #endif
 
+// k in [eV/K]
+#ifndef K_BOLTZMANN
+#define K_BOLTZMANN 8.617332478e-5;
+#endif
+
 #ifndef ROWBLOCK
 #define ROWBLOCK 100
 #endif

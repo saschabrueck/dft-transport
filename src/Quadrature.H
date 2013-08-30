@@ -6,12 +6,6 @@
 #include <vector>
 #include <complex>
 
-// k in [eV/K]
-#ifndef K_BOLTZMANN
-#define K_BOLTZMANN 8.617332478e-5;
-#endif
-
-
 /** \enum quadrature_type
  *
  *  \brief User friendly access to quadrature types in \sa Quadrature
