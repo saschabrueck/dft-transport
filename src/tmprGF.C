@@ -22,10 +22,8 @@ void sparse_invert(TCSR<CPX> *matrix, std::vector<int> Bmax) {
 
   std::vector<int> Bmin(Bmax.size(), 0);
 
-  std::cout << "Bmin[0]=" << Bmin[0] << "\n";
   for (unsigned int i = 0; i < Bmin.size() - 1; ++i) {
     Bmin[i + 1] = Bmax[i] + 1;
-    std::cout << "Bmin[" << i+1 << "]=" << Bmin[i+1] << "\n";
   }
 
   // calculate memory requirements and positions:
@@ -57,32 +55,28 @@ void sparse_invert(TCSR<CPX> *matrix, std::vector<int> Bmax) {
     largest_diagonal = current_diagonal;
   }
 
-  // allocate memory to hold the results:
+  // solve
   CPX *GR = new CPX[GR_size];
   CPX *GRNNp1 = new CPX[GRNNp1_size];
-
-  // create the instance of the solver:
   rGF *myRGF = new rGF(matrix);
-
-  // solve
   myRGF->solve_blocks(Bmin, Bmax, GR, GRNNp1);
 
-  // fill the input matrix nnz with the corresponding elements
+  // this here serves as a cache for the lower diagonal blocks
   CPX *T10_cur = new CPX[largest_diagonal*largest_diagonal];
   CPX *T10_next = new CPX[largest_diagonal*largest_diagonal];
 
+  // append indices to Bmin to avoid special handling of last blocks in
+  // the following code.
+  Bmin.push_back(Bmax[num_blocks - 1] + 1);
+  Bmin.push_back(Bmax[num_blocks - 1] + 1);
+
   std::stringstream filename("");
 
-  //for (int block_row = 0; block_row <= num_blocks; ++block_row) {
-  for (int block_row = 0; block_row <= 1; ++block_row) {
+  for (int block_row = 0; block_row < num_blocks; ++block_row) {
 
-    // debug
-    //if (block_row > 0) {
-    //  filename.str("");
-    //  filename << "GR_" << block_row << block_row - 1 << "_cur.csv";
-    //  write_mat(T10_cur, Bmin[block_row + 1] - Bmin[block_row], 
-    //            Bmin[block_row + 2] - Bmin[block_row + 1], filename.str());
-    //}
+    std::cout << block_row << ": Going from row " << Bmin[block_row] << " to "
+              << Bmax[block_row] << ", up to column " << Bmin[block_row + 2]
+              << "\n";
 
     for (int row = Bmin[block_row]; row <= Bmax[block_row]; ++row) {
       int nnz_start = matrix->edge_i[row] - matrix->findx;
@@ -100,11 +94,9 @@ void sparse_invert(TCSR<CPX> *matrix, std::vector<int> Bmax) {
           // left to diagonal
           int j_T10_cur = column - Bmin[block_row - 1];
           int i_T10_cur = row - Bmin[block_row];
-          int T10_row_length = Bmin[block_row] - Bmin[block_row - 1];
-          int T10_pos = (i_T10_cur * T10_row_length) + j_T10_cur;
-          //matrix->nnz[innz] = T10_cur[T10_pos];
-          //std::cout << "R," << row << "," << column << ","
-          //          << T10_cur[T10_pos] << "\n";
+          int T10_cur_row_length = Bmin[block_row] - Bmin[block_row - 1];
+          int T10_cur_pos = (i_T10_cur * T10_cur_row_length) + j_T10_cur;
+          matrix->nnz[innz] = T10_cur[T10_cur_pos];
         }
         else if (column < Bmin[block_row + 1]) {
           // diagonal
@@ -128,25 +120,12 @@ void sparse_invert(TCSR<CPX> *matrix, std::vector<int> Bmax) {
           int T10_next_row_length = Bmin[block_row + 1] - Bmin[block_row];
           int T10_next_pos = (T10_next_row_length * j_GRNNp1) + i_GRNNp1;
           T10_next[T10_next_pos] = GRNNp1[GRNNp1_pos];
-
-          // 'transpose' here
-          //if (block_row == 0) {
-          //std::cout << "C," << column << "," << row << ","
-          //          << GRNNp1[GRNNp1_pos] << "\n";
-          //}
         }
         else {
           // M_TODO: outside right block, raise exception
         }
       }
     }
-
-    // debug
-    //filename.str("");
-    //filename << "GR_" << block_row + 1 << block_row << "_next.csv";
-    //write_mat(T10_next, Bmin[block_row + 2] - Bmin[block_row + 1], 
-    //          Bmin[block_row + 1] - Bmin[block_row], filename.str());
-
     std::swap(T10_cur, T10_next);
   }
 
