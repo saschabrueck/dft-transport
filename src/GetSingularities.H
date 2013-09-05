@@ -6,6 +6,7 @@
 #define __SINGULARITIES
 
 #include "CSR.H"
+#include <vector>
 
 class Singularities {
 public:
