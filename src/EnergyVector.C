@@ -13,6 +13,7 @@ int energyvector(TCSR<double> *Overlap,TCSR<double> *KohnSham,TCSR<double> *P_Ma
 // check parameters
     if ( Overlap->size_tot%transport_params.n_cells || transport_params.bandwidth<1 ) return (LOGCERR, EXIT_FAILURE);
 // additional parameters not needed in the future
+    int bw=transport_params.bandwidth;
     int ncells=transport_params.n_cells;
     int size=Overlap->size_tot;
     int ndof=size/ncells;
@@ -47,32 +48,36 @@ int energyvector(TCSR<double> *Overlap,TCSR<double> *KohnSham,TCSR<double> *P_Ma
     Ps->copy_index(OverlapCollect);
     Ps->init_variable(Ps->nnz,Ps->n_nonzeros);
 // determine singularity stuff
+//    {
     sabtime=get_time(0.0);
-    Singularities *singularities = new Singularities(KohnShamCollect,OverlapCollect,transport_params);
+    Singularities singularities(KohnShamCollect,OverlapCollect,transport_params);
     cout << "TIME FOR SINGULARITIES " << get_time(sabtime) << endl;
     double Temp=0.0;
     int n_mu=2;
     double *muvec = new double[n_mu];
-    muvec[0]=singularities->energy_vbe;
-//    muvec[1]=singularities->energy_vbe+0.5;
-    muvec[1]=singularities->energy_vbe;
+    muvec[0]=singularities.energy_vbe;
+//    muvec[1]=singularities.energy_vbe+0.5;
+    muvec[1]=singularities.energy_vbe;
 // determine elements in nonequilibrium range
     double k_b=K_BOLTZMANN;
     double nonequi_start=muvec[0]-35.0*k_b*Temp;
+int integral_over_real_axis=1;
+if (integral_over_real_axis) nonequi_start=singularities.energy_gs;
     double nonequi_end=muvec[n_mu-1]+35.0*k_b*Temp;
     std::vector<double> energylist;
     energylist.push_back(nonequi_start);
-    for (int i_energies=0;i_energies<singularities->n_energies;i_energies++)
-        if (singularities->energies[i_energies]>nonequi_start && singularities->energies[i_energies]<nonequi_end)
-            energylist.push_back(singularities->energies[i_energies]);
+    for (uint i_energies=0;i_energies<singularities.energies.size();i_energies++)
+        if (singularities.energies[i_energies]>nonequi_start && singularities.energies[i_energies]<nonequi_end)
+            energylist.push_back(singularities.energies[i_energies]);
     energylist.push_back(nonequi_end);
-    if (!iam) cout << energylist.size() << " energies in nonequilibrium range from a total of " << singularities->n_energies << " singularity points" << endl;
+    if (!iam) cout << energylist.size() << " energies in nonequilibrium range from a total of " << singularities.energies.size() << " singularity points" << endl;
+    if (!iam) for (uint i_list=0;i_list<energylist.size();i_list++) cout << energylist[i_list] << endl;
 // get integration points along complex contour with gauss legendre
     int num_points_on_contour=transport_params.n_abscissae;
-    Quadrature gausslegendre(quadrature_types::CCGL,singularities->energy_gs,nonequi_start,Temp,muvec[0],num_points_on_contour);
+    Quadrature gausslegendre(quadrature_types::CCGL,singularities.energy_gs,nonequi_start,Temp,muvec[0],num_points_on_contour);
     std::vector<CPX> energyvector(gausslegendre.abscissae);
     std::vector<CPX> stepvector(gausslegendre.weights);
-    std::vector<transport_methods::transport_method> methodvector(num_points_on_contour,transport_methods::NEGF);
+    std::vector<transport_methods::transport_method> methodvector(gausslegendre.abscissae.size(),transport_methods::NEGF);
 // get integration points along real axis with gauss cheby
     int num_points_per_interval=transport_params.n_abscissae;
     std::vector<transport_methods::transport_method> methodblock(num_points_per_interval,transport_methods::WF);
@@ -87,22 +92,43 @@ int energyvector(TCSR<double> *Overlap,TCSR<double> *KohnSham,TCSR<double> *P_Ma
             delete gausscheby;
         }
     }
-    delete singularities;
-    cout << "Size of Energyvector " << energyvector.size() << endl;
+/*
+Quadrature trapez(quadrature_types::TR,nonequi_start,nonequi_end,Temp,muvec[0],2000);
+energyvector.resize(2000);
+stepvector.resize(2000);
+methodvector.resize(2000);
+copy(trapez.abscissae.begin(),trapez.abscissae.end(),energyvector.begin());
+copy(trapez.weights.begin(),trapez.weights.end(),stepvector.begin());
+fill(methodvector.begin(),methodvector.end(),transport_methods::WF);
+*/
+    if (!iam) cout << "Size of Energyvector " << energyvector.size() << endl;
+//    }
 // run distributed
+    std::vector<double> currentvector(energyvector.size(),0.0);
     double skip_point_weight_thr=0.0;
     uint jpos;
     for (int iseq=0;iseq<int(ceil(double(energyvector.size())/nprocs));iseq++)
         if ( (jpos=iam+iseq*nprocs)<energyvector.size())
             if (abs(stepvector[jpos])>skip_point_weight_thr)
-                if (density(KohnShamCollect,OverlapCollect,Ps,energyvector[jpos],stepvector[jpos],muvec,n_mu,methodvector[jpos],transport_params)) return (LOGCERR, EXIT_FAILURE);
+                if (density(KohnShamCollect,OverlapCollect,Ps,energyvector[jpos],stepvector[jpos],muvec,n_mu,methodvector[jpos],currentvector[jpos],transport_params)) return (LOGCERR, EXIT_FAILURE);
 // copy density to corners
 //    Ps->contactdensity(ndof,bw);
-// trPS
+// set blocks containing pbc to zero
+    OverlapCollect->settozeropbc(bw,ndof);
+// trPS per energy point
+    ofstream myfile;
+    std::vector<double> currentvector2(energyvector.size(),0.0);
+    MPI_Allreduce(&currentvector[0],&currentvector2[0],energyvector.size(),MPI_DOUBLE,MPI_SUM,MPI_COMM_WORLD);
+    if (!iam) {
+        myfile.open("DOS_Profile");
+        for (uint iele=0;iele<energyvector.size();iele++)
+            if (abs(stepvector[iele])>skip_point_weight_thr)
+                myfile << real(energyvector[iele]) << " " << currentvector2[iele] << endl;
+        myfile.close();
+    }
     double trPS;
     double trPS_Sum;
 // trPS per unit cell
-    ofstream myfile;
     if (!iam) myfile.open("NumberOfElectrons");
     if (!iam) myfile << "Number of electrons per unit cell";
     for (int idens=0;idens<ncells;idens++) {

@@ -70,12 +70,15 @@ Quadrature::Quadrature(quadrature_types::quadrature_type type, double start,
     band_start = end;
     band_end = start;
   } else {
-    throw excQuadrature("Invalid range specified");
+    my_type = quadrature_types::NONE;
   }
   if (num_abscissae == 0) {
     throw excQuadrature("Invalid number of abscissae specified");
   }
   switch (my_type) {
+    case quadrature_types::NONE: {
+      break;
+    }
     case quadrature_types::CCGL: {
       if (num_abscissae == 0) {
         throw excQuadrature("Invalid number of abscissae");

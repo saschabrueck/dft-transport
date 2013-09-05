@@ -12,17 +12,16 @@ public:
 Singularities(TCSR<double> *,TCSR<double> *,c_transport_type);
 ~Singularities();
 
-/// Number of singularity points
-int n_energies;
-/// Array containing the singularity points
-double* energies;
+/// Vector containing the singularity points
+std::vector<double> energies;
 /// Lower integration limit
 double energy_gs;
 /// Upper integration limit
 double energy_vbe;
 
 private:
-int determine_velocities(TCSR<double>*,TCSR<double>*,double,int,double&,double&,double*,int&,c_transport_type);
+double min_parabola(int,double*,double*,int,double&);
+int determine_velocities(TCSR<double>*,TCSR<double>*,double,int,double*,double*,c_transport_type);
 };
 
 #endif

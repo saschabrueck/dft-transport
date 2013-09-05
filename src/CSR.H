@@ -102,8 +102,10 @@ public:
     void reducescatter(TCSR<T>*,MPI_Comm);
     void reducescatterfactorconvert(TCSR<double>*,MPI_Comm,double);
     void reducescatterconvert(TCSR<double>*,MPI_Comm);
+    double psipsidaggerdosdebug(CPX*,int);
     void psipsidagger(CPX*,int,CPX);
     void moveawaypbc(T*,T*,int,int);
+    void settozeropbc(int,int);
     void tr_full_to_sparse(T*,int,int);
     void extract_lower_triangle(TCSR<T>*);
     void extract_upper_triangle(TCSR<T>*);
@@ -1245,7 +1247,7 @@ void TCSR<T>::contactunitcell(T *contacty,int ndof,int bandw,int signy)
 {
 // this is the version for the serial case and no spin orbit coupling
     int i,j,index;
-    init_variable(contacty,ndof*ndof*(2*bandw-1));
+    init_variable(contacty,ndof*ndof*(2*bandw+1));
     if (signy==1) {
         for(i=0;i<ndof;i++) {
             for(j=edge_i[i]-findx;j<edge_i[i+1]-findx;j++) {
@@ -1550,6 +1552,21 @@ inline void TCSR<CPX>::reducescatterconvert(TCSR<double>*matdist,MPI_Comm my_com
 /************************************************************************************************/
 
 template <>
+inline double TCSR<double>::psipsidaggerdosdebug(CPX* psi,int nkval)
+{
+    int i,e;
+    double result=0;
+    for(i=0;i<size;i++){
+        for(e=edge_i[i]-findx;e<edge_i[i+1]-findx;e++){
+            result+=nnz[e]*real(c_zdotc(nkval,&psi[index_j[e]-findx],size,&psi[i],size));
+        }
+    }
+    return result;
+}
+
+/************************************************************************************************/
+
+template <>
 inline void TCSR<double>::psipsidagger(CPX* psi,int nkval,CPX factor)
 {
     int i,e;
@@ -1567,8 +1584,7 @@ void TCSR<T>::moveawaypbc(T *left, T *right, int bw, int ndof)
 {
     int i,e;
     int bwndof=bw*ndof;
-    T zero;
-    init_variable(&zero,1);
+    T zero=(T)0;
     init_variable(left,size_tot*size_tot);
     init_variable(right,size_tot*size_tot);
 
@@ -1585,6 +1601,32 @@ void TCSR<T>::moveawaypbc(T *left, T *right, int bw, int ndof)
         for (e=edge_i[i]-findx;e<edge_i[i+1]-findx;e++) {
             if (index_j[e]-findx-i<=-bwndof) {
                 left[i+(index_j[e]-findx)*size_tot]=nnz[e];
+                nnz[e]=zero;
+            }
+        }
+    }
+}
+
+/************************************************************************************************/
+
+template <class T>
+void TCSR<T>::settozeropbc(int bw, int ndof)
+{
+    int i,e;
+    int bwndof=bw*ndof;
+    T zero=(T)0;
+
+    for (i=0;i<bwndof;i++) {
+        for (e=edge_i[i]-findx;e<edge_i[i+1]-findx;e++) {
+            if (index_j[e]-findx-i>=bwndof) {
+                nnz[e]=zero;
+            }
+        }
+    }
+
+    for (i=size_tot-bwndof;i<size_tot;i++) {
+        for (e=edge_i[i]-findx;e<edge_i[i+1]-findx;e++) {
+            if (index_j[e]-findx-i<=-bwndof) {
                 nnz[e]=zero;
             }
         }
