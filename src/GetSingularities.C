@@ -44,21 +44,11 @@ Singularities::Singularities(TCSR<double> *KohnSham,TCSR<double> *Overlap,c_tran
         MPI_Gather(energies_local,ndof*seq_per_cpu,MPI_DOUBLE,energies_matrix,ndof*seq_per_cpu,MPI_DOUBLE,0,MPI_COMM_WORLD);
         MPI_Gather(derivatives_local,ndof*seq_per_cpu,MPI_DOUBLE,derivatives_matrix,ndof*seq_per_cpu,MPI_DOUBLE,0,MPI_COMM_WORLD);
         if (!iam && i_mu==0) {
-ofstream efile;
-efile.open("energiesmatrix");
-efile.precision(15);
-for (int iwrite=0;iwrite<ndof*nprocs*seq_per_cpu;iwrite++) efile<<energies_matrix[iwrite]<<endl;
-efile.close();
-efile.open("derivativesmatrix");
-efile.precision(15);
-for (int iwrite=0;iwrite<ndof*nprocs*seq_per_cpu;iwrite++) efile<<derivatives_matrix[iwrite]<<endl;
-efile.close();
             for (int i=0;i<ndof;i++) {
                 if (do_fitting) {
                     if (abs(derivatives_matrix[i])<parameter_sab.eps_singularities) energies.push_back(energies_matrix[i]);
                     for (int j=1;j<n_k-2;j++) {
                         if (derivatives_matrix[i+j*ndof]*derivatives_matrix[i+(j+1)*ndof]<0.0) {
-cout<<"minpara "<<min_parabola(4,&k[j-1],&energies_matrix[i+(j-1)*ndof],ndof,extrval)<<endl;
                             if (min_parabola(4,&k[j-1],&energies_matrix[i+(j-1)*ndof],ndof,extrval)<1.0/(n_k*n_k)) energies.push_back(extrval);
                         }
                     }
@@ -122,10 +112,10 @@ double Singularities::min_parabola(int n,double *x,double *y,int disp,double& ex
     int pivarray[3];
     c_dgetrf(3,3,mat,3,pivarray,&info);
     c_dgetrs('N',3,1,mat,3,pivarray,a,3,&info);
-    extr = a[3]-a[2]*a[2]/a[1]/4.0;
+    extr = a[2]-a[1]*a[1]/a[0]/4.0;
     double resid = 0.0;
     for (p=0;p<n;p++)
-        resid+=pow(a[1]*x[p]*x[p]+a[2]*x[p]+a[3]-y[p*disp],2);
+        resid+=pow(a[0]*x[p]*x[p]+a[1]*x[p]+a[2]-y[p*disp],2);
     return sqrt(resid);
 }
 
