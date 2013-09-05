@@ -24,7 +24,7 @@ int ldlt_free__(int *);
 int ldlt_blkselinv__(int *, int*, int*, CPX *, int*);
 }
 
-int density(TCSR<double> *KohnSham,TCSR<double> *Overlap,TCSR<double> *Ps,CPX energy,CPX weight,double *muvec,int n_mu,transport_methods::transport_method method,c_transport_type parameter_sab)
+int density(TCSR<double> *KohnSham,TCSR<double> *Overlap,TCSR<double> *Ps,CPX energy,CPX weight,double *muvec,int n_mu,transport_methods::transport_method method,double &current,c_transport_type parameter_sab)
 {
     double d_one=1.0;
     double d_zer=0.0;
@@ -196,6 +196,7 @@ cout << "COMPARE INJR " << injr[ntriblock-1] << " AND INJR2 " << injr2[ntriblock
         if (real(energy)<=muvec[1]) fermir=1.0;
         Ps->psipsidagger(Sol,nprol,weight*fermil);
         Ps->psipsidagger(&Sol[HamSig->size_tot*nprol],npror,weight*fermir);
+        current=Overlap->psipsidaggerdosdebug(Sol,nprol+npror);
         cout << "TIME FOR CONSTRUCTION OF S-PATTERN DENSITY MATRIX " << get_time(sabtime) << endl;
 // transmission
         CPX *vecoutdof=new CPX[ndof];

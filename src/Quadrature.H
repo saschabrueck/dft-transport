@@ -13,6 +13,7 @@
  */
 namespace quadrature_types {
 enum quadrature_type {
+  NONE=0,
   CCGL=1,   // Complex Contour Gauss-Legendre
   GL=2,     // Gauss-Legendre
   ANPS=3,   // Areshkin-Nikolic Pole Summation
