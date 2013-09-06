@@ -638,8 +638,8 @@ void rGF::calculate_GR(int block, std::vector<int> Bmin, std::vector<int> Bmax,
   // tmp = T_{i,i-1} * GRNNp1 = T_{i,i-1} * GR_block * T_{i-1,i} * gR_{i},
   // dim: result_size*result_size
   // NOTE: trans_mat_vec_mult(in, out, cols_of_non_transposed_in, <ignored>)
-  /*T_iim1->trans_mat_vec_mult(GRNNp1, tmp, result_size, result_size);
-  filename.str(""); filename << "tests/rGF/C_" << block << ".csv";
+  T_iim1->trans_mat_vec_mult(GRNNp1, tmp, result_size, result_size);
+  /*filename.str(""); filename << "tests/rGF/C_" << block << ".csv";
   write_mat(tmp, result_size, result_size, filename.str());*/
 
   // GRNNp1 *= -1, dim: precursor_size*result_size
