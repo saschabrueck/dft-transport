@@ -145,7 +145,7 @@ SUBROUTINE cp_get_result_r1(env_id, description, N, RESULT, ierr) BIND(C,name="c
      i = i+1
   END DO
 
-  CALL get_result_r1(env_id,desc_low, N, fortran_RESULT, ierr)
+  CALL get_result_r1(env_id,desc_low, N, fortran_RESULT, ierr=ierr)
   RESULT = fortran_RESULT
 END SUBROUTINE cp_get_result_r1
 
