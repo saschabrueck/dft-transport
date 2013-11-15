@@ -1,7 +1,11 @@
 CPP = CC
+GCC = cc
 
-CFLAGS = -g -Wall -DAdd_ 
+CFLAGS = -g -Wall -fopenmp #-dynamic
 CXXFLAGS = -std=c++11 $(CFLAGS)
+
+LEX           = flex
+YACC          = bison
 
 # Directory of the libraries used by OMEN
 LIB_TOP       = /users/bruecks/GreenSolver/
@@ -30,9 +34,14 @@ QHULLLIB      = $(LIB_TOP)/QHULL/src/libqhull.a
 SUPERLULIB    = $(LIB_TOP)/SuperLU_DIST_2.0/Lib/libsuperlu_dist_2.0.a
 UMFPACKLIB    = $(LIB_TOP)/UMFPACK/Lib/libumfpack.a
 
-LFLAGS = -L/users/bruecks/cp2k/lib/CRAY-XE6-gfortran-hwtopo/popt/ 
-DFLAGS =
-LIBS = $(SUPERLULIB) $(UMFPACKLIB) $(AMDLIB) $(METISLIB) $(MUMPSLIB) $(PORDLIB) \
+LINLIN = /users/bruecks/CSelInv/EXAMPLES/C2Finterface.o /users/bruecks/CSelInv/LIB/libcsupldlt.a
+
+PARDISO_SO = /users/bruecks/bin/libpardiso491-GNU430-X86-64.so
+
+LFLAGS = -L/users/bruecks/cp2k/lib/CRAY-XE6-gfortran-hwtopo/popt/ #-Wl,-rpath,/opt/cray/mpt/5.6.1/gni/mpich2-gnu/47/lib/ -Wl,-rpath,/opt/fftw/3.3.0.1/interlagos/lib/
+#LFLAGS = -L/users/bruecks/cp2k2/cp2k/cp2k/lib/CRAY-XE6-gfortran-hwtopo/popt/
+DFLAGS = -DAdd_
+LIBS = $(SUPERLULIB) $(UMFPACKLIB) $(AMDLIB) $(MUMPSLIB) $(PORDLIB) $(METISLIB) $(AZTECLIB) $(QHULLLIB) \
 	-lcp2k_lib -lcp2k_base_lib -lcp2k_dbcsr_lib -lcp2k_fft_lib -lcp2k_ma_lib -lcp2k_elpa_lib \
-	-lm -lgfortran -lstdc++	-lfftw3 -lsci_gnu 
-INCLUDES = $(INCSLU) $(INCUFC) $(INCUMF) $(INCMPS) $(INCPOR) $(INCAMD)
+	-lsci_gnu_mp -lm -lrt -fopenmp -lgfortran -lstdc++ 
+INCLUDES = $(INCSLU) $(INCUFC) $(INCUMF) $(INCMPS) $(INCPOR) $(INCAMD) $(INCAZT) $(INCQHU)
