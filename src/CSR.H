@@ -40,8 +40,11 @@ public:
     TCSR(const char*);
     TCSR(char*,int,int);
 // sab begin
+//create new matrix by cutting out from old one
+    TCSR(TCSR<T>*,int,int,int,int);
 // THIS CONSTRUCTOR WILL CREATE A MATRIX BY WEIGHTED SUMMING OF TWO OTHERS
     TCSR(T,TCSR<double>*,T,TCSR<double>*);
+    TCSR(CPX,TCSR<CPX>*,CPX,TCSR<CPX>*);
 // this is the same but adds an additional matrix C with the SAME SPARSITY PATTERN AS B
     TCSR(T,TCSR<double>*,T,TCSR<double>*,T,TCSR<double>*);
 // and this will construct the density matrix on the TCSR sparsity pattern
@@ -53,6 +56,11 @@ public:
     TCSR(TCSR<T>*,T*);
 // and this is the gather
     TCSR(TCSR<T>*,MPI_Comm);
+    TCSR(TCSR<T>*,int,MPI_Comm);
+    TCSR(TCSR<T>*,int*,int,MPI_Comm);
+    TCSR(TCSR<T>*,MPI_Comm,int,MPI_Comm*,MPI_Comm*);
+//distribute matrix according to pattern
+    TCSR(TCSR<T>*,TCSR<T>*,int,MPI_Comm);
 // sab end
     ~TCSR();
     void change_contain(TCSR<T>*);
@@ -76,12 +84,13 @@ public:
     void trans_mat_vec_mult(T*,T*,int,int,int);
     void spec_mat_vec_mult(T*,T*,int,int*,int*,int,int);
     void spec_mat_vec_mult(T*,T*,int,int*,int*,int,int,int*);
-    void sparse_to_full(T*,int,int);
+    //void sparse_to_full(T*,int,int);
     void sparse_to_cmp_full(CPX*,int,int);
     void full_to_sparse(T*,int,int);
     void cmp_full_to_sparse(CPX*,int,int,CPX);
     void write_CSR(const char*);
     void write(const char*);
+    void init_variable(int*,int);
     void init_variable(double*,int);
     void init_variable(CPX*,int);
     void add_to_corner(T*,T,int*,int);
@@ -89,7 +98,9 @@ public:
     void get_full_index_i(int*);
     int get_msize(int,int,int,int*);
 // sab begin
+    void sparse_to_full(T*,int,int);
     int get_bandwidth(int);
+    void shift_resize(int,int,int,int);
     void contactunitcell(T*,int,int,int,int);
     void contactunitcell(T*,int,int,int);
     void addcontact(T*,int,int,int);
@@ -99,6 +110,9 @@ public:
     void add_imag(TCSR<CPX>*,CPX);
     void assemble(TCSR<T>*,TCSR<T>*,TCSR<T>*,int,int);
     void assembleshift(TCSR<T>*,TCSR<T>*,TCSR<T>*,int,int);
+    void Bcast(int,MPI_Comm);
+    void scatter(TCSR<T>*,int,MPI_Comm);
+    void reduce(int,MPI_Comm);
     void reducescatter(TCSR<T>*,MPI_Comm);
     void reducescatterfactorconvert(TCSR<double>*,MPI_Comm,double);
     void reducescatterconvert(TCSR<double>*,MPI_Comm);
@@ -107,6 +121,8 @@ public:
     void moveawaypbc(T*,T*,int,int);
     void settozeropbc(int,int);
     void tr_full_to_sparse(T*,int,int);
+    void full_to_sparse(T*,int,int,int,int);
+    void sparse_transpose(TCSR<T> *mat);
     void extract_lower_triangle(TCSR<T>*);
     void extract_upper_triangle(TCSR<T>*);
 // sab end
@@ -176,6 +192,106 @@ inline TCSR<T>::TCSR(TCSR<T> *mat)
 /******************** written by SAB ********************/
 
 template <class T>
+inline TCSR<T>::TCSR(TCSR<T> *mat,int istart, int ilength, int jstart, int jlength)
+{
+    size       = mat->size;
+    size_tot   = mat->size_tot;
+    type       = mat->type;
+    findx      = mat->findx;
+    first_row  = mat->first_row;
+
+    int iend       = istart+ilength;
+    int jend       = jstart+jlength;
+    int loc_istart = max(0,min(size,istart-first_row));
+    int loc_iend   = max(0,min(size,iend-first_row));
+
+    int n_nz_edge  = mat->edge_i[loc_iend]-mat->edge_i[loc_istart];
+    int n_nz_full  = (loc_iend-loc_istart)*jlength;
+    n_nonzeros     = min(n_nz_edge,n_nz_full);
+
+    nnz        = new T[max(n_nonzeros,1)];
+    index_i    = new int[max(size,1)];
+    index_j    = new int[max(n_nonzeros,1)];
+    edge_i     = new int[size+1];
+    diag_pos   = new int[max(size,1)];
+
+    n_nonzeros = 0;
+    init_variable(index_i,size);
+
+    for (int i=loc_istart;i<loc_iend;i++) {
+        for(int e=mat->edge_i[i]-mat->findx;e<mat->edge_i[i+1]-mat->findx;e++){
+            if(mat->index_j[e]-mat->findx>=jstart && mat->index_j[e]-mat->findx<jend){
+                index_i[i]++;
+                index_j[n_nonzeros]=mat->index_j[e];
+                nnz[n_nonzeros]=mat->nnz[e];
+                n_nonzeros++;
+            }
+        }
+    }
+
+    get_row_edge();
+    get_diag_pos();
+
+    if (n_nonzeros!=edge_i[size]-findx) throw CSR_Exception(__LINE__,__FILE__);
+}
+
+/******************** written by SAB ********************/
+
+template <>
+inline TCSR<CPX>::TCSR(CPX alphafactor,TCSR<CPX> *A,CPX betafactor,TCSR<CPX> *B)
+{
+    if ( (size       = A->size      )!=B->size      ) throw CSR_Exception(__LINE__,__FILE__);
+    if ( (size_tot   = A->size_tot  )!=B->size_tot  ) throw CSR_Exception(__LINE__,__FILE__);
+    if ( (type       = A->type      )!=B->type      ) throw CSR_Exception(__LINE__,__FILE__);
+    if ( (findx      = A->findx     )!=B->findx     ) throw CSR_Exception(__LINE__,__FILE__);
+    if ( (first_row  = A->first_row )!=B->first_row ) throw CSR_Exception(__LINE__,__FILE__);
+
+    int addit  = B->additionalentries(A);
+
+    if (addit<0) throw CSR_Exception(__LINE__,__FILE__);
+  
+    n_nonzeros = addit+A->n_nonzeros;
+
+    index_i    = new int[size];
+    edge_i     = new int[size+1];
+    nnz        = new CPX[n_nonzeros];
+    index_j    = new int[n_nonzeros];
+    diag_pos   = new int[size];
+
+    int i,j,edgy1,edgy2;
+    int numbercounter=0;
+    CPX *linefull=new CPX[size_tot];
+
+    for (i=0;i<size;i++) {
+        init_variable(linefull,size_tot);
+        index_i[i]=0;
+        for (edgy1=A->edge_i[i]-A->findx;edgy1<A->edge_i[i+1]-A->findx;edgy1++) {
+            linefull[A->index_j[edgy1]-A->findx]+=alphafactor*A->nnz[edgy1];
+        }
+        for (edgy2=B->edge_i[i]-B->findx;edgy2<B->edge_i[i+1]-B->findx;edgy2++) {
+            linefull[B->index_j[edgy2]-B->findx]+=betafactor*B->nnz[edgy2];
+        }
+        for (j=0;j<size_tot;j++) {
+            if (abs(linefull[j])) {
+                nnz[numbercounter]=linefull[j];
+                index_j[numbercounter]=j+findx;
+                index_i[i]++;
+                numbercounter++;
+            }
+        }
+    }
+
+    n_nonzeros = numbercounter;
+
+    delete[] linefull;
+
+    get_row_edge();
+    get_diag_pos();
+}
+
+/******************** written by SAB ********************/
+
+template <class T>
 inline TCSR<T>::TCSR(T alphafactor,TCSR<double> *A,T betafactor,TCSR<double> *B)
 {
     if ( (size       = A->size      )!=B->size      ) throw CSR_Exception(__LINE__,__FILE__);
@@ -192,8 +308,8 @@ inline TCSR<T>::TCSR(T alphafactor,TCSR<double> *A,T betafactor,TCSR<double> *B)
 
     index_i    = new int[size];
     edge_i     = new int[size+1];
-    nnz        = new T[n_nonzeros];
-    index_j    = new int[n_nonzeros];
+    nnz        = new T[max(n_nonzeros,1)];
+    index_j    = new int[max(n_nonzeros,1)];
     diag_pos   = new int[size];
 
     int i,j,edgy1,edgy2;
@@ -218,6 +334,8 @@ inline TCSR<T>::TCSR(T alphafactor,TCSR<double> *A,T betafactor,TCSR<double> *B)
             }
         }
     }
+
+    n_nonzeros = numbercounter;
 
     delete[] linefull;
 
@@ -246,8 +364,8 @@ inline TCSR<T>::TCSR(T alphafactor,TCSR<double> *A,T betafactor,TCSR<double> *B,
 
     index_i    = new int[size];
     edge_i     = new int[size+1];
-    nnz        = new T[n_nonzeros];
-    index_j    = new int[n_nonzeros];
+    nnz        = new T[max(n_nonzeros,1)];
+    index_j    = new int[max(n_nonzeros,1)];
     diag_pos   = new int[size];
 
     int i,j,edgy1,edgy2;
@@ -272,6 +390,8 @@ inline TCSR<T>::TCSR(T alphafactor,TCSR<double> *A,T betafactor,TCSR<double> *B,
             }
         }
     }
+
+    n_nonzeros = numbercounter;
 
     delete[] linefull;
 
@@ -351,9 +471,9 @@ template <class T>
 inline TCSR<T>::TCSR(TCSR<T> *mat,T *vec)
 {
 
-    nnz        = new T[mat->n_nonzeros];
+    nnz        = new T[max(mat->n_nonzeros,1)];
     index_i    = new int[mat->size];
-    index_j    = new int[mat->n_nonzeros];
+    index_j    = new int[max(mat->n_nonzeros,1)];
     edge_i     = new int[mat->size+1];
     diag_pos   = new int[mat->size];
 
@@ -371,7 +491,7 @@ inline TCSR<T>::TCSR(TCSR<T> *mat,T *vec)
 
     for(int i=0;i<size;i++) {
         for(int e=edge_i[i]-findx;e<edge_i[i+1]-findx;e++) {
-            nnz[e]=(vec[i]+vec[index_j[e]-findx])/2*mat->nnz[e];
+            nnz[e]=(vec[i+first_row]+vec[index_j[e]-findx])/2*mat->nnz[e];
         }
     }
 
@@ -389,14 +509,16 @@ inline TCSR<T>::TCSR(TCSR<T> *matlocal,MPI_Comm my_comm)
     int loc_n_nonzeros=matlocal->n_nonzeros;
     int* dist_loc_n_nonzeros=new int[nprocs];
     MPI_Allgather(&loc_n_nonzeros,1,MPI_INT,dist_loc_n_nonzeros,1,MPI_INT,my_comm);
-    int* displc_n_nonzeros=new int[nprocs+1]();
+    int* displc_n_nonzeros=new int[nprocs+1];
+    displc_n_nonzeros[0]=0;
     for (int iii=1;iii<nprocs+1;iii++)
         displc_n_nonzeros[iii]=displc_n_nonzeros[iii-1]+dist_loc_n_nonzeros[iii-1];
 
     int loc_size=matlocal->size;
     int* dist_loc_size=new int[nprocs];
     MPI_Allgather(&loc_size,1,MPI_INT,dist_loc_size,1,MPI_INT,my_comm);
-    int* displc_size=new int[nprocs+1]();
+    int* displc_size=new int[nprocs+1];
+    displc_size[0]=0;
     for (int iii=1;iii<nprocs+1;iii++)
         displc_size[iii]=displc_size[iii-1]+dist_loc_size[iii-1];
     if (displc_size[iam]!=matlocal->first_row) throw CSR_Exception(__LINE__,__FILE__);
@@ -421,6 +543,334 @@ inline TCSR<T>::TCSR(TCSR<T> *matlocal,MPI_Comm my_comm)
     delete[] displc_n_nonzeros;
     delete[] dist_loc_size;
     delete[] displc_size;
+
+    get_row_edge();
+    get_diag_pos();
+}
+
+/******************** written by SAB ********************/
+
+template <class T>
+inline TCSR<T>::TCSR(TCSR<T> *matlocal,int rootint,MPI_Comm my_comm)
+{
+    int iam,nprocs;
+    MPI_Comm_size(my_comm,&nprocs);
+    MPI_Comm_rank(my_comm,&iam);
+
+    int loc_n_nonzeros=matlocal->n_nonzeros;
+    int* dist_loc_n_nonzeros=new int[nprocs];
+    MPI_Allgather(&loc_n_nonzeros,1,MPI_INT,dist_loc_n_nonzeros,1,MPI_INT,my_comm);
+    int* displc_n_nonzeros=new int[nprocs+1]();
+    for (int iii=1;iii<nprocs+1;iii++)
+        displc_n_nonzeros[iii]=displc_n_nonzeros[iii-1]+dist_loc_n_nonzeros[iii-1];
+
+    int loc_size=matlocal->size;
+    int* dist_loc_size=new int[nprocs];
+    MPI_Allgather(&loc_size,1,MPI_INT,dist_loc_size,1,MPI_INT,my_comm);
+    int* displc_size=new int[nprocs+1]();
+    for (int iii=1;iii<nprocs+1;iii++)
+        displc_size[iii]=displc_size[iii-1]+dist_loc_size[iii-1];
+    if (displc_size[iam]!=matlocal->first_row) throw CSR_Exception(__LINE__,__FILE__);
+
+    if (iam==rootint) {
+        n_nonzeros = displc_n_nonzeros[nprocs];
+        size_tot   = matlocal->size_tot;
+    } else {
+        n_nonzeros = 0;
+        size_tot   = 0;
+    }
+    size       = size_tot;
+    findx      = matlocal->findx;
+    first_row  = 0;
+    type       = 0;
+    nnz        = new T[max(n_nonzeros,1)];
+    index_i    = new int[max(size,1)];
+    index_j    = new int[max(n_nonzeros,1)];
+    edge_i     = new int[size+1];
+    diag_pos   = new int[max(size,1)];
+
+    MPI_Gatherv(matlocal->nnz,matlocal->n_nonzeros,give_me_MPI_datatype(nnz),nnz,dist_loc_n_nonzeros,displc_n_nonzeros,give_me_MPI_datatype(nnz),rootint,my_comm);
+    MPI_Gatherv(matlocal->index_j,matlocal->n_nonzeros,MPI_INT,index_j,dist_loc_n_nonzeros,displc_n_nonzeros,MPI_INT,rootint,my_comm);
+    MPI_Gatherv(matlocal->index_i,matlocal->size,MPI_INT,index_i,dist_loc_size,displc_size,MPI_INT,rootint,my_comm);
+
+    delete[] dist_loc_n_nonzeros;
+    delete[] displc_n_nonzeros;
+    delete[] dist_loc_size;
+    delete[] displc_size;
+
+    get_row_edge();
+    get_diag_pos();
+}
+
+/******************** written by SAB ********************/
+
+template <class T>
+inline TCSR<T>::TCSR(TCSR<T> *matlocal,int *rootvec,int rootnum,MPI_Comm my_comm)
+{
+    int iam,nprocs;
+    MPI_Comm_size(my_comm,&nprocs);
+    MPI_Comm_rank(my_comm,&iam);
+
+    int loc_n_nonzeros=matlocal->n_nonzeros;
+    int* dist_loc_n_nonzeros=new int[nprocs];
+    MPI_Allgather(&loc_n_nonzeros,1,MPI_INT,dist_loc_n_nonzeros,1,MPI_INT,my_comm);
+    int* displc_n_nonzeros=new int[nprocs+1]();
+    for (int iii=1;iii<nprocs+1;iii++)
+        displc_n_nonzeros[iii]=displc_n_nonzeros[iii-1]+dist_loc_n_nonzeros[iii-1];
+
+    int loc_size=matlocal->size;
+    int* dist_loc_size=new int[nprocs];
+    MPI_Allgather(&loc_size,1,MPI_INT,dist_loc_size,1,MPI_INT,my_comm);
+    int* displc_size=new int[nprocs+1]();
+    for (int iii=1;iii<nprocs+1;iii++)
+        displc_size[iii]=displc_size[iii-1]+dist_loc_size[iii-1];
+    if (displc_size[iam]!=matlocal->first_row) throw CSR_Exception(__LINE__,__FILE__);
+
+    n_nonzeros = 0;
+    size_tot   = 0;
+    for (int iroot=0;iroot<rootnum;iroot++){
+        if (iam==rootvec[iroot]){
+            n_nonzeros = displc_n_nonzeros[nprocs];
+            size_tot   = matlocal->size_tot;
+        }
+    }
+    size       = size_tot;
+    findx      = matlocal->findx;
+    first_row  = 0;
+    type       = 0;
+    nnz        = new T[max(n_nonzeros,1)];
+    index_i    = new int[max(size,1)];
+    index_j    = new int[max(n_nonzeros,1)];
+    edge_i     = new int[size+1];
+    diag_pos   = new int[max(size,1)];
+
+    MPI_Gatherv(matlocal->nnz,matlocal->n_nonzeros,give_me_MPI_datatype(nnz),nnz,dist_loc_n_nonzeros,displc_n_nonzeros,give_me_MPI_datatype(nnz),rootvec[0],my_comm);
+    MPI_Gatherv(matlocal->index_j,matlocal->n_nonzeros,MPI_INT,index_j,dist_loc_n_nonzeros,displc_n_nonzeros,MPI_INT,rootvec[0],my_comm);
+    MPI_Gatherv(matlocal->index_i,matlocal->size,MPI_INT,index_i,dist_loc_size,displc_size,MPI_INT,rootvec[0],my_comm);
+
+    MPI_Group my_group,sub_group;
+    MPI_Comm_group(my_comm,&my_group);
+    MPI_Group_incl(my_group,rootnum,rootvec,&sub_group);
+    MPI_Comm sub_comm;
+    MPI_Comm_create(my_comm,sub_group,&sub_comm);
+    MPI_Group_free(&my_group);
+    MPI_Group_free(&sub_group);
+    MPI_Bcast(nnz,n_nonzeros,give_me_MPI_datatype(nnz),rootvec[0],sub_comm);
+    MPI_Bcast(index_j,n_nonzeros,MPI_INT,rootvec[0],sub_comm);
+    MPI_Bcast(index_i,size,MPI_INT,rootvec[0],sub_comm);
+    MPI_Comm_free(&sub_comm);
+
+/*
+    struct tags {
+        enum {
+            nnz,
+            index_j,
+            index_i
+        };
+    };
+
+    MPI_Status status;
+    if (iam==rootvec[0]){
+        for (int iroot=1;iroot<rootnum;iroot++){
+            MPI_Send(nnz,n_nonzeros,give_me_MPI_datatype(nnz),rootvec[iroot],tags::nnz,my_comm);
+            MPI_Send(index_j,n_nonzeros,MPI_INT,rootvec[iroot],tags::index_j,my_comm);
+            MPI_Send(index_i,size,MPI_INT,rootvec[iroot],tags::index_i,my_comm);
+        }
+    }else{
+        for (int iroot=1;iroot<rootnum;iroot++){
+            if (iam==rootvec[iroot]){
+                MPI_Recv(nnz,n_nonzeros,give_me_MPI_datatype(nnz),rootvec[0],tags::nnz,my_comm,&status);
+                MPI_Recv(index_j,n_nonzeros,MPI_INT,rootvec[0],tags::index_j,my_comm,&status);
+                MPI_Recv(index_i,size,MPI_INT,rootvec[0],tags::index_i,my_comm,&status);
+            }
+        }
+    }
+*/
+
+    delete[] dist_loc_n_nonzeros;
+    delete[] displc_n_nonzeros;
+    delete[] dist_loc_size;
+    delete[] displc_size;
+
+    get_row_edge();
+    get_diag_pos();
+}
+
+/******************** written by SAB ********************/
+
+template <class T>
+inline TCSR<T>::TCSR(TCSR<T> *matlocal,MPI_Comm my_comm_in,int size_my_comm_out,MPI_Comm *my_comm_out,MPI_Comm *equal_rank_comm)
+{
+    struct tags {
+        enum {
+            first_row,
+            nnz,
+            index_j,
+            index_i
+        };
+    };
+
+    int iam,nprocs;
+    MPI_Comm_size(my_comm_in,&nprocs);
+    MPI_Comm_rank(my_comm_in,&iam);
+    if (nprocs % size_my_comm_out) throw CSR_Exception(__LINE__,__FILE__);
+    int nmat = nprocs / size_my_comm_out;
+    int color = iam / size_my_comm_out;
+    MPI_Comm_split(my_comm_in,color,iam,my_comm_out);
+    int rank_my_comm_out;
+    MPI_Comm_rank(*my_comm_out,&rank_my_comm_out);
+    MPI_Comm_split(my_comm_in,rank_my_comm_out,iam,equal_rank_comm);
+
+    int loc_n_nonzeros=matlocal->n_nonzeros;
+    int* dist_loc_n_nonzeros=new int[nprocs];
+    MPI_Allgather(&loc_n_nonzeros,1,MPI_INT,dist_loc_n_nonzeros,1,MPI_INT,my_comm_in);
+    int* displc_n_nonzeros=new int[nmat+1]();
+    for (int irecv=0;irecv<nmat;irecv++) {
+        int from_node = (irecv+iam*nmat)%nprocs;
+        displc_n_nonzeros[irecv+1]=displc_n_nonzeros[irecv]+dist_loc_n_nonzeros[from_node];
+    }
+
+    int loc_size=matlocal->size;
+    int* dist_loc_size=new int[nprocs];
+    MPI_Allgather(&loc_size,1,MPI_INT,dist_loc_size,1,MPI_INT,my_comm_in);
+    int* displc_size=new int[nmat+1]();
+    for (int irecv=0;irecv<nmat;irecv++) {
+        int from_node = (irecv+iam*nmat)%nprocs;
+        displc_size[irecv+1]=displc_size[irecv]+dist_loc_size[from_node];
+    }
+
+    MPI_Request reqs;
+    MPI_Status status;
+    MPI_Irecv(&first_row,1,MPI_INT,(iam*nmat)%(nmat*size_my_comm_out),tags::first_row,my_comm_in,&reqs);
+    if (!(iam%nmat))
+        for (int isend=0;isend<nmat;isend++)
+            MPI_Send(&matlocal->first_row,1,MPI_INT,iam/nmat+isend*size_my_comm_out,tags::first_row,my_comm_in);
+    MPI_Wait(&reqs,&status);
+
+    n_nonzeros = displc_n_nonzeros[nmat];
+    size_tot   = matlocal->size_tot;
+    size       = displc_size[nmat];
+    findx      = matlocal->findx;
+    type       = 0;
+    nnz        = new T[max(n_nonzeros,1)];
+    index_i    = new int[max(size,1)];
+    index_j    = new int[max(n_nonzeros,1)];
+    edge_i     = new int[size+1];
+    diag_pos   = new int[max(size,1)];
+
+    MPI_Status* nnz_status=new MPI_Status[nmat];
+    MPI_Status* ind_j_status=new MPI_Status[nmat];
+    MPI_Status* ind_i_status=new MPI_Status[nmat];
+    MPI_Request* nnz_reqs=new MPI_Request[nmat];
+    MPI_Request* ind_j_reqs=new MPI_Request[nmat];
+    MPI_Request* ind_i_reqs=new MPI_Request[nmat];
+
+    for (int irecv=0;irecv<nmat;irecv++) {
+        int from_node = (irecv+iam*nmat)%nprocs;
+        MPI_Irecv(&nnz[displc_n_nonzeros[irecv]],dist_loc_n_nonzeros[from_node],give_me_MPI_datatype(nnz),from_node,tags::nnz,my_comm_in,&nnz_reqs[irecv]);
+        MPI_Irecv(&index_j[displc_n_nonzeros[irecv]],dist_loc_n_nonzeros[from_node],MPI_INT,from_node,tags::index_j,my_comm_in,&ind_j_reqs[irecv]);
+        MPI_Irecv(&index_i[displc_size[irecv]],dist_loc_size[from_node],MPI_INT,from_node,tags::index_i,my_comm_in,&ind_i_reqs[irecv]);
+    }
+
+    for (int isend=0;isend<nmat;isend++) {
+        int to_node = iam/nmat+isend*size_my_comm_out;
+        MPI_Send(matlocal->nnz,matlocal->n_nonzeros,give_me_MPI_datatype(nnz),to_node,tags::nnz,my_comm_in);
+        MPI_Send(matlocal->index_j,matlocal->n_nonzeros,MPI_INT,to_node,tags::index_j,my_comm_in);
+        MPI_Send(matlocal->index_i,matlocal->size,MPI_INT,to_node,tags::index_i,my_comm_in);
+    }
+
+    MPI_Waitall(nmat,nnz_reqs,nnz_status);
+    MPI_Waitall(nmat,ind_j_reqs,ind_j_status);
+    MPI_Waitall(nmat,ind_i_reqs,ind_i_status);
+
+    delete[] nnz_status;
+    delete[] ind_j_status;
+    delete[] ind_i_status;
+    delete[] nnz_reqs;
+    delete[] ind_j_reqs;
+    delete[] ind_i_reqs;
+
+    delete[] dist_loc_n_nonzeros;
+    delete[] displc_n_nonzeros;
+    delete[] dist_loc_size;
+    delete[] displc_size;
+
+    get_row_edge();
+    get_diag_pos();
+}
+
+/******************** written by SAB ********************/
+
+template <class T>
+inline TCSR<T>::TCSR(TCSR<T> *mat,TCSR<T> *dep_mat,int rootrank,MPI_Comm matrix_comm)
+{
+    int iam,nprocs;
+    MPI_Comm_size(matrix_comm,&nprocs);
+    MPI_Comm_rank(matrix_comm,&iam);
+
+    size_tot   = mat->size_tot;
+    type       = mat->type;
+    findx      = mat->findx;
+
+    if (iam==rootrank)
+        if (size_tot!=dep_mat->size_tot || type!=dep_mat->type || findx!=dep_mat->findx)
+            throw CSR_Exception(__LINE__,__FILE__);
+
+    size       = mat->size;
+    first_row  = mat->first_row;
+    
+    int *first_rows = new int[nprocs+1];
+    MPI_Allgather(&first_row,1,MPI_INT,first_rows,1,MPI_INT,matrix_comm);
+    first_rows[nprocs]=size_tot;
+    int *sizes = new int[nprocs];
+    for (int irank=0;irank<nprocs;irank++) {
+        sizes[irank]=first_rows[irank+1]-first_rows[irank];
+    }
+    if (size!=sizes[iam]) throw CSR_Exception(__LINE__,__FILE__);
+
+    int *n_nonzeros_array = new int[nprocs];
+    if (iam==rootrank) {
+        for (int irank=0;irank<nprocs;irank++) {
+            n_nonzeros_array[irank]=dep_mat->edge_i[first_rows[irank+1]]-dep_mat->edge_i[first_rows[irank]];
+        }
+    }
+    MPI_Bcast(n_nonzeros_array,nprocs,MPI_INT,rootrank,matrix_comm);
+    int *n_nonzeros_disp = new int[nprocs+1];
+    n_nonzeros_disp[0]=0;
+    for (int irank=0;irank<nprocs;irank++) {
+        n_nonzeros_disp[irank+1]=n_nonzeros_disp[irank]+n_nonzeros_array[irank];
+    }
+    n_nonzeros=n_nonzeros_array[iam];
+
+    nnz        = new T[max(n_nonzeros,1)];
+    index_i    = new int[size];
+    index_j    = new int[max(n_nonzeros,1)];
+    edge_i     = new int[size+1];
+    diag_pos   = new int[size];
+
+    init_variable(index_i,size);
+    if (!n_nonzeros) {
+        init_variable(nnz,1);
+        init_variable(index_j,1);
+    }
+
+    T *nnz_ptr = NULL;
+    int *indj_ptr = NULL;
+    int *indi_ptr = NULL;
+    if (iam==rootrank) {
+        nnz_ptr=dep_mat->nnz;
+        indj_ptr=dep_mat->index_j;
+        indi_ptr=dep_mat->index_i;
+    }
+
+    MPI_Scatterv(nnz_ptr,n_nonzeros_array,n_nonzeros_disp,give_me_MPI_datatype(nnz),nnz,n_nonzeros,give_me_MPI_datatype(nnz),rootrank,matrix_comm);
+    MPI_Scatterv(indj_ptr,n_nonzeros_array,n_nonzeros_disp,MPI_INT,index_j,n_nonzeros,MPI_INT,rootrank,matrix_comm);
+    MPI_Scatterv(indi_ptr,sizes,first_rows,MPI_INT,index_i,size,MPI_INT,rootrank,matrix_comm);
+
+    delete[] first_rows;
+    delete[] sizes;
+    delete[] n_nonzeros_array;
+    delete[] n_nonzeros_disp;
 
     get_row_edge();
     get_diag_pos();
@@ -1180,7 +1630,7 @@ void TCSR<CPX>::sparse_to_cmp_full(CPX *B,int nrow,int ncol)
 }
 */
 /************************************************************************************************/
-
+/*
 template <class T>
 void TCSR<T>::sparse_to_full(T *B,int nrow,int ncol)
 {
@@ -1195,8 +1645,25 @@ void TCSR<T>::sparse_to_full(T *B,int nrow,int ncol)
         }
     }
 }
-
+*/
 /*SAB********************************************************************************************/
+
+template <class T>
+void TCSR<T>::sparse_to_full(T *B,int nrow,int ncol)
+{
+    int i,j,e;
+
+    init_variable(B,nrow*ncol);
+    for(i=0;i<min(nrow,size);i++){
+        for(e=edge_i[i]-findx;e<edge_i[i+1]-findx;e++){
+            if ((j=index_j[e]-findx)<ncol){
+                B[i+j*nrow] = nnz[e];
+            }
+        }
+    }
+}
+
+/************************************************************************************************/
 
 template <class T>
 int TCSR<T>::get_bandwidth(int ndof)
@@ -1211,6 +1678,35 @@ int TCSR<T>::get_bandwidth(int ndof)
     double bandw=ceil(double(jmax)/ndof);
     return int(bandw)-1;
 // maybe add security check to make sure that bandw from other side is the same
+}
+
+/************************************************************************************************/
+
+template <class T>
+void TCSR<T>::shift_resize(int istart, int ilength, int jstart, int jlength)
+{
+
+    if (first_row || istart+ilength>size) throw CSR_Exception(__LINE__,__FILE__);
+
+    size = ilength;
+    size_tot = ilength;
+
+    for (int e=0;e<n_nonzeros;e++){
+        int j=index_j[e];
+        if (j>=jstart && j<jstart+jlength){
+            index_j[e]-=jstart;
+        }else{
+            throw CSR_Exception(__LINE__,__FILE__);
+        }
+    }
+
+    for (int i=0;i<size;i++){
+        index_i[i]=index_i[i+istart];
+    }
+
+    get_row_edge();
+    get_diag_pos();
+
 }
 
 /************************************************************************************************/
@@ -1486,6 +1982,94 @@ void TCSR<T>::assembleshift(TCSR<T> *leftmat,TCSR<T> *middlemat,TCSR<T> *rightma
 /************************************************************************************************/
 
 template <class T>
+void TCSR<T>::Bcast(int rootrank,MPI_Comm my_comm)
+{
+    MPI_Bcast(&size,1,MPI_INT,rootrank,my_comm);
+    MPI_Bcast(&size_tot,1,MPI_INT,rootrank,my_comm);
+    MPI_Bcast(&type,1,MPI_INT,rootrank,my_comm);
+    MPI_Bcast(&n_nonzeros,1,MPI_INT,rootrank,my_comm);
+    MPI_Bcast(&findx,1,MPI_INT,rootrank,my_comm);
+    MPI_Bcast(&first_row,1,MPI_INT,rootrank,my_comm);
+    
+    MPI_Bcast(nnz,n_nonzeros,give_me_MPI_datatype(nnz),rootrank,my_comm);
+    MPI_Bcast(index_i,size,MPI_INT,rootrank,my_comm);
+    MPI_Bcast(index_j,n_nonzeros,MPI_INT,rootrank,my_comm);
+    MPI_Bcast(edge_i,size+1,MPI_INT,rootrank,my_comm);
+    MPI_Bcast(diag_pos,size,MPI_INT,rootrank,my_comm);
+}
+
+/************************************************************************************************/
+
+template <class T>
+void TCSR<T>::scatter(TCSR<T>*matdist,int root,MPI_Comm my_comm)
+{
+    int iam,nprocs;
+    MPI_Comm_size(my_comm,&nprocs);
+    MPI_Comm_rank(my_comm,&iam);
+
+    int *scounts=new int[nprocs];
+    int sloc=matdist->n_nonzeros;
+    MPI_Allgather(&sloc,1,MPI_INT,scounts,1,MPI_INT,my_comm);
+
+    int *first_rows=new int[nprocs];
+    int frloc=matdist->first_row;
+    MPI_Allgather(&frloc,1,MPI_INT,first_rows,1,MPI_INT,my_comm);
+
+    int rows_start;
+    int rows_end;
+    if (iam==root){
+        rows_start=first_row;
+        rows_end=first_row+size;
+    }
+    MPI_Bcast(&rows_start,1,MPI_INT,root,my_comm);
+    MPI_Bcast(&rows_end,1,MPI_INT,root,my_comm);
+
+    for (int IR=0;IR<nprocs;IR++){
+        int row=first_rows[IR];
+        if (row<rows_start || row>=rows_end){
+            scounts[IR]=0;
+        }
+    }
+
+    int *displc=new int[nprocs];
+    displc[0]=0;
+    for (int IP=1;IP<nprocs;IP++){
+        displc[IP]=displc[IP-1]+scounts[IP-1];
+    }
+
+    MPI_Scatterv(nnz,scounts,displc,give_me_MPI_datatype(nnz),matdist->nnz,scounts[iam],give_me_MPI_datatype(nnz),root,my_comm);
+
+    delete[] scounts;
+    delete[] first_rows;
+    delete[] displc;
+}
+
+/************************************************************************************************/
+
+template <class T>
+void TCSR<T>::reduce(int root,MPI_Comm my_comm)
+{
+    T *nnz_tmp=NULL;
+
+    int iam,nprocs;
+    MPI_Comm_size(my_comm,&nprocs);
+    MPI_Comm_rank(my_comm,&iam);
+
+    if (iam==root){
+        nnz_tmp=new T[n_nonzeros];
+    }
+
+    MPI_Reduce(nnz,nnz_tmp,n_nonzeros,give_me_MPI_datatype(nnz),MPI_SUM,root,my_comm);
+
+    if (iam==root){
+        c_tcopy(n_nonzeros,nnz_tmp,1,nnz,1);
+        delete[] nnz_tmp;
+    }
+}
+
+/************************************************************************************************/
+
+template <class T>
 void TCSR<T>::reducescatter(TCSR<T>*matdist,MPI_Comm my_comm)
 {
     int iam,nprocs;
@@ -1493,7 +2077,6 @@ void TCSR<T>::reducescatter(TCSR<T>*matdist,MPI_Comm my_comm)
     MPI_Comm_rank(my_comm,&iam);
 
     int *recvcounts=new int[nprocs];
-
     int recvloc=matdist->n_nonzeros;
     MPI_Allgather(&recvloc,1,MPI_INT,recvcounts,1,MPI_INT,my_comm);
 
@@ -1558,7 +2141,7 @@ inline double TCSR<double>::psipsidaggerdosdebug(CPX* psi,int nkval)
     double result=0;
     for(i=0;i<size;i++){
         for(e=edge_i[i]-findx;e<edge_i[i+1]-findx;e++){
-            result+=nnz[e]*real(c_zdotc(nkval,&psi[index_j[e]-findx],size,&psi[i],size));
+            result+=nnz[e]*real(c_zdotc(nkval,&psi[index_j[e]-findx],size_tot,&psi[first_row+i],size_tot));
         }
     }
     return result;
@@ -1569,10 +2152,11 @@ inline double TCSR<double>::psipsidaggerdosdebug(CPX* psi,int nkval)
 template <>
 inline void TCSR<double>::psipsidagger(CPX* psi,int nkval,CPX factor)
 {
+if (first_row) throw CSR_Exception(__LINE__,__FILE__);
     int i,e;
     for(i=0;i<size;i++){
         for(e=edge_i[i]-findx;e<edge_i[i+1]-findx;e++){
-            nnz[e]+=real(factor*c_zdotc(nkval,&psi[index_j[e]-findx],size,&psi[i],size));
+            nnz[e]+=real(factor*c_zdotc(nkval,&psi[index_j[e]-findx],size_tot,&psi[first_row+i],size_tot));
         }
     }
 }
@@ -1613,20 +2197,19 @@ template <class T>
 void TCSR<T>::settozeropbc(int bw, int ndof)
 {
     int i,e;
-    int bwndof=bw*ndof;
     T zero=(T)0;
 
-    for (i=0;i<bwndof;i++) {
+    for (i=0;i<max(0,min(size,bw*ndof-first_row));i++) {
         for (e=edge_i[i]-findx;e<edge_i[i+1]-findx;e++) {
-            if (index_j[e]-findx-i>=bwndof) {
+            if ( (index_j[e]-findx)/ndof - (i+first_row)/ndof > bw ) {
                 nnz[e]=zero;
             }
         }
     }
 
-    for (i=size_tot-bwndof;i<size_tot;i++) {
+    for (i=max(0,min(size,size_tot-bw*ndof-first_row));i<size;i++) {
         for (e=edge_i[i]-findx;e<edge_i[i+1]-findx;e++) {
-            if (index_j[e]-findx-i<=-bwndof) {
+            if ( (index_j[e]-findx)/ndof - (i+first_row)/ndof < -bw ) {
                 nnz[e]=zero;
             }
         }
@@ -1713,6 +2296,73 @@ void TCSR<T>::extract_upper_triangle(TCSR<T> *mat)
     if (n_nonzeros!=edge_i[size]-findx) throw CSR_Exception(__LINE__,__FILE__);
 }
 
+/************************************************************************************************/
+
+template <class T>
+void TCSR<T>::full_to_sparse(T *B,int nrow,int ncol,int ipos,int jpos)
+{
+    int i,j;
+
+    n_nonzeros = 0;
+    init_variable(index_i,size);
+
+    int imax=min(ipos+nrow,size)-ipos;    
+    for(i=0;i<imax;i++){
+
+        for(j=0;j<ncol;j++){
+
+	    if(abs(B[i+j*nrow])>tollim){
+
+                index_j[n_nonzeros] = jpos+j+findx;
+                nnz[n_nonzeros]     = B[i+j*nrow];
+
+                index_i[i+ipos]++;
+                n_nonzeros++;
+            }
+        }
+    }
+    get_row_edge();
+    get_diag_pos();
+}
+
+/************************************************************************************************/
+
+template <class T>
+void TCSR<T>::sparse_transpose(TCSR<T> *mat)
+{
+    int i, j, e;
+    int fin  = mat->findx;
+    int fout = findx;
+
+    n_nonzeros = mat->n_nonzeros;
+    
+    init_variable(index_i,size);
+    for(i=0;i<size;i++){
+        for(e=mat->edge_i[i]-fin;e<mat->edge_i[i+1]-fin;e++){
+            index_i[mat->index_j[e]-fin]++;
+        }
+    }
+    get_row_edge();
+
+    int *ptr = new int[size];
+    for(i=0;i<size;i++){
+        ptr[i] = edge_i[i] - fout;
+    }
+    
+    for(i=0;i<size;i++){
+        for(e=mat->edge_i[i]-fin;e<mat->edge_i[i+1]-fin;e++){
+            j = mat->index_j[e]-fin;
+            index_j[ptr[j]] = i + fout;
+            nnz[ptr[j]] = mat->nnz[e];
+            ptr[j]++;
+        }
+    }
+
+    delete[] ptr;
+
+    get_diag_pos();
+}
+    
 /*SAB*END****************************************************************************************/
 
 template <class T>
@@ -1889,6 +2539,16 @@ inline void TCSR<CPX>::write(const char* filename)
         }
     }
     myfile.close();
+}
+
+/************************************************************************************************/
+
+template <class T>
+void TCSR<T>::init_variable(int *var,int N)
+{
+    for(int i=0;i<N;i++){
+        var[i] = 0;
+    }
 }
 
 /************************************************************************************************/

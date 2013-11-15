@@ -25,6 +25,8 @@ private:
     MPI_Comm slu_comm;
     ZMUMPS_STRUC_C id;
 
+    int do_distribute;
+
     void create_local_matrix(TCSR<T>*,ZMUMPS_STRUC_C*);
 };
 
@@ -34,7 +36,7 @@ extern "C"{
 }
 
 /************************************************************************************************/
-
+/*
 template <class T>
 MUMPS<T>::MUMPS(TCSR<T>* mat,MPI_Comm solver_comm)
 {
@@ -56,11 +58,11 @@ MUMPS<T>::MUMPS(TCSR<T>* mat,MPI_Comm solver_comm)
     create_local_matrix(mat,&id);
 
 }
-
+*/
 /************************************************************************************************/
 
 template <class T>
-MUMPS<T>::MUMPS(TCSR<T>* mat,MPI_Comm solver_comm,int pord)
+MUMPS<T>::MUMPS(TCSR<T>* mat,MPI_Comm solver_comm,int pord=0)
 {
 
     slu_comm                  = solver_comm;
@@ -69,6 +71,8 @@ MUMPS<T>::MUMPS(TCSR<T>* mat,MPI_Comm solver_comm,int pord)
     MPI_Comm_rank(slu_comm,&mpi_rank);
 
     fortran_index             = 1;
+
+    do_distribute             = 1;
 
     id.par                    = 1;
     id.sym                    = 0;
@@ -80,8 +84,12 @@ MUMPS<T>::MUMPS(TCSR<T>* mat,MPI_Comm solver_comm,int pord)
 
     create_local_matrix(mat,&id);
 
-    if(pord){
+    if(pord%2){
         id.icntl[6] = 4; //PORD reordering algorithm
+    }
+
+    if (pord/2){
+        do_distribute=0;
     }
 
 }
@@ -142,27 +150,36 @@ void MUMPS<CPX>::solve_equation(CPX *res, CPX *arg_rhs, int no_rhs)
     //id.rhs      = new ZMUMPS_COMPLEX[no_rhs*2*id.n];
     id.job      = 3;
     
-    if(mpi_rank){
-        MPI_Send(&m_loc,1,MPI_INT,0,0,slu_comm);
-        MPI_Send(arg_rhs,no_rhs*m_loc,MPI_DOUBLE_COMPLEX,0,1,slu_comm);
-    }else{
-        Itot = 0;
-        for(IM=0;IM<m_loc;IM++){
-            for(IRHS=0;IRHS<no_rhs;IRHS++){
-                id.rhs[IRHS*id.n+Itot].r=real(arg_rhs[IRHS*m_loc+IM]);
-                id.rhs[IRHS*id.n+Itot].i=imag(arg_rhs[IRHS*m_loc+IM]);
-            }
-            Itot++;
-        }
-        for(i_proc=1;i_proc<mpi_size;i_proc++){
-            MPI_Recv(&no_element,1,MPI_INT,i_proc,0,slu_comm,&status);
-            MPI_Recv(arg_rhs,no_rhs*no_element,MPI_DOUBLE_COMPLEX,i_proc,1,slu_comm,&status);
-            for(IM=0;IM<no_element;IM++){
+    if (do_distribute) {
+        if(mpi_rank){
+            MPI_Send(&m_loc,1,MPI_INT,0,0,slu_comm);
+            MPI_Send(arg_rhs,no_rhs*m_loc,MPI_DOUBLE_COMPLEX,0,1,slu_comm);
+        }else{
+            Itot = 0;
+            for(IM=0;IM<m_loc;IM++){
                 for(IRHS=0;IRHS<no_rhs;IRHS++){
-                    id.rhs[IRHS*id.n+Itot].r=real(arg_rhs[IRHS*no_element+IM]);
-                    id.rhs[IRHS*id.n+Itot].i=imag(arg_rhs[IRHS*no_element+IM]);
+                    id.rhs[IRHS*id.n+Itot].r=real(arg_rhs[IRHS*m_loc+IM]);
+                    id.rhs[IRHS*id.n+Itot].i=imag(arg_rhs[IRHS*m_loc+IM]);
                 }
                 Itot++;
+            }
+            for(i_proc=1;i_proc<mpi_size;i_proc++){
+                MPI_Recv(&no_element,1,MPI_INT,i_proc,0,slu_comm,&status);
+                MPI_Recv(arg_rhs,no_rhs*no_element,MPI_DOUBLE_COMPLEX,i_proc,1,slu_comm,&status);
+                for(IM=0;IM<no_element;IM++){
+                    for(IRHS=0;IRHS<no_rhs;IRHS++){
+                        id.rhs[IRHS*id.n+Itot].r=real(arg_rhs[IRHS*no_element+IM]);
+                        id.rhs[IRHS*id.n+Itot].i=imag(arg_rhs[IRHS*no_element+IM]);
+                    }
+                    Itot++;
+                }
+            }
+        }
+    }else{
+        if(!mpi_rank){
+            for(int IELE=0;IELE<no_rhs*id.n;IELE++){
+                id.rhs[IELE].r=real(arg_rhs[IELE]);
+                id.rhs[IELE].i=imag(arg_rhs[IELE]);
             }
         }
     }
@@ -170,11 +187,17 @@ void MUMPS<CPX>::solve_equation(CPX *res, CPX *arg_rhs, int no_rhs)
     zmumps_c(&id);   
 
     MPI_Bcast(id.rhs,no_rhs*id.n,MPI_DOUBLE_COMPLEX,0,slu_comm);
-
-    for(IM=fst_row;IM<fst_row+m_loc;IM++){
-        for(IRHS=0;IRHS<no_rhs;IRHS++){
-            res[IRHS*m_loc+IM-fst_row] = \
-	        CPX(id.rhs[IRHS*id.n+IM].r,id.rhs[IRHS*id.n+IM].i);
+ 
+    if (do_distribute) {
+        for(IM=fst_row;IM<fst_row+m_loc;IM++){
+            for(IRHS=0;IRHS<no_rhs;IRHS++){
+                res[IRHS*m_loc+IM-fst_row] = \
+                    CPX(id.rhs[IRHS*id.n+IM].r,id.rhs[IRHS*id.n+IM].i);
+            }
+        }
+    }else{
+        for(int IELE=0;IELE<no_rhs*id.n;IELE++){
+            res[IELE] = CPX(id.rhs[IELE].r,id.rhs[IELE].i);
         }
     }
    

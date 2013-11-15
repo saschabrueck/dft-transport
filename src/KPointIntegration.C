@@ -43,7 +43,7 @@ int kpointintegration(TCSR<double> *Overlap,TCSR<double> *KohnSham,TCSR<double> 
     KohnShamCollect->sparse_to_full(ham,size,size);
     delete KohnShamCollect;
 
-    CPX *overlapnnzsave=new CPX[OverlapCollect->n_nonzeros];
+    CPX *overlapnnzsave=new CPX[OverlapCollect->n_nonzeros]();
     c_dcopy(OverlapCollect->n_nonzeros,OverlapCollect->nnz,1,(double*)overlapnnzsave,2);
 
     CPX *A=new CPX[sizesq];
@@ -61,6 +61,9 @@ int kpointintegration(TCSR<double> *Overlap,TCSR<double> *KohnSham,TCSR<double> 
     OverlapCollect->moveawaypbc(saut,sau,bw,ndof);
     OverlapCollect->sparse_to_full(sam,size,size);
     
+    CPX *overlapnnz=new CPX[OverlapCollect->n_nonzeros]();
+    c_dcopy(OverlapCollect->n_nonzeros,OverlapCollect->nnz,1,(double*)overlapnnz,2);
+
     CPX *B=new CPX[sizesq];
     for (int i=0;i<size;i++)
         for (int j=0;j<size;j++)
@@ -109,7 +112,6 @@ int kpointintegration(TCSR<double> *Overlap,TCSR<double> *KohnSham,TCSR<double> 
     full_transpose(size,size,A,B);
     delete[] A;
     TCSR<CPX> *Ps = new TCSR<CPX>(OverlapCollect,B,CPX(alphastep*step,0.0),nocclocal);
-    delete OverlapCollect;
     Ps->sparse_to_full(B,size,size);
     CPX trPS_k=c_zdotc(sizesq,B,1,B2,1);
     CPX trPS_kSum=CPX(0.0,0.0);
@@ -118,18 +120,34 @@ int kpointintegration(TCSR<double> *Overlap,TCSR<double> *KohnSham,TCSR<double> 
     MPI_Allreduce(&trPS_k,&trPS_kSum,1,MPI_DOUBLE_COMPLEX,MPI_SUM,MPI_COMM_WORLD);
     if (!iam) cout << "Number of electrons from Sum_k(tr(P[k]S[k])) " << real(trPS_kSum) << endl;
 
-    int middlebegin=Ps->edge_i[bw*ndof]-Ps->findx;
-    int middlenumber=Ps->edge_i[bw*ndof+ndof]-Ps->findx-middlebegin;
-    CPX trPScpx=c_zdotc(middlenumber,&Ps->nnz[middlebegin],1,&overlapnnzsave[middlebegin],1);
-    CPX trPScpxSum=CPX(0.0,0.0);
-    MPI_Allreduce(&trPScpx,&trPScpxSum,1,MPI_DOUBLE_COMPLEX,MPI_SUM,MPI_COMM_WORLD);
-    if (!iam) cout << "Number of electrons from density matrix strip " << real(trPScpxSum)*ncells << endl;
+    int begin,number;
+    CPX trPScpx,trPScpxSum;
+    if (!iam) cout << "Number of electrons per unit cell " << endl;
+    for (int idens=0;idens<ncells;idens++) {
+        begin=Ps->edge_i[idens*ndof]-Ps->findx;
+        number=Ps->edge_i[idens*ndof+ndof]-Ps->findx-begin;
+        trPScpx=c_zdotc(number,&Ps->nnz[begin],1,&overlapnnz[begin],1);
+        MPI_Allreduce(&trPScpx,&trPScpxSum,1,MPI_DOUBLE_COMPLEX,MPI_SUM,MPI_COMM_WORLD);
+        if (!iam) cout << " " << real(trPScpxSum);
+    }
+    if (!iam) cout << endl;
+    for (int idens=0;idens<ncells;idens++) {
+        begin=Ps->edge_i[idens*ndof]-Ps->findx;
+        number=Ps->edge_i[idens*ndof+ndof]-Ps->findx-begin;
+        trPScpx=c_zdotc(number,&Ps->nnz[begin],1,&overlapnnzsave[begin],1);
+        MPI_Allreduce(&trPScpx,&trPScpxSum,1,MPI_DOUBLE_COMPLEX,MPI_SUM,MPI_COMM_WORLD);
+        if (!iam) cout << " " << real(trPScpxSum);
+    }
+    if (!iam) cout << endl;
+    delete OverlapCollect;
+    delete[] overlapnnzsave;
+    delete[] overlapnnz;
 
-    TCSR<CPX> *P_Matrix_cpx = new TCSR<CPX>(P_Matrix->size,P_Matrix->n_nonzeros,P_Matrix->findx);
-    P_Matrix_cpx->copy_index(P_Matrix);
+    TCSR<CPX> *P_Matrix_cpx = new TCSR<CPX>(Overlap->size,Overlap->n_nonzeros,Overlap->findx);
+    P_Matrix_cpx->copy_index(Overlap);
     Ps->reducescatter(P_Matrix_cpx,MPI_COMM_WORLD);
 
-    c_dcopy(P_Matrix->n_nonzeros,(double*)P_Matrix_cpx->nnz,2,P_Matrix->nnz,1);
+    c_dcopy(Overlap->n_nonzeros,(double*)P_Matrix_cpx->nnz,2,Overlap->nnz,1);
 
     return 0;
 

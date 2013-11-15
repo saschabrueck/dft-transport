@@ -44,7 +44,11 @@ void change_sign(double*,int,int,int);
 
 void sort_vec(double*,int);
 
+void sort_vec(double*,int*,int);
+
 void sort_abs_imag(CPX*,int*,int);
+
+void sort_abs_vec(CPX*,int*,int);
 
 void check_mpi(int,int,int,int,int,int,int,int);
 

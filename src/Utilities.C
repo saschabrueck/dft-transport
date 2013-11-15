@@ -48,6 +48,7 @@ bool sortj(const IJPOS& a, const IJPOS& b)
 /************************************************************************************************/
 
 
+
 /************************************************************************************************/
 
 void dreshape(int N, int inc, double *v, int *index)
@@ -182,6 +183,35 @@ void sort_vec(double *vec,int N)
 
 /************************************************************************************************/
 
+void sort_vec(double *vec,int *idx_order,int N)
+{
+    int ii,jj,pos;
+    double* vec_new = new double[N];
+    
+    for(ii = 0; ii < N; ii++) {
+      pos = 0;
+      for(jj = 0; jj < N; jj++) {
+         if(ii != jj) {
+             if((vec[ii]>vec[jj])
+                || (vec[ii] == vec[jj] && ii > jj)) {
+                 pos++;
+             }
+         }
+      }
+      idx_order[ii] = pos;
+    }
+    
+    for(ii = 0; ii < N; ii++) {
+        vec_new[idx_order[ii]] = vec[ii];
+    }
+    
+    c_dcopy(N,vec_new,1,vec,1);
+
+    delete[] vec_new;
+}
+
+/************************************************************************************************/
+
 void sort_abs_imag(CPX *vec,int *index,int N)
 {
 
@@ -209,6 +239,36 @@ void sort_abs_imag(CPX *vec,int *index,int N)
     c_zcopy(N,vec_new,1,vec,1);
 
     delete[] idx_order;
+    delete[] vec_new;
+}
+
+/************************************************************************************************/
+
+void sort_abs_vec(CPX *vec,int *idx_order,int N)
+{
+
+    int  pos,ii,jj;
+    CPX* vec_new = new CPX[N];
+    
+    for(ii = 0; ii < N; ii++) {
+      pos = 0;
+      for(jj = 0; jj < N; jj++) {
+         if(ii != jj) {
+             if((abs(vec[ii])>abs(vec[jj]))
+                || (abs(vec[ii]) == abs(vec[jj]) && ii > jj)) {
+                 pos++;
+             }
+         }
+      }
+      idx_order[ii] = pos;
+    }
+    
+    for(ii = 0; ii < N; ii++) {
+        vec_new[idx_order[ii]] = vec[ii];
+    }
+    
+    c_zcopy(N,vec_new,1,vec,1);
+
     delete[] vec_new;
 }
 
@@ -451,45 +511,6 @@ void set_to_zero(int length, T *array) {
   }
 }
 
-void set_random(int length, int seed, CPX *array)
-{
-  std::default_random_engine generator(seed);
-  std::uniform_real_distribution<double> distribution(-1.0, 1.0);
-  for (int i=0; i < length; ++i) {
-    double real = distribution(generator);
-    double imag = distribution(generator);
-    array[i] = CPX(real, imag);
-  }
-}
-
-
-/** \brief Write a double complex matrix to a file
- *
- *  \param filename Name of the file to write to.
- *
- *  \param matrix Array containing the matrix to be written to the file.
- *
- *  \param num_rows Number of rows.
- *
- *  \param num_cols Number of columns.
- */
-void write_matrix_to_file(const char *filename, CPX *matrix, int num_rows,
-                          int num_cols)
-{
-    ofstream output_file;
- 
-    output_file.open(filename);
-    output_file.precision(8);
-    for(int row=0; row < num_rows; ++row){
-        for(int column=0; column < num_cols; ++column){
-            output_file << real(matrix[row + column * num_rows]) << " "
-                   << imag(matrix[row + column * num_rows]) << " ";
-        }
-        output_file<<"\n";
-    }
-    output_file.close();
-}
-
 
 /// Returns the width of a matrix stored in a CSR file
 int get_csr_rows(const char *filename)
@@ -595,23 +616,6 @@ void print_mat(CPX *matrix, int rows, int columns, int row_start,
 }
 void write_mat(CPX *matrix, int rowlength, int columnlength, 
                const char *filename)
-{
-  int fortran_index = 1;
-  int precision = 15;
-  ofstream outfile;
-  outfile.open(filename);
-  outfile.precision(precision);
-  for (int i=0; i < rowlength; ++i) {
-    for (int j=0; j < columnlength; ++j) {
-      int position = i * rowlength + j;
-      outfile << (i + fortran_index) << " " << (j + fortran_index) << " "
-      << real(matrix[position]) << " " << imag(matrix[position]) << "\n";
-    }
-  }
-  outfile.close();
-}
-void write_mat(CPX *matrix, int rowlength, int columnlength, 
-               std::basic_string<char> filename)
 {
   int fortran_index = 1;
   int precision = 15;

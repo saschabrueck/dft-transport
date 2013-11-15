@@ -401,7 +401,8 @@ struct VOLTAGE
 extern "C"
 {
     typedef struct{
-           int method, bandwidth, n_cells, n_occ, n_abscissae, n_kpoint,
+           int method, bandwidth, n_cells, n_occ, n_abscissae,
+               n_kpoint,
                extra_int_param1, extra_int_param2, extra_int_param3;
            double  evoltfactor, colzero_threshold,
                    eps_limit, eps_decay, eps_singularities,
