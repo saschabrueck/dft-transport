@@ -1,4 +1,5 @@
 #include <iostream>
+#include <cstring>
 #include "InputParameter.H"
 #include "Types.H"
 #include "AtomStrain.H"

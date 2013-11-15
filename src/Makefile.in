@@ -12,13 +12,14 @@ LDFLAGS = $(LFLAGS) $(DFLAGS)
 
 MAIN = main.cpp
 SOURCES_CPP = cDBCSR_tools.cpp c_scf.cpp
-SOURCES_C = array_tools.C Utilities.C CSR.C DiagScaLapack.C Density.C EnergyVector.C Quadrature.C GreenSolver.C KPointIntegration.C GetSingularities.C GetSigma.C rGF.C tmprGF.C @pardiso@
+SOURCES_C = InputParameter.C WireGenerator.C FEMGrid.C Poisson.C Utilities.C CSR.C DiagScaLapack.C Density.C EnergyVector.C Quadrature.C KPointIntegration.C GetSingularities.C GetSigma.C rGF.C tmprGF.C SemiSelfConsistent.C AtomStrain.C Macopt.C Material.C Fermi.C @pardiso@
+SOURCES_c = y.tab.c lex.yy.c
 
-OBJECTS = $(SOURCES_CPP:.cpp=.o) $(SOURCES_C:.C=.o)
+OBJECTS = $(SOURCES_CPP:.cpp=.o) $(SOURCES_C:.C=.o) $(SOURCES_c:.c=.o)
 EXECUTABLE = interface
 MYEXECUTABLE = mymain
 
-all: $(SOURCES_CPP) $(SOURCES_C) $(EXECUTABLE)
+all: $(SOURCES_CPP) $(SOURCES_C) $(SOURCES_c) $(EXECUTABLE)
 
 $(EXECUTABLE): $(MAIN:.cpp=.o) $(OBJECTS)
 	$(CPP) $(CXXFLAGS) $(INCLUDES) -o $@ $(MAIN:.cpp=.o) $(OBJECTS) $(LINLIN) @pardiso_so@ $(LDFLAGS) $(LIBS)
@@ -29,9 +30,18 @@ $(EXECUTABLE): $(MAIN:.cpp=.o) $(OBJECTS)
 .C.o:
 	$(CPP) $(INCLUDES) $(CXXFLAGS) -c $< -o $@ $(LDFLAGS)
 
+.c.o:
+	$(GCC) $(INCLUDES) $(CFLAGS) -c $< -o $@ $(LDFLAGS)
+
+y.tab.c: parser.y
+	$(YACC) -d -b y $<
+
+lex.yy.c: parser.lex y.tab.c
+	$(LEX) $<
+
 $(MYEXECUTABLE): $(MYEXECUTABLE).cc $(SOURCES_CPP) $(SOURCES_C) $(OBJECTS)
 	$(CPP) $(CXXFLAGS) $(INCLUDES) $(MYEXECUTABLE).cc -o $@ $(OBJECTS) @pardiso_so@ $(LDFLAGS) $(LIBS)
 
 .PHONY: clean
 clean:
-	rm -rf *.o $(EXECUTABLE) $(MYEXECUTABLE) $(INP_DIR)/output.out csr.*
+	rm -rf *.o lex.yy.c  y.tab.c $(EXECUTABLE) $(MYEXECUTABLE) $(INP_DIR)/output.out csr.*

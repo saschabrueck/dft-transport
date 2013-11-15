@@ -10,19 +10,18 @@
 
 class Singularities {
 public:
-Singularities(TCSR<double> *,TCSR<double> *,c_transport_type);
+Singularities(TCSR<double> *,TCSR<double> *,int,double *,double *,int *,c_transport_type);
 ~Singularities();
 
 /// Vector containing the singularity points
 std::vector<double> energies;
 /// Lower integration limit
 double energy_gs;
-/// Upper integration limit
-double energy_vbe;
 
 private:
+int ndof;
 double min_parabola(int,double*,double*,int,double&);
-int determine_velocities(TCSR<double>*,TCSR<double>*,double,int,double*,double*,c_transport_type);
+int determine_velocities(CPX*,CPX*,double,double*,double*,c_transport_type);
 };
 
 #endif

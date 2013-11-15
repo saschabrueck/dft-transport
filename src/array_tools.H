@@ -35,13 +35,9 @@ void print_array(const T *array, int size)
 }
 
 template <class T>
-void full_transpose(int n1, int n2, T *in, T* out)
+void full_transpose(int ncol, int nrow, T *B, T* A)
 {
-    for (int j=0;j<n2;j++)
-        for (int i=0;i<n1;i++)
-            out[j*n1+i]=in[i*n2+j];
+    for(int i=0;i<ncol;i++) c_tcopy(nrow,&B[i*nrow],1,&A[i],ncol);
 }
-
-void full_conjugate_transpose(int n1, int n2, CPX *in, CPX* out);
 
 #endif

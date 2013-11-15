@@ -3,8 +3,30 @@
 #include <assert.h>
 #include "c_scf.H"
 
-#define OUTPUT_FILE "./output.out"
+// OMEN INPUT
+#include "Types.H"
+#include "InputParameter.H"
+#include "Material.H"
+#include "WireGenerator.H"
+#include "FEMGrid.H"
+#include "Poisson.H"
 
+extern "C" {
+    void yyrestart(FILE *);
+    void yyparse();
+    extern FILE *yyin;
+}
+
+PARAM *parameter;
+WireStructure *nanowire;
+ENERGY *En;
+VOLTAGE *voltage;
+
+WireGenerator* Wire;
+FEMGrid *FEM;
+Poisson *OMEN_Poisson_Solver;
+
+// CP2K LIBRARY ROUTINES
 extern "C"
 {
    void cp_c_init_cp2k(int *init_mpi, int *ierr);
@@ -34,19 +56,23 @@ int main (int argc, char **argv)
    double e_pot;
    char *input_file;
    char *output_file;
+   char *command_file;
    double *pos, *force;
-//   int myid, nproc;
-   MPI::Intercomm mpi_comm;
 
-   std::string inpfile_path = argv[1];
-//   std::string outfile_path = argv[2];
-   std::string outfile_path = OUTPUT_FILE;
+   std::string inpfile_path = argv[1]+std::string(".inp");
    input_file=new char[inpfile_path.size()+1];
    input_file[inpfile_path.size()]=0;
    memcpy(input_file,inpfile_path.c_str(),inpfile_path.size());
+   std::string outfile_path = argv[1]+std::string(".out");
    output_file=new char[outfile_path.size()+1];
    output_file[outfile_path.size()]=0;
    memcpy(output_file,outfile_path.c_str(),outfile_path.size());
+   std::string commandfile_path = argv[1]+std::string(".cmd");
+   command_file=new char[commandfile_path.size()+1];
+   command_file[commandfile_path.size()]=0;
+   memcpy(command_file,commandfile_path.c_str(),commandfile_path.size());
+
+   MPI::Intercomm mpi_comm;
 
    init_mpi = 0;
    finalize_mpi = 0;
@@ -54,11 +80,9 @@ int main (int argc, char **argv)
 
    MPI::Init(argc, argv);
    MPI::COMM_WORLD.Set_errhandler(MPI::ERRORS_THROW_EXCEPTIONS);
-//   myid = MPI::COMM_WORLD.Get_rank();
-//   nproc = MPI::COMM_WORLD.Get_size();
    mpi_comm = MPI::COMM_WORLD;
    fcomm = MPI_Comm_c2f(mpi_comm);
- 
+
    cp_c_init_cp2k(&init_mpi, &error);
    cp_c_create_fenv_comm(&f_env_id, input_file, output_file, &fcomm, &error);
    cp_c_ext_scf_set_ptr(&f_env_id, &c_scf_method, &error);
@@ -71,17 +95,59 @@ int main (int argc, char **argv)
    force = new double[n_el_force];
    std::fill_n(pos, n_el_pos, 0);
    std::fill_n(force, n_el_force, 0);
+
+   int do_omen_poisson=0;
+   if ((yyin = fopen(command_file,"r")) != NULL) do_omen_poisson=1;
+   if (do_omen_poisson) {
+      init_parameters();
+      yyrestart(yyin);
+      yyparse();
+      fclose(yyin);
+      Material* material = new Material(parameter->mat_name,parameter->mat_binary_x,parameter->strain_model,parameter->Temp);
+      material->initialize(nanowire->sc_dist_dep);
+      Wire = new WireGenerator(parameter->lattype,0);
+      Wire->execute_task(nanowire,material,0,MPI::COMM_WORLD);
+//      WireGenerator* Wire = new WireGenerator();
+//      Wire->execute_task(nanowire);
+      FEM = new FEMGrid();
+      MPI_Comm newcomm;
+      MPI_Comm_dup(MPI::COMM_WORLD,&newcomm);
+      int newcommsize;
+      MPI_Comm_size(newcomm,&newcommsize);
+      FEM->execute_task(Wire,nanowire,newcommsize,1,newcomm,MPI::COMM_WORLD);
+//      FEM->execute_task(Wire,nanowire);
+      OMEN_Poisson_Solver = new Poisson();
+      OMEN_Poisson_Solver->init(Wire,nanowire,FEM,newcommsize,1,MPI::COMM_WORLD);
+//      OMEN_Poisson_Solver->init(nanowire,FEM);
+   }
+
+
+int iam;MPI_Comm_rank(MPI_COMM_WORLD,&iam);
+if(!iam){
+ofstream femgridfile("femgrid");
+for (int ix=0;ix<FEM->NGrid;ix++) femgridfile<<FEM->grid[3*ix]<<" "<<FEM->grid[3*ix+1]<<" "<<FEM->grid[3*ix+2]<<endl;
+femgridfile.close();
+}
+ 
    cp_c_calc_energy_force(&f_env_id, &calc_force, &error);
    cp_c_get_energy(&f_env_id, &e_pot, &error);
    cp_c_get_force(&f_env_id, force, &n_el_force, &error);
    cp_c_get_pos(&f_env_id, pos, &n_el, &error);
    cp_c_destroy_fenv(&f_env_id, &error);
    cp_c_finalize_cp2k(&finalize_mpi, &error);
+
+   if (do_omen_poisson) {
+      delete OMEN_Poisson_Solver;
+      delete FEM;
+      delete Wire;
+      delete_parameters();
+   }
    
    delete [] pos;
    delete [] force;
    delete [] input_file;
    delete [] output_file;
+   delete [] command_file;
 
    MPI::Finalize();
    return 0;

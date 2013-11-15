@@ -127,7 +127,7 @@ int diagscalapack(TCSR<double> *Overlap,TCSR<double> *KohnSham,TCSR<double> *P_M
     if (!iam) cout << "Time after Dens " << get_time(sabtime) << endl;
     if (!iam) sabtime=get_time(0.0);
     MPI_Bcast(Density->nnz,Density->n_nonzeros,MPI_DOUBLE,0,MPI_COMM_WORLD);
-    Density->reducescatter(P_Matrix,MPI_COMM_WORLD);
+    Density->reducescatter(Overlap,MPI_COMM_WORLD);
 
     delete[] eigval;
 

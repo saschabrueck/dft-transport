@@ -4,14 +4,22 @@
 #include "GetSingularities.H"
 #include "Quadrature.H"
 
-int energyvector(TCSR<double> *Overlap,TCSR<double> *KohnSham,TCSR<double> *P_Matrix,c_transport_type transport_params)
+int energyvector(TCSR<double> *Overlap,TCSR<double> *KohnSham,int n_mu,double* muvec, int* contactvec,double* dopingvec,double* electronchargeperatom,c_transport_type transport_params)
 {
     int iam, nprocs;
     MPI_Comm_size(MPI_COMM_WORLD,&nprocs);
     MPI_Comm_rank(MPI_COMM_WORLD,&iam);
+    MPI_Comm matrix_comm;
+    MPI_Comm eq_rank_matrix_comm;
     double sabtime;
 // check parameters
     if ( Overlap->size_tot%transport_params.n_cells || transport_params.bandwidth<1 ) return (LOGCERR, EXIT_FAILURE);
+    int tasks_per_point=1;
+    if (tasks_per_point>1) if (!iam) cout<<"Distributing matrix over "<<tasks_per_point<<" tasks"<<endl;
+    if ( nprocs%tasks_per_point ) {
+        if (!iam) cout << "Choose number of tasks per energy point as a divider of total number of tasks" << endl;
+        return (LOGCERR, EXIT_FAILURE);
+    }
 // additional parameters not needed in the future
     int bw=transport_params.bandwidth;
     int ncells=transport_params.n_cells;
@@ -19,49 +27,84 @@ int energyvector(TCSR<double> *Overlap,TCSR<double> *KohnSham,TCSR<double> *P_Ma
     int ndof=size/ncells;
     int begin;
     int number;
+// only a writeoutthing
+/*
+            TCSR<double> *Hcut = new TCSR<double>(KohnSham,0,ndof,0,(bw+1)*ndof);
+            TCSR<double> *Hsp = new TCSR<double>(Hcut,0,MPI_COMM_WORLD);
+            delete Hcut;
+            if (!iam) {
+                Hsp->shift_resize(0,ndof,0,(bw+1)*ndof);
+                Hsp->change_findx(1);
+                Hsp->write("H012");
+            }
+            delete Hsp;
+            TCSR<double> *Scut = new TCSR<double>(Overlap,0,ndof,0,(bw+1)*ndof);
+            TCSR<double> *Ssp = new TCSR<double>(Scut,MPI_COMM_WORLD);
+            delete Scut;
+            if (!iam) {
+                Ssp->shift_resize(0,ndof,0,(bw+1)*ndof);
+                Ssp->change_findx(1);
+                Ssp->write("S012");
+            }
+            delete Ssp;
+            return EXIT_FAILURE;
+*/
+// end the writeoutthing
+    c_dscal(KohnSham->n_nonzeros,transport_params.evoltfactor,KohnSham->nnz,1);
 // allocate matrices to gather on every node
-    TCSR<double> *KohnShamCollectPrimal = new TCSR<double>(KohnSham,MPI_COMM_WORLD);
     TCSR<double> *KohnShamCollect;
-    TCSR<double> *OverlapCollect = new TCSR<double>(Overlap,MPI_COMM_WORLD);
-// add the potential 
-    int addpotential=0;
-    if (addpotential) {
-        cout << "ADDING POTENTIAL" << endl;
-        double *Vvec = new double[Overlap->size_tot];
-        int na=5;
-        int nb=na+5;
-        int nc=ncells;
-        for (int ivvec=0;          ivvec<na*4*13*12; ivvec++) Vvec[ivvec] =  0.0;
-        for (int ivvec=na*4*13*12; ivvec<nb*4*13*12; ivvec++) Vvec[ivvec] =  1.5;
-        for (int ivvec=nb*4*13*12; ivvec<nc*4*13*12; ivvec++) Vvec[ivvec] =  0.5;
-        TCSR<double> *Pot = new TCSR<double>(Overlap,Vvec);
-        delete[] Vvec;
-        KohnShamCollect = new TCSR<double>(transport_params.evoltfactor,KohnShamCollectPrimal,1.0,Pot);
-        delete Pot;
-        delete KohnShamCollectPrimal;
+    TCSR<double> *OverlapCollect;
+    TCSR<double> *Ps=NULL;
+    if (tasks_per_point > 1) {
+        MPI_Comm KS_matrix_comm;
+        MPI_Comm KS_eq_rank_matrix_comm;
+        KohnShamCollect = new TCSR<double>(KohnSham,MPI_COMM_WORLD,tasks_per_point,&KS_matrix_comm,&KS_eq_rank_matrix_comm);
+        OverlapCollect = new TCSR<double>(Overlap,MPI_COMM_WORLD,tasks_per_point,&matrix_comm,&eq_rank_matrix_comm);
+        int comm_result, eq_comm_result;
+        MPI_Comm_compare(KS_matrix_comm,matrix_comm,&comm_result);
+        MPI_Comm_compare(KS_eq_rank_matrix_comm,eq_rank_matrix_comm,&eq_comm_result);
+        if (comm_result!=MPI_CONGRUENT || eq_comm_result!=MPI_CONGRUENT) return (LOGCERR, EXIT_FAILURE);
+        MPI_Comm_free(&KS_matrix_comm);
+        MPI_Comm_free(&KS_eq_rank_matrix_comm);
+        int matrix_rank, n_mat_comm;
+        MPI_Comm_size(eq_rank_matrix_comm,&n_mat_comm);
+        MPI_Comm_rank(matrix_comm,&matrix_rank);
+        int *master_ranks = new int[n_mat_comm];
+        if (matrix_rank==0) {
+            MPI_Gather(&iam,1,MPI_INT,master_ranks,1,MPI_INT,0,eq_rank_matrix_comm);
+        }
+        MPI_Bcast(master_ranks,n_mat_comm,MPI_INT,0,MPI_COMM_WORLD);
+        Ps = new TCSR<double>(Overlap,master_ranks,n_mat_comm,MPI_COMM_WORLD);
+        Ps->init_variable(Ps->nnz,Ps->n_nonzeros);
+        delete[] master_ranks;
     } else {
-        KohnShamCollect = KohnShamCollectPrimal;
-        KohnShamCollectPrimal = NULL;
-        c_dscal(KohnShamCollect->n_nonzeros,transport_params.evoltfactor,KohnShamCollect->nnz,1);
+        KohnShamCollect = new TCSR<double>(KohnSham,MPI_COMM_WORLD);
+        OverlapCollect = new TCSR<double>(Overlap,MPI_COMM_WORLD);
+        MPI_Comm_split(MPI_COMM_WORLD,iam,iam,&matrix_comm);
+        MPI_Comm_dup(MPI_COMM_WORLD,&eq_rank_matrix_comm);
+        Ps = new TCSR<double>(OverlapCollect->size,OverlapCollect->n_nonzeros,OverlapCollect->findx);
+        Ps->copy_index(OverlapCollect);
+        Ps->init_variable(Ps->nnz,Ps->n_nonzeros);
     }
-    TCSR<double> *Ps = new TCSR<double>(OverlapCollect->size,OverlapCollect->n_nonzeros,OverlapCollect->findx);
-    Ps->copy_index(OverlapCollect);
-    Ps->init_variable(Ps->nnz,Ps->n_nonzeros);
 // determine singularity stuff
-//    {
-    sabtime=get_time(0.0);
-    Singularities singularities(KohnShamCollect,OverlapCollect,transport_params);
-    cout << "TIME FOR SINGULARITIES " << get_time(sabtime) << endl;
     double Temp=0.0;
-    int n_mu=2;
-    double *muvec = new double[n_mu];
-    muvec[0]=singularities.energy_vbe;
-//    muvec[1]=singularities.energy_vbe+0.5;
-    muvec[1]=singularities.energy_vbe;
+    if (electronchargeperatom==NULL) {
+        muvec = new double[n_mu];
+        contactvec = new int[n_mu];
+        contactvec[0]=1;
+        contactvec[1]=2;
+        dopingvec = new double[n_mu];
+        dopingvec[0]=0.0;
+        dopingvec[1]=0.0;
+    }
+    sabtime=get_time(0.0);
+    Singularities singularities(KohnSham,Overlap,n_mu,muvec,dopingvec,contactvec,transport_params);
+    if (!iam) cout << "TIME FOR SINGULARITIES " << get_time(sabtime) << endl;
 // determine elements in nonequilibrium range
     double k_b=K_BOLTZMANN;
     double nonequi_start=muvec[0]-35.0*k_b*Temp;
-int integral_over_real_axis=1;
+int integral_over_real_axis=0;
+if (!iam) if (integral_over_real_axis) cout << "Integral over real axis" << endl;
 if (integral_over_real_axis) nonequi_start=singularities.energy_gs;
     double nonequi_end=muvec[n_mu-1]+35.0*k_b*Temp;
     std::vector<double> energylist;
@@ -71,7 +114,14 @@ if (integral_over_real_axis) nonequi_start=singularities.energy_gs;
             energylist.push_back(singularities.energies[i_energies]);
     energylist.push_back(nonequi_end);
     if (!iam) cout << energylist.size() << " energies in nonequilibrium range from a total of " << singularities.energies.size() << " singularity points" << endl;
-    if (!iam) for (uint i_list=0;i_list<energylist.size();i_list++) cout << energylist[i_list] << endl;
+    if (!iam) {
+        ofstream myfile;
+        myfile.open("SingularityList");
+        myfile.precision(15);
+        for (uint iele=0;iele<energylist.size();iele++)
+            myfile << energylist[iele] << endl;
+        myfile.close();
+    }
 // get integration points along complex contour with gauss legendre
     int num_points_on_contour=transport_params.n_abscissae;
     Quadrature gausslegendre(quadrature_types::CCGL,singularities.energy_gs,nonequi_start,Temp,muvec[0],num_points_on_contour);
@@ -79,17 +129,21 @@ if (integral_over_real_axis) nonequi_start=singularities.energy_gs;
     std::vector<CPX> stepvector(gausslegendre.weights);
     std::vector<transport_methods::transport_method> methodvector(gausslegendre.abscissae.size(),transport_methods::NEGF);
 // get integration points along real axis with gauss cheby
-    int num_points_per_interval=transport_params.n_abscissae;
-    std::vector<transport_methods::transport_method> methodblock(num_points_per_interval,transport_methods::WF);
-    Quadrature *gausscheby;
-    double smallest_energy_distance=transport_params.extra_param1;
+    double smallest_energy_distance=transport_params.extra_param2;
+transport_params.extra_int_param1=40;
+if (!iam) cout<<"Smallest enery distance "<<smallest_energy_distance<<endl;
+if (!iam) cout<<"Max number of points per small interval "<<transport_params.extra_int_param1<<endl;
+if (!iam) cout<<"Average distance for big intervals "<<transport_params.extra_param1<<endl;
     for (uint i_energies=1;i_energies<energylist.size();i_energies++) {
-        if (energylist[i_energies-1]<energylist[i_energies]-smallest_energy_distance) {
-            gausscheby = new Quadrature(quadrature_types::GC,energylist[i_energies-1],energylist[i_energies],0.0,0.0,num_points_per_interval);
-            energyvector.insert(energyvector.end(),gausscheby->abscissae.begin(),gausscheby->abscissae.end());
-            stepvector.insert(stepvector.end(),gausscheby->weights.begin(),gausscheby->weights.end());
+        int num_points_per_interval=max(transport_params.extra_int_param1,int(ceil(abs(energylist[i_energies]-energylist[i_energies-1])/transport_params.extra_param1)));
+        while ((energylist[i_energies]-energylist[i_energies-1])*(1.0-cos(M_PI/(2.0*num_points_per_interval)))/2.0<smallest_energy_distance && num_points_per_interval>1)
+            --num_points_per_interval;
+        if (num_points_per_interval>1) {
+            Quadrature gausscheby(quadrature_types::GC,energylist[i_energies-1],energylist[i_energies],0.0,0.0,num_points_per_interval);
+            energyvector.insert(energyvector.end(),gausscheby.abscissae.begin(),gausscheby.abscissae.end());
+            stepvector.insert(stepvector.end(),gausscheby.weights.begin(),gausscheby.weights.end());
+            std::vector<transport_methods::transport_method> methodblock(gausscheby.abscissae.size(),transport_methods::WF);
             methodvector.insert(methodvector.end(),methodblock.begin(),methodblock.end());
-            delete gausscheby;
         }
     }
 /*
@@ -101,55 +155,102 @@ copy(trapez.abscissae.begin(),trapez.abscissae.end(),energyvector.begin());
 copy(trapez.weights.begin(),trapez.weights.end(),stepvector.begin());
 fill(methodvector.begin(),methodvector.end(),transport_methods::WF);
 */
+/*
+energyvector.resize(1);
+energyvector[0]=CPX(-10.6400633547,0.0);
+stepvector.resize(1);
+stepvector[0]=CPX(1.0,0.0);
+methodvector.resize(1);
+methodvector[0]=transport_methods::WF;
+*/
     if (!iam) cout << "Size of Energyvector " << energyvector.size() << endl;
-//    }
 // run distributed
     std::vector<double> currentvector(energyvector.size(),0.0);
-    double skip_point_weight_thr=0.0;
+    int matrix_id, n_mat_comm;
+    MPI_Comm_size(eq_rank_matrix_comm,&n_mat_comm);
+    MPI_Comm_rank(eq_rank_matrix_comm,&matrix_id);
     uint jpos;
-    for (int iseq=0;iseq<int(ceil(double(energyvector.size())/nprocs));iseq++)
-        if ( (jpos=iam+iseq*nprocs)<energyvector.size())
-            if (abs(stepvector[jpos])>skip_point_weight_thr)
-                if (density(KohnShamCollect,OverlapCollect,Ps,energyvector[jpos],stepvector[jpos],muvec,n_mu,methodvector[jpos],currentvector[jpos],transport_params)) return (LOGCERR, EXIT_FAILURE);
-// copy density to corners
-//    Ps->contactdensity(ndof,bw);
-// set blocks containing pbc to zero
-    OverlapCollect->settozeropbc(bw,ndof);
+    for (int iseq=0;iseq<int(ceil(double(energyvector.size())/n_mat_comm));iseq++)
+        if ( (jpos=matrix_id+iseq*n_mat_comm)<energyvector.size())
+            if (abs(stepvector[jpos])>0.0)
+                if (density(KohnShamCollect,OverlapCollect,Ps,energyvector[jpos],stepvector[jpos],methodvector[jpos],n_mu,muvec,contactvec,currentvector[jpos],transport_params,matrix_comm))
+                    return (LOGCERR, EXIT_FAILURE);
+    delete KohnShamCollect;
 // trPS per energy point
     ofstream myfile;
     std::vector<double> currentvector2(energyvector.size(),0.0);
     MPI_Allreduce(&currentvector[0],&currentvector2[0],energyvector.size(),MPI_DOUBLE,MPI_SUM,MPI_COMM_WORLD);
     if (!iam) {
         myfile.open("DOS_Profile");
+        myfile.precision(15);
         for (uint iele=0;iele<energyvector.size();iele++)
-            if (abs(stepvector[iele])>skip_point_weight_thr)
-                myfile << real(energyvector[iele]) << " " << currentvector2[iele] << endl;
+            if (abs(stepvector[iele])>0.0)
+                myfile << real(energyvector[iele]) << " " << real(stepvector[iele]) << " " << currentvector2[iele] << endl;
         myfile.close();
     }
-    double trPS;
-    double trPS_Sum;
-// trPS per unit cell
-    if (!iam) myfile.open("NumberOfElectrons");
-    if (!iam) myfile << "Number of electrons per unit cell";
-    for (int idens=0;idens<ncells;idens++) {
-        begin=Ps->edge_i[idens*ndof]-Ps->findx;
-        number=Ps->edge_i[idens*ndof+ndof]-Ps->findx-begin;
-        trPS=c_ddot(number,&Ps->nnz[begin],1,&OverlapCollect->nnz[begin],1);
+
+    if (tasks_per_point > 1) {
+        int matrix_rank, matrix_size;
+        MPI_Comm_size(matrix_comm,&matrix_size);
+        MPI_Comm_rank(matrix_comm,&matrix_rank);
+        if (matrix_rank==0) {
+            Ps->reduce(0,eq_rank_matrix_comm);
+        }
+        TCSR<double> *OverlapWorldCollect = new TCSR<double>(Overlap,0,MPI_COMM_WORLD);
+        if (!iam) {
+            cout << "Number of electrons per unit cell";
+            for (int idens=0;idens<ncells;idens++) {
+                begin=Ps->edge_i[idens*ndof]-Ps->findx;
+                number=Ps->edge_i[idens*ndof+ndof]-Ps->findx-begin;
+                cout << " " << c_ddot(number,&Ps->nnz[begin],1,&OverlapWorldCollect->nnz[begin],1);
+            }
+            cout << endl;
+            cout << "Total number of electrons " << c_ddot(Ps->n_nonzeros,Ps->nnz,1,OverlapWorldCollect->nnz,1) << endl;
+        }
+        delete OverlapWorldCollect;
+        if (electronchargeperatom==NULL) {
+            Ps->scatter(Overlap,0,MPI_COMM_WORLD);
+        } else {
+            if (!iam) {
+                for (int iatom=0;iatom<4*13*ncells;iatom++) {
+                    begin=Ps->edge_i[iatom*12]-Ps->findx;
+                    number=Ps->edge_i[iatom*12+12]-Ps->findx-begin;
+                    electronchargeperatom[iatom]=c_ddot(number,&Ps->nnz[begin],1,&OverlapWorldCollect->nnz[begin],1);
+                }
+            }
+            MPI_Bcast(&electronchargeperatom[0],4*13*ncells,MPI_DOUBLE,0,MPI_COMM_WORLD);
+        }
+    } else {
+        double trPS;
+        double trPS_Sum;
+        if (!iam) cout << "Number of electrons per unit cell";
+        for (int idens=0;idens<ncells;idens++) {
+            begin=Ps->edge_i[idens*ndof]-Ps->findx;
+            number=Ps->edge_i[idens*ndof+ndof]-Ps->findx-begin;
+            trPS=c_ddot(number,&Ps->nnz[begin],1,&OverlapCollect->nnz[begin],1);
+            MPI_Allreduce(&trPS,&trPS_Sum,1,MPI_DOUBLE,MPI_SUM,MPI_COMM_WORLD);
+            if (!iam) cout << " " << trPS_Sum;
+        }
+        if (!iam) cout << endl;
+        trPS=c_ddot(Ps->n_nonzeros,Ps->nnz,1,OverlapCollect->nnz,1);
         MPI_Allreduce(&trPS,&trPS_Sum,1,MPI_DOUBLE,MPI_SUM,MPI_COMM_WORLD);
-        if (!iam) myfile << " " << trPS_Sum;
+        if (!iam) cout << "Total number of electrons " << trPS_Sum << endl;
+        if (electronchargeperatom==NULL) {
+            Ps->reducescatter(Overlap,MPI_COMM_WORLD);
+        } else {
+            for (int iatom=0;iatom<4*13*ncells;iatom++) {
+                begin=Ps->edge_i[iatom*12]-Ps->findx;
+                number=Ps->edge_i[iatom*12+12]-Ps->findx-begin;
+                trPS=c_ddot(number,&Ps->nnz[begin],1,&OverlapCollect->nnz[begin],1);
+                MPI_Allreduce(&trPS,&electronchargeperatom[iatom],1,MPI_DOUBLE,MPI_SUM,MPI_COMM_WORLD);
+            }
+        }
     }
-    if (!iam) myfile << endl;
-    if (!iam) myfile.close();
-// trPS total
-    trPS=c_ddot(Ps->n_nonzeros,Ps->nnz,1,OverlapCollect->nnz,1);
-    MPI_Allreduce(&trPS,&trPS_Sum,1,MPI_DOUBLE,MPI_SUM,MPI_COMM_WORLD);
-    if (!iam) cout << "Total number of electrons " << trPS_Sum << endl;
-// sum and scatter to distributed p matrix
-    Ps->reducescatter(P_Matrix,MPI_COMM_WORLD);
     delete Ps;
-    delete KohnShamCollect;
     delete OverlapCollect;
     delete[] muvec;
+    MPI_Comm_free(&matrix_comm);
+    MPI_Comm_free(&eq_rank_matrix_comm);
 
     return 0;
 }

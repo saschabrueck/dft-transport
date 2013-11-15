@@ -60,6 +60,10 @@ extern "C" {
                                    double *b, int *ldb, double *alphar, double *alphai, \
                                    double *beta, double *vl, int *ldvl, double *vr, int *ldvr, \
                                    double *work, int *lwork, int *info);
+    void fortran_name(zggev,ZGGEV)(char* jobvl, char *jobvr, int *n, CPX *a, int *lda, \
+                                   CPX *b, int *ldb, CPX *alpha, \
+                                   CPX *beta, CPX *vl, int *ldvl, CPX *vr, int *ldvr, \
+                                   CPX *work, int *lwork, double *rwork, int *info);
     void fortran_name(zgeev,ZGEEV)(char *jobvl, char *jobvr, int *n, CPX *a, int *lda, \
                                    CPX *w, CPX *vl, int *ldvl, CPX *vr, int *ldvr, CPX *work, \
                                    int *lwork, double *rwork, int *info);
@@ -394,6 +398,16 @@ inline void c_dggev(char jobvl, char jobvr, int n, double *a, int lda, double *b
 {
     fortran_name(dggev,DGGEV)(&jobvl,&jobvr,&n,a,&lda,b,&ldb,alphar,alphai,beta,vl,&ldvl,vr,\
                               &ldvr,work,&lwork,info);
+}
+
+/************************************************************************************************/
+
+inline void c_zggev(char jobvl, char jobvr, int n, CPX *a, int lda, CPX *b, int ldb, \
+                    CPX *alpha, CPX *beta, CPX *vl, int ldvl, \
+                    CPX *vr, int ldvr, CPX *work, int lwork, double *rwork, int *info)
+{
+    fortran_name(zggev,ZGGEV)(&jobvl,&jobvr,&n,a,&lda,b,&ldb,alpha,beta,vl,&ldvl,vr,\
+                              &ldvr,work,&lwork,rwork,info);
 }
 
 /************************************************************************************************/
