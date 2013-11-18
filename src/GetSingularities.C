@@ -111,7 +111,6 @@ Singularities::Singularities(TCSR<double> *KohnSham,TCSR<double> *Overlap,int n_
             for (int j=0;j<n_k;j++) {
                 int nocc_k=-1;
                 while (energies_matrix[++nocc_k+j*ndof]<muvec[i_mu]);
-cout<<j<<" has "<<nocc_k<<endl;
                 nocctry+=nocc_k;
             }
             double nocciter = (double) nocctry/n_k;
@@ -124,7 +123,6 @@ cout<<j<<" has "<<nocc_k<<endl;
                 for (int j=0;j<n_k;j++) {
                     int nocc_k=-1;
                     while (energies_matrix[++nocc_k+j*ndof]<muvec[i_mu]);
-cout<<j<<" has "<<nocc_k<<endl;
                     nocctry+=nocc_k;
                 }
                 nocciter = (double) nocctry/n_k;

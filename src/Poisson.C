@@ -186,7 +186,7 @@ void Poisson::solve_FDM(double *Vnew,double *Vold,double *rho_atom,double *drho_
 
 	    P->mat_vec_mult(Vnew,res,1);
 	    c_daxpy(P->size,beta,rho,1,res,1);
-	    c_daxpy(P->size,-beta,doping,1,res,1);
+	    c_daxpy(P->size,beta,doping,1,res,1);
 	    P->update_loc_diag(drho_dV,beta);
         
 	    solver = new Umfpack<double>(P,loc_comm);
