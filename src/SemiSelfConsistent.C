@@ -21,13 +21,15 @@ int semiselfconsistent(TCSR<double> *Overlap,TCSR<double> *KohnSham,c_transport_
     double Lg=nanowire->Lc;
     double residual;
     double Temp=0.0;
-    double *Vnew = new double[FEM->NGrid]();
+    double *Vnew = new double[FEM->NGrid];
     double *Vold = new double[FEM->NGrid];
     double *Vbf = new double[Overlap->size_tot];
-    double *rho_atom = new double[FEM->NAtom];
+    double *rho_atom = new double[FEM->NAtom]();
     double *drho_atom_dV = new double[FEM->NAtom]();
-    double condition_tol = 1.0E-2;
-    double condition = 2*condition_tol;
+    double *rho_atom_previous = new double[FEM->NAtom];
+    double dens_tol = 1.0E-4;
+    int i_iter;
+    int max_iter=10;
 
     for (int ix=0;ix<FEM->NGrid;ix++) {
         double x=FEM->grid[3*ix]-FEM->grid[0];
@@ -62,11 +64,13 @@ int semiselfconsistent(TCSR<double> *Overlap,TCSR<double> *KohnSham,c_transport_
     dopingvec[0]=doping_cell[0];
     dopingvec[1]=doping_cell[5];
 
-    while (condition>condition_tol) {
+    for (i_iter=1;i_iter<=max_iter;i_iter++) {
+
         for (int ibf=0;ibf<Overlap->size_tot;ibf++)
             Vbf[ibf]=Vnew[FEM->real_at_index[ibf/12]];
-        c_dcopy(FEM->NGrid,Vnew,1,Vold,1);//only needed for the condition
-// add the potential 
+//ifstream vbfin("vbffileinput");
+//for (int isab=0;isab<Overlap->size_tot;isab++) vbfin >> Vbf[isab];
+//vbfin.close();
         TCSR<double> *Pot = new TCSR<double>(Overlap,Vbf);
         TCSR<double> *KohnShamPot = new TCSR<double>(1.0,KohnSham,1.0/transport_params.evoltfactor,Pot);
         delete Pot;
@@ -74,17 +78,23 @@ int semiselfconsistent(TCSR<double> *Overlap,TCSR<double> *KohnSham,c_transport_
 int iam;MPI_Comm_rank(MPI_COMM_WORLD,&iam);
 if (!iam) cout << "DOPING " << dopingvec[0] << " " << dopingvec[1] << endl;
 
+        c_dcopy(FEM->NAtom,rho_atom,1,rho_atom_previous,1);
         if (energyvector(Overlap,KohnShamPot,n_mu,muvec,contactvec,dopingvec,rho_atom,transport_params)) return (LOGCERR, EXIT_FAILURE);
+//for (int isab=0;isab<312;isab++) rho_atom[isab]=-2.004463;
+
         delete KohnShamPot;
         c_daxpy(FEM->NAtom,1.0,&nuclearchargeperatom[0],1,rho_atom,1);
-//zero for testing influence of bad mulliken wiggles, but gives weird results
-//c_dcopy(FEM->NAtom,drho_atom_dV,1,rho_atom,1);
+
+        c_daxpy(FEM->NAtom,-1.0,rho_atom,1,rho_atom_previous,1);
+        double condition = c_dasum(FEM->NAtom,rho_atom_previous,1)/FEM->NAtom;
+        if (condition<dens_tol) break;
 
 if(!iam){
 ofstream rhofile("rhofile");
 for (int ig=0;ig<FEM->NAtom;ig++) rhofile<<rho_atom[ig]<<endl;
 rhofile.close();
 }
+        c_dscal(FEM->NGrid,0.0,Vold,1);
         OMEN_Poisson_Solver->solve(Vnew,Vold,rho_atom,drho_atom_dV,1,NULL,FEM,Wire,Temp,Vg,Vs,Vs,Vd,&residual,1.0E-4,10,1,1,MPI_COMM_WORLD,MPI_COMM_WORLD,1,MPI_COMM_WORLD,0);
 
 if(!iam){
@@ -92,10 +102,19 @@ ofstream potfile("potfile");
 for (int ig=0;ig<FEM->NGrid;ig++) potfile<<Vnew[ig]<<endl;
 potfile.close();
 }
+        for (int ibf=0;ibf<Overlap->size_tot;ibf++)
+            Vbf[ibf]=Vnew[FEM->real_at_index[ibf/12]];
+if(!iam){
+ofstream vbffile("vbffile");
+for (int ig=0;ig<Overlap->size_tot;ig++) vbffile<<Vbf[ig]<<endl;
+vbffile.close();
+}
+
 //this is only for the condition
-        c_daxpy(FEM->NGrid,-1.0,Vnew,1,Vold,1);
-        condition = c_dasum(FEM->NGrid,Vold,1)/c_dasum(FEM->NGrid,Vnew,1);
+
+// !!!!!!!!!!! DONT USE THIS CONDITION AS THE POTENTIAL SHIFTS BUT THE DENSITY DOESNT SO USE THE DENSITY !!!!!!!!!!!!
 if(!iam) cout<<"CONDITION "<<condition<<endl;
+MPI_Barrier(MPI_COMM_WORLD);
 //exit(0);
     }
 

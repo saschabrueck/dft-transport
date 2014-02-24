@@ -91,9 +91,14 @@ extern "C" {
     void fortran_name(zlarnv,ZLARNV)(int*,int*,int*,CPX*);
 // SAB
     void fortran_name(dsygv,DSYGV)(int *itype,char *jobz,char *uplo,int *n,double *a,int *lda,double *b,int *ldb,\
-                    double *w,double *work,int *lwork,int *info);
+                                   double *w,double *work,int *lwork,int *info);
     void fortran_name(zhegv,ZHEGV)(int *itype,char *jobz,char *uplo,int *n,CPX *a,int *lda,CPX *b,int *ldb,\
-                    double *w,CPX *work,int *lwork,double *rwork,int *info);
+                                   double *w,CPX *work,int *lwork,double *rwork,int *info);
+    void fortran_name(zhegvx,ZHEGVX)(int *itype,char *jobz,char *range,char *uplo,int *n,CPX *a,int *lda,\
+                                     CPX *b,int *ldb, double *vl, double *vu, int *il,int *iu,double *abstol,\
+                                     int *m,double *w,CPX *z,int *ldz,CPX *work,int *lwork,double *rwork,\
+                                     int *iwork,int *ifail,int *info);
+    double fortran_name(dlamch,DLAMCH)(char*);
     void fortran_name(dlasrt,DLASRT)(char*,int*,double*,int*);
 
 // MMC
@@ -516,6 +521,24 @@ inline void c_zhegv(int itype,char jobz,char uplo,int n,CPX *a,int lda,CPX *b,in
                     double *w,CPX *work,int lwork,double *rwork,int *info)
 {
     fortran_name(zhegv,ZHEGV)(&itype,&jobz,&uplo,&n,a,&lda,b,&ldb,w,work,&lwork,rwork,info);
+}
+
+/************************************************************************************************/
+
+inline void c_zhegvx(int itype,char jobz,char range,char uplo,int n,CPX *a,int lda,\
+                     CPX *b,int ldb, double vl, double vu, int il,int iu,double abstol,\
+                     int *m,double *w,CPX *z,int ldz,CPX *work,int lwork,double *rwork,\
+                     int *iwork,int *ifail,int *info)
+{
+    fortran_name(zhegvx,ZHEGVX)(&itype,&jobz,&range,&uplo,&n,a,&lda,b,&ldb,&vl,&vu,&il,&iu,&abstol,\
+                              m,w,z,&ldz,work,&lwork,rwork,iwork,ifail,info);
+}
+
+/************************************************************************************************/
+
+inline double c_dlamch(char cmach)
+{
+    return fortran_name(dlamch,DLAMCH)(&cmach);
 }
 
 /************************************************************************************************/

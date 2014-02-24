@@ -85,7 +85,10 @@ void Poisson::init(WireGenerator *Wire,WireStructure *nanowire,FEMGrid *FEM,int 
     
     //P1->write("P1.dat");
     //P2->write("P2.dat");
-    //RP2->write("RP2.dat");
+
+    if(!mpi_rank){
+    RP2->write("RP2.dat");
+    }
     
 }
 
@@ -267,6 +270,7 @@ void Poisson::solve_FEM(double *Vnew,double *Vold,double *rho_atom,double *drho_
 	int max_iter      = poisson_iteration;
 	int start         = RP2->first_row;
 	int stop          = RP2->first_row+RP2->size;
+cout << "START " << start << " STOP " << stop << endl;
 	double t0         = 0;
 	double criterion  = poisson_criterion/1000;
 	double beta1      = (e*1.0e9)/Eps0;
@@ -281,6 +285,7 @@ void Poisson::solve_FEM(double *Vnew,double *Vold,double *rho_atom,double *drho_
 	double *rhsign    = new double[Wire->No_Atom];
 	double condition  = INF;
 	double loc_cond   = INF;
+//	LinearSolver<CPX> *solver;
 	LinearSolver<double> *solver;
 
 	if(!mpi_loc_rank){
@@ -300,22 +305,80 @@ void Poisson::solve_FEM(double *Vnew,double *Vold,double *rho_atom,double *drho_
 	       FEM->NGround,Vground,FEM->source_index,FEM->NSource,Vsource,\
                FEM->drain_index,FEM->NDrain,Vdrain);
 
+if (!mpi_glob_rank) {
+ofstream vnewfile("vnewfile");
+for (int isab=0;isab<FEM->NGrid;isab++) vnewfile<<Vnew[isab]<<endl;
+vnewfile.close();
+}
+
 	init_doping(doping,FEM->doping,FEM->poisson_index,FEM->NGrid,start,stop);
 
-	        copy_cd_cdd(rho,drho_dV,rho_atom,drho_atom_dV,FEM->ratom_index,\
+        double *rho_full     = new double[FEM->NGrid]();
+        double *drho_dV_full = new double[FEM->NGrid]();
+
+	        copy_cd_cdd(rho_full,drho_dV_full,rho_atom,drho_atom_dV,FEM->ratom_index,\
 			    Wire->ch_conv,FEM->poisson_index,FEM->atom_index,\
 			    FEM->NAtom,start,stop);
 
-	init_var(res,RP2->size);
-//also i dont understand the minus sign for the doping
-	    c_daxpy(RP2->size,-beta1,rho,1,res,1);
-	    c_daxpy(RP2->size,beta1,doping,1,res,1);
-      
-		solver = new Umfpack<double>(RP2,loc_comm);
-		solver->prepare();
-	    solver->solve_equation(delta_V,res,1);
+	init_doping(rho,rho_full,FEM->poisson_index,FEM->NGrid,start,stop);
 
+        delete[] rho_full;
+        delete[] drho_dV_full;
+
+	init_var(res,RP2->size);
+//           P2->mat_vec_mult(Vnew,res,1);
+//           c_dscal(RP2->size,-1.0,res,1);
+//also i dont understand the minus sign for the doping
+	    c_daxpy(RP2->size,beta1,rho,1,res,1);
+	    c_daxpy(RP2->size,beta1,doping,1,res,1);
+     
+if (!mpi_glob_rank) {
+ofstream resfile("resfile");
+for (int isab=0;isab<RP2->size;isab++) resfile<<res[isab]<<endl;
+resfile.close();
+ofstream rhogridfile("rhogridfile");
+for (int isab=0;isab<RP2->size;isab++) rhogridfile<<rho[isab]<<endl;
+rhogridfile.close();
+ofstream dopgridfile("dopgridfile");
+for (int isab=0;isab<RP2->size;isab++) dopgridfile<<doping[isab]<<endl;
+dopgridfile.close();
+}
+
+/*
+int ranky=MPI_UNDEFINED;
+if (!mpi_glob_rank) ranky=0;
+MPI_Comm singlecomm;
+MPI_Comm_split(glob_comm,ranky,mpi_glob_rank,&singlecomm);
+*/
+if (!mpi_glob_rank) {
+/*
+TCSR<CPX>* RP2c = new TCSR<CPX>(RP2->size,RP2->n_nonzeros,RP2->findx);
+init_var(RP2c->nnz,RP2->n_nonzeros);
+RP2c->copy_contain(RP2,1.0);
+		solver = new MUMPS<CPX>(RP2c,MPI_COMM_SELF);
+delete RP2c;
+*/
+		solver = new Umfpack<double>(RP2,MPI_COMM_SELF);
+		solver->prepare();
+
+/*
+	CPX *resc       = new CPX[RP2->size]();
+	CPX *delta_Vc   = new CPX[FEM->NPoisson]();
+c_dcopy(RP2->size,res,1,(double*)resc,2);
+	    solver->solve_equation(delta_Vc,resc,1);
+c_dcopy(RP2->size,(double*)delta_Vc,2,delta_V,1);
+*/
+	    solver->solve_equation(delta_V,res,1);
+}
+
+if (!mpi_glob_rank) {
+ofstream potpoissonfile("potpoissonfile");
+for (int isab=0;isab<RP2->size;isab++) potpoissonfile<<delta_V[isab]<<endl;
+potpoissonfile.close();
+}
+if (!mpi_glob_rank) {
 	    delete solver;
+}
        
 //why is the delta V subtracted? oh i change it to copy, but still dont understand what it used to be like 
             iterate_V(Vnew,delta_V,FEM->poisson_index,FEM->NGrid);
@@ -370,6 +433,7 @@ void Poisson::init_V(double *Vnew,double *Vold,int NGrid,int *gate_index,int NGa
     int IG,IS,ID;
 
 //    c_dcopy(NGrid,Vold,1,Vnew,1);
+    c_dscal(NGrid,0.0,Vnew,1);
 
     for(IG=0;IG<NGate;IG++){
         Vnew[gate_index[IG]] = Vg;
@@ -566,12 +630,8 @@ void Poisson::copy_cd_cdd(double *rho,double *drho_dV,double *rho_atom,double *d
     int IA;
     
     for(IA=0;IA<NAtom;IA++){
-        if(poisson_index[atom_index[IA]]){
-	    if((ratom_index[IA]>=start)&&(ratom_index[IA]<stop)){
-	        rho[ratom_index[IA]-start]     = rho_atom[ch_conv[IA]];
-	        drho_dV[ratom_index[IA]-start] = drho_atom_dV[ch_conv[IA]];
-	    }
-	}
+	        rho[atom_index[IA]]     = rho_atom[IA];
+	        drho_dV[atom_index[IA]] = drho_atom_dV[IA];
     }
 
 }

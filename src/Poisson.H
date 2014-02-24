@@ -10,6 +10,8 @@
 #include "CSR.H"
 #include "Umfpack.H"
 #include "Fermi.H"
+//#include "Aztec.H"
+//#include "MUMPS.H"
 
 class Poisson{
 public:

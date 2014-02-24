@@ -99,6 +99,7 @@ public:
     int get_msize(int,int,int,int*);
 // sab begin
     void sparse_to_full(T*,int,int);
+    void mat_vec_mult_add(T*,T*,int,T);
     int get_bandwidth(int);
     void shift_resize(int,int,int,int);
     void contactunitcell(T*,int,int,int,int);
@@ -648,6 +649,8 @@ inline TCSR<T>::TCSR(TCSR<T> *matlocal,int *rootvec,int rootnum,MPI_Comm my_comm
     MPI_Gatherv(matlocal->index_j,matlocal->n_nonzeros,MPI_INT,index_j,dist_loc_n_nonzeros,displc_n_nonzeros,MPI_INT,rootvec[0],my_comm);
     MPI_Gatherv(matlocal->index_i,matlocal->size,MPI_INT,index_i,dist_loc_size,displc_size,MPI_INT,rootvec[0],my_comm);
 
+/*
+//Bcast segfaults on pilatus
     MPI_Group my_group,sub_group;
     MPI_Comm_group(my_comm,&my_group);
     MPI_Group_incl(my_group,rootnum,rootvec,&sub_group);
@@ -655,12 +658,13 @@ inline TCSR<T>::TCSR(TCSR<T> *matlocal,int *rootvec,int rootnum,MPI_Comm my_comm
     MPI_Comm_create(my_comm,sub_group,&sub_comm);
     MPI_Group_free(&my_group);
     MPI_Group_free(&sub_group);
-    MPI_Bcast(nnz,n_nonzeros,give_me_MPI_datatype(nnz),rootvec[0],sub_comm);
+    MPI_Bcast(nnz,n_nonzeros_mpi,give_me_MPI_datatype(nnz),rootvec[0],sub_comm);
     MPI_Bcast(index_j,n_nonzeros,MPI_INT,rootvec[0],sub_comm);
     MPI_Bcast(index_i,size,MPI_INT,rootvec[0],sub_comm);
     MPI_Comm_free(&sub_comm);
+*/
 
-/*
+// /*
     struct tags {
         enum {
             nnz,
@@ -685,7 +689,7 @@ inline TCSR<T>::TCSR(TCSR<T> *matlocal,int *rootvec,int rootnum,MPI_Comm my_comm
             }
         }
     }
-*/
+// */
 
     delete[] dist_loc_n_nonzeros;
     delete[] displc_n_nonzeros;
@@ -1661,6 +1665,48 @@ void TCSR<T>::sparse_to_full(T *B,int nrow,int ncol)
             }
         }
     }
+}
+
+/************************************************************************************************/
+
+template <>
+inline void TCSR<double>::mat_vec_mult_add(double *in, double *out, int nrhs, double fac)
+{
+    int i,j,until;
+    double *vec = new double[nrhs];
+    
+    for(i=0;i<size;i++){
+        init_variable(vec,nrhs);
+        until = edge_i[i+1]-edge_i[i];
+        for(j=0;j<until;j++){
+            c_daxpy(nrhs,nnz[edge_i[i]-findx+j],&in[index_j[edge_i[i]-findx+j]-findx],\
+                    size_tot,vec,1);
+        }
+        c_daxpy(nrhs,fac,vec,1,&out[i],size);
+    }
+    delete[] vec;
+
+}
+
+/************************************************************************************************/
+
+template <>
+inline void TCSR<CPX>::mat_vec_mult_add(CPX *in, CPX *out, int nrhs, CPX fac)
+{
+    int i,j,until;
+    CPX *vec = new CPX[nrhs];
+    
+    for(i=0;i<size;i++){
+        init_variable(vec,nrhs);
+        until = edge_i[i+1]-edge_i[i];
+        for(j=0;j<until;j++){
+            c_zaxpy(nrhs,nnz[edge_i[i]-findx+j],&in[index_j[edge_i[i]-findx+j]-findx],\
+                    size_tot,vec,1);
+        }
+        c_zaxpy(nrhs,fac,vec,1,&out[i],size);
+    }
+    delete[] vec;
+
 }
 
 /************************************************************************************************/
