@@ -12,7 +12,8 @@ public:
 
     Arpack();
     ~Arpack();
-    bool eigs(CPX*,CPX*,CPX*,int,int);
+    bool eigs(CPX*,CPX*,CPX*,int,int,int,double&);
+    bool eigs(CPX*,CPX*,double*,int,int,int,double&);
 
 private:
 	

@@ -7,10 +7,15 @@
 
 #include "CSR.H"
 #include <vector>
+#include <valarray>
+#include "Utilities.H"
 
 class Singularities {
 public:
-Singularities(TCSR<double> *,TCSR<double> *,int,double *,double *,int *,c_transport_type);
+Singularities(c_transport_type);
+int Execute(TCSR<double>*,TCSR<double>*,int,double*,double*,int*);
+void get_propagating(vector< vector<double> >&,const vector<CPX>&);
+void delete_matrices();
 ~Singularities();
 
 /// Vector containing the singularity points
@@ -20,8 +25,23 @@ double energy_gs;
 
 private:
 int ndof;
+double eps_singularities;
+int n_k;
+int n_cells;
+int bandwidth;
+int noccunitcell;
+
+double *energies_matrix;
+double *derivatives_matrix;
+double *curvatures_matrix;
+
 double min_parabola(int,double*,double*,int,double&);
-int determine_velocities(CPX*,CPX*,double,double*,double*,c_transport_type);
+int determine_velocities(CPX*,CPX*,double,double*,double*,double*);
+void determine_fermi(double&,double);
+int eigen(CPX*,CPX*,CPX*,CPX*,CPX,double*);
+void write_bandstructure(int);
+void follow_band();
+
 };
 
 #endif

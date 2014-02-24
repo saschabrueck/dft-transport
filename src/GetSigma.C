@@ -5,10 +5,11 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <limits>
+#include <valarray>
 using namespace std;
 #include "ScaLapack.H"
 #include "InjectionFeast.H"
-//#include "Arpack.H"
+#include "Arpack.H"
 #include "GetSigma.H"
 
 BoundarySelfEnergy::BoundarySelfEnergy()
@@ -27,12 +28,19 @@ BoundarySelfEnergy::BoundarySelfEnergy()
     do_delete_sigma=0;
     do_delete_spsigdist=0;
     do_delete_inj=0;
+    do_delete_spainjdist=0;
 
     H0 = NULL;
     H1 = NULL;
     H1t = NULL;
 
     complexenergypoint=0;
+    compute_inj=0;
+
+    bandwidth=2;
+    colzerothr=1.0E-12;
+    eps_limit=1.0E-8;
+    eps_decay=1.0E-4;
 }
 
 BoundarySelfEnergy::~BoundarySelfEnergy()
@@ -52,6 +60,11 @@ BoundarySelfEnergy::~BoundarySelfEnergy()
         delete spsigmardist;
     }
 
+    if (do_delete_spainjdist) {
+        delete spainjldist;
+        delete spainjrdist;
+    }
+
     if (do_delete_H) {
         delete H0;
         delete H1;
@@ -59,10 +72,8 @@ BoundarySelfEnergy::~BoundarySelfEnergy()
     }
 }
 
-int BoundarySelfEnergy::Set_vars(CPX energy,MPI_Comm matrix_comm,MPI_Comm boundary_comm)
+int BoundarySelfEnergy::Set_master(MPI_Comm matrix_comm,MPI_Comm boundary_comm)
 {
-    if (imag(energy)) complexenergypoint=1;
-
     int matrix_rank, matrix_procs;
     MPI_Comm_size(matrix_comm,&matrix_procs);
     MPI_Comm_rank(matrix_comm,&matrix_rank);
@@ -88,11 +99,24 @@ int BoundarySelfEnergy::Set_vars(CPX energy,MPI_Comm matrix_comm,MPI_Comm bounda
     delete[] matrix_ranks_array;
     delete[] boundary_ranks_array;
     return 0;
-
 }
 
-void BoundarySelfEnergy::Cutout(TCSR<CPX> *SumHamC,int contact,MPI_Comm matrix_comm,c_transport_type parameter_sab)
+int BoundarySelfEnergy::Cutout(TCSR<CPX> *SumHamC,int contact,CPX energy,transport_methods::transport_method method,c_transport_type parameter_sab,MPI_Comm matrix_comm)
 {
+    energyp=energy;
+    if (imag(energy)) complexenergypoint=1;
+    if (method==transport_methods::WF) compute_inj=1;
+    if (complexenergypoint && compute_inj) return (LOGCERR, EXIT_FAILURE);
+
+    n_cells=parameter_sab.n_cells;
+    ndof=SumHamC->size_tot/n_cells;
+    int ntriblock=bandwidth*ndof;
+
+    bandwidth=parameter_sab.bandwidth;
+    colzerothr=parameter_sab.colzero_threshold;
+    eps_limit=parameter_sab.eps_limit;
+    eps_decay=parameter_sab.eps_decay;
+
     int iam,nprocs;
     MPI_Comm_size(matrix_comm,&nprocs);
     MPI_Comm_rank(matrix_comm,&iam);
@@ -105,9 +129,7 @@ void BoundarySelfEnergy::Cutout(TCSR<CPX> *SumHamC,int contact,MPI_Comm matrix_c
         }
     }
     delete[] gathered_master_ranks;
-    int bandwidth=parameter_sab.bandwidth;
-    ndof=SumHamC->size_tot/parameter_sab.n_cells;
-    int ntriblock=bandwidth*ndof;
+
     if (contact==1) {
         TCSR<CPX> *H0cut = new TCSR<CPX>(SumHamC,0,ntriblock,0,ntriblock);
         TCSR<CPX> *H1cut = new TCSR<CPX>(SumHamC,0,ntriblock,ntriblock,ntriblock);
@@ -136,18 +158,17 @@ void BoundarySelfEnergy::Cutout(TCSR<CPX> *SumHamC,int contact,MPI_Comm matrix_c
         }
     }
     do_delete_H=1;
+    return 0;
 }
 
-void BoundarySelfEnergy::Distribute(TCSR<CPX> *SumHamC,c_transport_type parameter_sab,MPI_Comm matrix_comm)
+void BoundarySelfEnergy::Distribute(TCSR<CPX> *SumHamC,MPI_Comm matrix_comm)
 {
     int iam;
     MPI_Comm_rank(matrix_comm,&iam);
-    int bandwidth=parameter_sab.bandwidth;
     int ntriblock=bandwidth*ndof;
-    int triblocksize=ntriblock*ntriblock;
     TCSR<CPX> *spsigmal = NULL;
     if (iam==master_rank) {
-        spsigmal = new TCSR<CPX>(SumHamC->size_tot,triblocksize,SumHamC->findx);
+        spsigmal = new TCSR<CPX>(SumHamC->size_tot,ntriblock*ntriblock,SumHamC->findx);
         spsigmal->full_to_sparse(sigmal,ntriblock,ntriblock,0,0);
         delete[] sigmal;
         sigmal = NULL;
@@ -156,7 +177,7 @@ void BoundarySelfEnergy::Distribute(TCSR<CPX> *SumHamC,c_transport_type paramete
     if (iam==master_rank) delete spsigmal;
     TCSR<CPX> *spsigmar = NULL;
     if (iam==master_rank) {
-        spsigmar = new TCSR<CPX>(SumHamC->size_tot,triblocksize,SumHamC->findx);
+        spsigmar = new TCSR<CPX>(SumHamC->size_tot,ntriblock*ntriblock,SumHamC->findx);
         spsigmar->full_to_sparse(sigmar,ntriblock,ntriblock,SumHamC->size_tot-ntriblock,SumHamC->size_tot-ntriblock);
         delete[] sigmar;
         sigmar = NULL;
@@ -165,9 +186,42 @@ void BoundarySelfEnergy::Distribute(TCSR<CPX> *SumHamC,c_transport_type paramete
     if (iam==master_rank) delete spsigmar;
     do_delete_sigma=0;
     do_delete_spsigdist=1;
+
+    if (compute_inj) {
+        MPI_Bcast(&n_propagating,1,MPI_INT,master_rank,matrix_comm);
+        TCSR<CPX> *spainjl = NULL;
+        if (iam==master_rank) {
+            spainjl = new TCSR<CPX>(SumHamC->size_tot,ntriblock*n_propagating,SumHamC->findx);
+            spainjl->full_to_sparse(injl,ntriblock,n_propagating,0,0);
+            delete[] injl;
+            injl = NULL;
+        }
+        spainjldist = new TCSR<CPX>(SumHamC,spainjl,master_rank,matrix_comm);
+        if (iam==master_rank) delete spainjl;
+        TCSR<CPX> *spainjr = NULL;
+        if (iam==master_rank) {
+            spainjr = new TCSR<CPX>(SumHamC->size_tot,ntriblock*n_propagating,SumHamC->findx);
+            spainjr->full_to_sparse(injr,ntriblock,n_propagating,SumHamC->size_tot-ntriblock,0);
+            delete[] injr;
+            injr = NULL;
+        }
+        spainjrdist = new TCSR<CPX>(SumHamC,spainjr,master_rank,matrix_comm);
+        if (iam==master_rank) delete spainjr;
+        do_delete_inj=0;
+        do_delete_spainjdist=1;
+        }
 }
 
-int BoundarySelfEnergy::GetSigma(transport_methods::transport_method method,c_transport_type parameter_sab,MPI_Comm boundary_comm)
+int BoundarySelfEnergy::Pascal(int r,int n)
+{
+    if( n == 0 )
+        return 1;
+    if( r == 0 || r == n )
+        return 1;
+    return Pascal( r - 1, n - 1 ) + Pascal( r, n - 1 );
+}
+
+int BoundarySelfEnergy::GetSigma(MPI_Comm boundary_comm)
 {
     double d_one=1.0;
     double d_zer=0.0;
@@ -175,18 +229,11 @@ int BoundarySelfEnergy::GetSigma(transport_methods::transport_method method,c_tr
     CPX z_zer=CPX(d_zer,d_zer);
     double sabtime;
     int iinfo=0;
-// get parameters
-    int bandwidth=parameter_sab.bandwidth;
-    double colzerothr=parameter_sab.colzero_threshold;
-    double eps_limit=parameter_sab.eps_limit;
-    double eps_decay=parameter_sab.eps_decay;
-    if (complexenergypoint && method==transport_methods::WF) return (LOGCERR, EXIT_FAILURE);
 // inj_sign
     int inj_sign=-1;
 // set parameters
-    int ndofsq,ndofsqbandwidth;
-    ndofsq=ndof*ndof;
-    ndofsqbandwidth=ndofsq*(2*bandwidth+1);
+    int ndofsq=ndof*ndof;
+    int nblocksband=2*bandwidth+1;
     int ntriblock=bandwidth*ndof;
     int triblocksize=ntriblock*ntriblock;
     int boundary_rank;
@@ -198,10 +245,11 @@ int BoundarySelfEnergy::GetSigma(transport_methods::transport_method method,c_tr
 // copy block
     CPX* KScpx;
     if (boundary_rank==0) {
-        KScpx=new CPX[ndofsqbandwidth];
+        KScpx=new CPX[ndofsq*nblocksband];
         H1t->sparse_to_full(KScpx,ndof,bandwidth*ndof);
         H0->sparse_to_full(&KScpx[bandwidth*ndofsq],ndof,bandwidth*ndof);
         H1->sparse_to_full(&KScpx[2*bandwidth*ndofsq],ndof,ndof);
+    }
 // after i tested if it makes a difference how i assemble the tridiagonalblocks i will remove everything there
 // and build the full kscpx, which i need for my old method, by sparse_to_full out of the h0 and h1, and i build
 // the sparse amat and bmat for feast out of h0 and h1 like i do below
@@ -220,6 +268,7 @@ int BoundarySelfEnergy::GetSigma(transport_methods::transport_method method,c_tr
 */
 // assemble tridiagonalblocks, here just to see if there is an influence if i take the first unit cell and replicate or take the first two unit cells
 /*
+    if (boundary_rank==0) {
         for (int ibandwidth=0;ibandwidth<bandwidth;ibandwidth++)
             for (int jbandwidth=0;jbandwidth<bandwidth;jbandwidth++)
                 for (int jdof=0;jdof<ndof;jdof++)
@@ -230,15 +279,26 @@ int BoundarySelfEnergy::GetSigma(transport_methods::transport_method method,c_tr
                 for (int jdof=0;jdof<ndof;jdof++)
                     c_zcopy(ndof,&KScpx[(2*bandwidth-ibandwidth+jbandwidth)*ndofsq+jdof*ndof],1,&H1cpx[(bandwidth*(jdof+jbandwidth*ndof)+ibandwidth)*ndof],1);
         full_transpose(ntriblock,ntriblock,H1cpx,H1cpxt);
-*/
+//        delete H0;
+//        delete H1;
+//        delete H1t;
+        H0->full_to_sparse(H0cpx,ntriblock,ntriblock);
+        H1->full_to_sparse(H1cpx,ntriblock,ntriblock);
+        H1t->full_to_sparse(H1cpxt,ntriblock,ntriblock);
+//        delete[] H0cpx;
+//        delete[] H1cpx;
+//        delete[] H1cpxt;
     }
+*/
+int worldrank; MPI_Comm_rank(MPI_COMM_WORLD,&worldrank);
+int arpack=0;
 // FEAST
 if (0) {
     InjectionFeast<CPX> *k_inj = new InjectionFeast<CPX>();
     int neigfeast=200;
     k_inj->initialize(2*ntriblock,neigfeast);
     eigvalcpx=new CPX[neigfeast];
-    eigvecc=new CPX[2*ntriblock*neigfeast];
+    CPX* eigvec=new CPX[2*ntriblock*neigfeast];
 /*
     CPX *Amat=new CPX[2*ntriblock*2*ntriblock]();
     CPX *Bmat=new CPX[2*ntriblock*2*ntriblock]();
@@ -300,17 +360,354 @@ if (0) {
         spA->get_diag_pos();
     }
     sabtime=get_time(d_zer);
-    k_inj->calc_kphase(spA,spB,2*ntriblock,eigvalcpx,eigvecc,&neigval,boundary_comm,&iinfo);
+    k_inj->calc_kphase(spA,spB,2*ntriblock,eigvalcpx,eigvec,&neigval,boundary_comm,&iinfo);
     cout << "TIME FOR FEAST " << get_time(sabtime) << endl;
     delete spA;
     delete spB;
     delete k_inj;
+    eigvecc=new CPX[ndof*neigval];//IST NEIGVAL AUCH RICHTIG? SIND DIE AUCH IN EIGVEC RICHTIG ANGEORDNET
+    c_zlacpy('A',ndof,neigval,eigvec,2*ntriblock,eigvecc,ndof);
+    delete[] eigvec;
+//ARPACK
+} else if (arpack) {
+    sabtime=get_time(d_zer);
+    double mmtime=d_zer;
+    double artime=d_zer;
+    double tmptime;
+    Arpack* AR = new Arpack();
+/*
+if (worldrank==10) {
+stringstream mysstreamy;
+mysstreamy << "ksmat" << worldrank;
+ofstream myfily(mysstreamy.str().c_str());
+for (int imat=0;imat<ndofsq*5;imat++) myfily << real(KScpx[imat]) << endl;
+myfily.close();
+}
+*/
+// /*
+    CPX shiftvec[] = {z_one,-z_one};
+    int narpoints=2;
+    int neigarpack=78;
+    int neigarpack2=52;
+    int neigarpack3=0;
+// */
+/*
+    CPX shiftvec[] = {z_one,-z_one};
+    int narpoints=2;
+    int neigarpack=110;
+    int neigarpack2=22;
+    int neigarpack3=0;
+*/
+/*
+    CPX shiftvec[] = {z_one,-z_one,CPX(d_zer,d_one),-CPX(d_zer,d_one)};
+    int narpoints=4;
+    int neigarpack=198;
+    int neigarpack2=0;
+    int neigarpack3=0;
+*/
+    eigvalcpx = new CPX[neigarpack*narpoints+neigarpack2+neigarpack3];
+    CPX* eigvec = new CPX[2*ntriblock*(neigarpack*narpoints+neigarpack2+neigarpack3)];
+    CPX* tmpmat = new CPX[ndofsq*nblocksband];
+    double* inpmat = new double[ndofsq*nblocksband];
+    double *trmat = new double[2*ntriblock*ndof];
+    int *pivarraya=new int[ndof];
+    for (int ishifts=0;ishifts<narpoints;ishifts++) {
+        for (int imat=0;imat<ndofsq*nblocksband;imat++) tmpmat[imat]=z_zer;
+        for (int iresult=0;iresult<nblocksband;iresult++) {
+            for (int iksmat=0;iksmat<=iresult;iksmat++) {
+                double pascalfactor=double(Pascal(nblocksband-1-iresult,nblocksband-1-iresult+iksmat));
+                c_zaxpy(ndofsq,pascalfactor*pow(shiftvec[ishifts],iksmat),&KScpx[(nblocksband-1-iresult+iksmat)*ndofsq],1,&tmpmat[iresult*ndofsq],1);
+            }
+        }
+        if (imag(shiftvec[ishifts])) {
+            c_zgetrf(ndof,ndof,&tmpmat[2*bandwidth*ndofsq],ndof,pivarraya,&iinfo);
+            if (iinfo) return (LOGCERR, EXIT_FAILURE);
+            c_zgetrs('N',ndof,ndof*2*bandwidth,&tmpmat[2*bandwidth*ndofsq],ndof,pivarraya,tmpmat,ndof,&iinfo);
+            if (iinfo) return (LOGCERR, EXIT_FAILURE);
+            CPX *trmatc = new CPX[2*ntriblock*ndof];
+            full_transpose(ntriblock*2,ndof,tmpmat,trmatc);
+            //c_dcopy(2*ntriblock*ndof,(double*)trmatc,2,inpmat,1);
+            tmptime=get_time(0.0);
+            AR->eigs(&eigvec[ishifts*2*ntriblock*neigarpack],&eigvalcpx[ishifts*neigarpack],trmatc,ndof,2*ntriblock,neigarpack,mmtime);
+            artime+=get_time(tmptime);
+            delete[] trmatc;
+        } else {
+            c_dcopy(ndofsq*nblocksband,(double*)tmpmat,2,inpmat,1);
+            c_dgetrf(ndof,ndof,&inpmat[2*bandwidth*ndofsq],ndof,pivarraya,&iinfo);
+            if (iinfo) return (LOGCERR, EXIT_FAILURE);
+            c_dgetrs('N',ndof,ndof*2*bandwidth,&inpmat[2*bandwidth*ndofsq],ndof,pivarraya,inpmat,ndof,&iinfo);
+            if (iinfo) return (LOGCERR, EXIT_FAILURE);
+            full_transpose(ntriblock*2,ndof,inpmat,trmat);
+/*
+stringstream mysstream;
+mysstream << "arpackmat" << worldrank << "_" << ishifts << "new";
+//ofstream myfile;
+//myfile.open(mysstream.str().c_str());
+ifstream my_file(mysstream.str().c_str());
+int yesmyfile=1;
+if (my_file) yesmyfile=0;
+my_file.close();
+if (yesmyfile) {
+ofstream myfile(mysstream.str().c_str());
+for (int imat=0;imat<ndofsq*nblocksband;imat++) myfile << real(tmpmat[imat]) << " " << imag(tmpmat[imat]) << endl;
+myfile.close();
+}
+*/
+            tmptime=get_time(0.0);
+            AR->eigs(&eigvec[ishifts*2*ntriblock*neigarpack],&eigvalcpx[ishifts*neigarpack],trmat,ndof,2*ntriblock,neigarpack,mmtime);
+            artime+=get_time(tmptime);
+        }
+        for (int ieigs=0;ieigs<neigarpack;ieigs++) {
+            eigvalcpx[ishifts*neigarpack+ieigs]=z_one/eigvalcpx[ishifts*neigarpack+ieigs]+shiftvec[ishifts];
+//}else{
+//            eigvalcpx[ishifts*neigarpack+ieigs]=2.0*z_one/eigvalcpx[ishifts*neigarpack+ieigs];
+//            eigvalcpx[ishifts*neigarpack+ieigs]+=sqrt(eigvalcpx[ishifts*neigarpack+ieigs]*eigvalcpx[ishifts*neigarpack+ieigs]-abs(shiftvec[ishifts])*abs(shiftvec[ishifts]));
+//}
+        }
+    }
+    delete[] tmpmat;
+    delete[] inpmat;
+    delete[] trmat;
+    delete[] pivarraya;
+//start arpack for square old method
+/*
+    ndof*=2;
+    ndofsq*=4;
+    bandwidth/=2;
+    nblocksband=3;
+    int *pivarraya2=new int[ndof];
+    CPX* KScpxbig = new CPX[ndofsq*nblocksband];
+    H0->sparse_to_full(&KScpxbig[ndofsq],ntriblock,ntriblock);
+    H1->sparse_to_full(&KScpxbig[2*ndofsq],ntriblock,ntriblock);
+    H1t->sparse_to_full(KScpxbig,ntriblock,ntriblock);
+    CPX *tmpmat2 = new CPX[ndofsq*nblocksband]();
+    for (int iresult=0;iresult<nblocksband;iresult++) {
+        for (int iksmat=0;iksmat<=iresult;iksmat++) {
+            double pascalfactor=double(Pascal(nblocksband-1-iresult,nblocksband-1-iresult+iksmat));
+            c_zaxpy(ndofsq,pascalfactor*pow(-z_one,iksmat),&KScpxbig[(nblocksband-1-iresult+iksmat)*ndofsq],1,&tmpmat2[iresult*ndofsq],1);
+        }
+    }
+    double *inpmat2 = new double[ndofsq*nblocksband];
+    c_dcopy(ndofsq*nblocksband,(double*)tmpmat2,2,inpmat2,1);
+    c_dgetrf(ndof,ndof,&inpmat2[2*bandwidth*ndofsq],ndof,pivarraya2,&iinfo);
+    if (iinfo) return (LOGCERR, EXIT_FAILURE);
+    c_dgetrs('N',ndof,ndof*2*bandwidth,&inpmat2[2*bandwidth*ndofsq],ndof,pivarraya2,inpmat2,ndof,&iinfo);
+    if (iinfo) return (LOGCERR, EXIT_FAILURE);
+    double *trmat2 = new double[ndofsq*nblocksband];
+    full_transpose(ndof*2,ndof,inpmat2,trmat2);
+//    CPX *trmatc2 = new CPX[2*ndof*ndof];
+//    c_dcopy(2*ndof*ndof,trmat2,1,(double*)trmatc2,2);
+    tmptime=get_time(0.0);
+    AR->eigs(&eigvec[2*ntriblock*narpoints*neigarpack],&eigvalcpx[narpoints*neigarpack],trmat2,ndof,2*ntriblock,neigarpack2,mmtime);
+    artime+=get_time(tmptime);
+    delete[] pivarraya2;
+    delete[] KScpxbig;
+    bandwidth*=2;
+    nblocksband=5;
+    ndof/=2;
+    ndofsq/=4;
+//    delete[] trmatc2;
+    delete[] tmpmat2;
+    delete[] inpmat2;
+    delete[] trmat2;
+    CPX *poly = new CPX[nblocksband];
+    CPX* vecoutdof = new CPX[ndof];
+    CPX *rootmat = new CPX[4*4];
+    double *workydouble=new double[2*4];
+    int lworkycc=2*4;
+    CPX *workycc=new CPX[lworkycc];
+    for (int ieigs=0;ieigs<neigarpack2;ieigs++) {
+        eigvalcpx[narpoints*neigarpack+ieigs]=sqrt(z_one/eigvalcpx[narpoints*neigarpack+ieigs]-z_one);
+        for (int ip=0;ip<nblocksband;ip++) {
+            c_zgemv('N',ndof,ndof,z_one,&KScpx[ndofsq*ip],ndof,&eigvec[(narpoints*neigarpack+ieigs)*2*ntriblock],1,z_zer,vecoutdof,1);
+            poly[ip]=c_zdotc(ndof,&eigvec[(narpoints*neigarpack+ieigs)*2*ntriblock],1,vecoutdof,1);
+        }
+        for (int ip=0;ip<4*4;ip++) {
+            rootmat[ip]=CPX(0.0,0.0);
+        }
+        for (int ip=1;ip<5;ip++) {
+            rootmat[(ip-1)*4]=poly[4-ip]/poly[4];
+        }
+        for (int ip=1;ip<4;ip++) {
+            rootmat[(ip-1)*4+ip]=CPX(1.0,0.0);
+        }
+        c_zgeev('N','N',4,rootmat,4,poly,NULL,1,NULL,1,workycc,lworkycc,workydouble,&iinfo);
+        if (iinfo) return (LOGCERR, EXIT_FAILURE);
+        for (int ip=0;ip<4;ip++) {
+            double eigcmpr = real(pow(eigvalcpx[narpoints*neigarpack+ieigs],2));
+            double eigcmpi = imag(pow(eigvalcpx[narpoints*neigarpack+ieigs],2));
+            double eigpolr = real(pow(poly[ip],2));
+            double eigpoli = imag(pow(poly[ip],2));
+            double tolcond = 1.0E-3;
+            int conditionr = (eigpolr<eigcmpr+tolcond && eigpolr>eigcmpr-tolcond);
+            int conditioni = (eigpoli<eigcmpi+tolcond && eigpoli>eigcmpi-tolcond);
+            if (conditionr && conditioni) {
+                if (real(poly[ip]/eigvalcpx[narpoints*neigarpack+ieigs])<0) {
+//                  cout<<"SIGN CHANGE "<<poly[ip]<<" FOR "<<eigvalcpx[narpoints*neigarpack+ieigs]<<" IN "<<ieigs<<" ON "<<worldrank<<endl;
+                    eigvalcpx[narpoints*neigarpack+ieigs]*=-1.0;
+                }
+                break;
+            }
+        }
+    }
+    delete[] workycc;
+    delete[] workydouble;
+    delete[] poly;
+    delete[] vecoutdof;
+    delete[] rootmat;
+if (0) {
+stringstream mysstream;
+mysstream << "arpackmat" << worldrank;
+//ofstream myfile;
+//myfile.open(mysstream.str().c_str());
+ifstream my_file(mysstream.str().c_str());
+int yesmyfile=1;
+if (my_file) yesmyfile=0;
+my_file.close();
+if (yesmyfile&&worldrank==26) {
+ofstream myfile(mysstream.str().c_str());
+for (int imat=0;imat<624*2*624*2*2;imat++) myfile << real(tmpmat2[imat]) << endl;
+myfile.close();
+}
+}
+//end arpack for square
+*/
+//start arpack for square new method
+    if (neigarpack2) {
+        double *matB = new double[1*ndofsq];
+        double *matM = new double[4*ndofsq];
+        double *matC = new double[8*ndofsq]();
+        c_dcopy(ndofsq,(double*)&KScpx[2*ndofsq],2,matB,1);
+        c_daxpy(ndofsq,-1.0,(double*)&KScpx[0*ndofsq],2,matB,1);
+        c_daxpy(ndofsq,-1.0,(double*)&KScpx[4*ndofsq],2,matB,1);
+        c_dlacpy('A',ndof,ndof,matB,ndof,&matM[0],2*ndof);
+        c_dlacpy('A',ndof,ndof,matB,ndof,&matM[2*ndofsq+ndof],2*ndof);
+        c_dcopy(ndofsq,(double*)&KScpx[3*ndofsq],2,matB,1);
+        c_daxpy(ndofsq,-1.0,(double*)&KScpx[1*ndofsq],2,matB,1);
+        c_dlacpy('A',ndof,ndof,matB,ndof,&matM[2*ndofsq],2*ndof);
+        c_dscal(ndofsq,-1.0,matB,1);
+        c_dlacpy('A',ndof,ndof,matB,ndof,&matM[ndof],2*ndof);
+        c_dcopy(ndofsq,(double*)&KScpx[0*ndofsq],2,matB,1);
+        c_dlacpy('A',ndof,ndof,matB,ndof,&matC[0],2*ndof);
+        c_dlacpy('A',ndof,ndof,matB,ndof,&matC[2*ndofsq+ndof],2*ndof);
+        c_dcopy(ndofsq,(double*)&KScpx[1*ndofsq],2,matB,1);
+        c_dlacpy('A',ndof,ndof,matB,ndof,&matC[2*ndofsq],2*ndof);
+        c_dcopy(ndofsq,(double*)&KScpx[3*ndofsq],2,matB,1);
+        c_dlacpy('A',ndof,ndof,matB,ndof,&matC[4*ndofsq+ndof],2*ndof);
+        c_dcopy(ndofsq,(double*)&KScpx[4*ndofsq],2,matB,1);
+        c_dlacpy('A',ndof,ndof,matB,ndof,&matC[4*ndofsq],2*ndof);
+        c_dlacpy('A',ndof,ndof,matB,ndof,&matC[6*ndofsq+ndof],2*ndof);
+        delete[] matB;
+        int *pivarrayM = new int[2*ndof];
+        c_dgetrf(2*ndof,2*ndof,matM,2*ndof,pivarrayM,&iinfo);
+        if (iinfo) return (LOGCERR, EXIT_FAILURE);
+        c_dgetrs('N',2*ndof,4*ndof,matM,2*ndof,pivarrayM,matC,2*ndof,&iinfo);
+        if (iinfo) return (LOGCERR, EXIT_FAILURE);
+        delete[] pivarrayM;
+        delete[] matM;
+        tmptime=get_time(0.0);
+        AR->eigs(&eigvec[2*ntriblock*narpoints*neigarpack],&eigvalcpx[narpoints*neigarpack],matC,2*ndof,2*ntriblock,neigarpack2,mmtime);
+        artime+=get_time(tmptime);
+        delete[] matC;
+        for (int ieigs=0;ieigs<neigarpack2;ieigs++) {
+            eigvalcpx[narpoints*neigarpack+ieigs]=sqrt(z_one/eigvalcpx[narpoints*neigarpack+ieigs]-z_one);
+            CPX eigvalfromvec = eigvec[2*ntriblock*(narpoints*neigarpack+ieigs)+ndof]/eigvec[2*ntriblock*(narpoints*neigarpack+ieigs)];
+            if (real(eigvalfromvec/eigvalcpx[narpoints*neigarpack+ieigs])<0) {
+                eigvalcpx[narpoints*neigarpack+ieigs]*=-1.0;
+            }
+        }
+    }
+//end arpack for square new method
+//start arpack for pow3
+    if (neigarpack3) {
+        double *matB = new double[ndofsq]();
+        double *matM = new double[16*ndofsq]();
+        double *matC = new double[16*ndofsq]();
+        for (int idiag=0;idiag<ndof;idiag++) {
+            matB[idiag+ndof*idiag]=1.0;
+        }
+        c_dlacpy('A',ndof,ndof,matB,ndof,&matM[0*4*ndofsq+3*ndof],4*ndof);
+        for (int idiag=0;idiag<ndof;idiag++) {
+            matB[idiag+ndof*idiag]=-1.0;
+        }
+        c_dlacpy('A',ndof,ndof,matB,ndof,&matC[3*4*ndofsq+3*ndof],4*ndof);
+        c_dcopy(ndofsq,(double*)&KScpx[0*ndofsq],2,matB,1);
+        c_dlacpy('A',ndof,ndof,matB,ndof,&matC[0*4*ndofsq+0*ndof],4*ndof);
+        c_dlacpy('A',ndof,ndof,matB,ndof,&matC[1*4*ndofsq+1*ndof],4*ndof);
+        c_dlacpy('A',ndof,ndof,matB,ndof,&matC[2*4*ndofsq+2*ndof],4*ndof);
+        c_dcopy(ndofsq,(double*)&KScpx[1*ndofsq],2,matB,1);
+        c_dlacpy('A',ndof,ndof,matB,ndof,&matM[0*4*ndofsq+2*ndof],4*ndof);
+        c_dlacpy('A',ndof,ndof,matB,ndof,&matC[1*4*ndofsq+0*ndof],4*ndof);
+        c_dlacpy('A',ndof,ndof,matB,ndof,&matC[2*4*ndofsq+1*ndof],4*ndof);
+        c_dcopy(ndofsq,(double*)&KScpx[2*ndofsq],2,matB,1);
+        c_dlacpy('A',ndof,ndof,matB,ndof,&matM[0*4*ndofsq+1*ndof],4*ndof);
+        c_dlacpy('A',ndof,ndof,matB,ndof,&matM[1*4*ndofsq+2*ndof],4*ndof);
+        c_dlacpy('A',ndof,ndof,matB,ndof,&matC[2*4*ndofsq+0*ndof],4*ndof);
+        c_dcopy(ndofsq,(double*)&KScpx[3*ndofsq],2,matB,1);
+        c_dlacpy('A',ndof,ndof,matB,ndof,&matM[0*4*ndofsq+0*ndof],4*ndof);
+        c_dlacpy('A',ndof,ndof,matB,ndof,&matM[1*4*ndofsq+1*ndof],4*ndof);
+        c_dlacpy('A',ndof,ndof,matB,ndof,&matM[2*4*ndofsq+2*ndof],4*ndof);
+        c_dcopy(ndofsq,(double*)&KScpx[4*ndofsq],2,matB,1);
+        c_dlacpy('A',ndof,ndof,matB,ndof,&matM[1*4*ndofsq+0*ndof],4*ndof);
+        c_dlacpy('A',ndof,ndof,matB,ndof,&matM[2*4*ndofsq+1*ndof],4*ndof);
+        c_dlacpy('A',ndof,ndof,matB,ndof,&matM[3*4*ndofsq+2*ndof],4*ndof);
+        delete[] matB;
+        c_daxpy(16*ndofsq,-1.0,matC,1,matM,1);
+        int *pivarrayM = new int[4*ndof];
+        c_dgetrf(4*ndof,4*ndof,matM,4*ndof,pivarrayM,&iinfo);
+        if (iinfo) return (LOGCERR, EXIT_FAILURE);
+        c_dgetrs('N',4*ndof,4*ndof,matM,4*ndof,pivarrayM,matC,4*ndof,&iinfo);
+        if (iinfo) return (LOGCERR, EXIT_FAILURE);
+        delete[] pivarrayM;
+        delete[] matM;
+/*
+if (worldrank==46){
+ofstream myfile("powthree46");
+for (int ii=0;ii<16*ndofsq;ii++) myfile << matC[ii] << endl;
+myfile.close();
+}
+MPI_Barrier(MPI_COMM_WORLD);
+exit(0);
+*/
+        tmptime=get_time(0.0);
+        AR->eigs(&eigvec[2*ntriblock*(narpoints*neigarpack+neigarpack2)],&eigvalcpx[narpoints*neigarpack+neigarpack2],matC,2*ntriblock,2*ntriblock,neigarpack2,mmtime);
+        artime+=get_time(tmptime);
+        delete[] matC;
+        for (int ieigs=0;ieigs<neigarpack3;ieigs++) {
+            eigvalcpx[narpoints*neigarpack+neigarpack2+ieigs]=pow(z_one/eigvalcpx[narpoints*neigarpack+neigarpack2+ieigs]-z_one,1.0/3.0);
+            CPX eigvalfromvec = eigvec[2*ntriblock*(narpoints*neigarpack+neigarpack2+ieigs)]/eigvec[2*ntriblock*(narpoints*neigarpack+neigarpack2+ieigs)+ndof];
+            if (real(eigvalfromvec/eigvalcpx[narpoints*neigarpack+neigarpack2+ieigs])<0) {
+                if (imag(eigvalfromvec/eigvalcpx[narpoints*neigarpack+neigarpack2+ieigs])>0) {
+                    eigvalcpx[narpoints*neigarpack+neigarpack2+ieigs]*=0.5*(-1.0+sqrt(3));
+                } else {
+                    eigvalcpx[narpoints*neigarpack+neigarpack2+ieigs]*=0.5*(-1.0-sqrt(3));
+                }
+            }
+        }
+    }
+//end arpack for pow3
+/*
+stringstream mysstream;
+mysstream << "eigvals" << worldrank;
+ofstream myfile(mysstream.str().c_str());
+for (int ieigout=0;ieigout<narpoints*neigarpack;ieigout++) myfile << real(eigvalcpx[ieigout]) << " " << imag(eigvalcpx[ieigout])  << endl;
+myfile.close();
+*/
+    for (int ieigs=0;ieigs<narpoints*neigarpack+neigarpack2+neigarpack3;ieigs++) {
+        eigvalcpx[ieigs]=z_one/(eigvalcpx[ieigs]-z_one);
+    }
+    neigval=narpoints*neigarpack+neigarpack2+neigarpack3;
+    delete AR;
+    eigvecc = new CPX[ndof*neigval];
+    c_zlacpy('A',ndof,neigval,eigvec,2*ntriblock,eigvecc,ndof);
+    delete[] eigvec;
+    cout << worldrank << " NEEDED TIME FOR DIAGONALIZATION " << get_time(sabtime) << " INCLUDING ARPACK " << artime << " INCLUDING MATVECMULT "<< mmtime << endl;
 // ALL EIGENVALUES
 } else {
 if (!boundary_rank) {
     CPX *mats=new CPX[ndofsq];
     c_zcopy(ndofsq,KScpx,1,mats,1);
-    for (int ibandwidth=1;ibandwidth<2*bandwidth+1;ibandwidth++)
+    for (int ibandwidth=1;ibandwidth<nblocksband;ibandwidth++)
         c_zaxpy(ndofsq,d_one,&KScpx[ibandwidth*ndofsq],1,mats,1);//easier is possible because mats is symmetric
     CPX *matb=new CPX[2*bandwidth*ndofsq];//lowest block of right hand side matrix
 // i think this is right for the general case
@@ -530,6 +927,20 @@ if (!boundary_rank) {
     delete[] eigvalcpx; 
     delete[] matcdof;
     delete[] vecout;
+if (nprotra) { cout<<worldrank<<" AT "<<real(energyp)<<" NPROTRA "<<nprotra<<" NPROREF "<<nproref<<" NDECTRA "<<ndectra<<" NDECREF "<<ndecref<<endl; } else cout<<worldrank<<" FAILED ! ! ! ! !"<<endl;
+for (int iout=0;iout<nprotra;iout++) cout<<worldrank<<" VALUE "<<lambdavec[protravec[iout]]<<endl;
+ofstream myfile;
+stringstream mysstream;
+mysstream << "AllEigvals" << worldrank;
+myfile.open(mysstream.str().c_str());
+myfile.precision(15);
+for (int iele=0;iele<neigval;iele++)
+    myfile << real(lambdavec[iele]) << " " << imag(lambdavec[iele]) << endl;
+myfile.close();
+//if (!nprotra) {
+//arpack=0;
+//}
+//MPI_Barrier(MPI_COMM_WORLD);
     if (nprotra!=nproref) return (LOGCERR, EXIT_FAILURE);
     if (ndectra!=ndecref) ndectra=min(ndectra,ndecref);//return (LOGCERR, EXIT_FAILURE);
 // FOR ABOVE CASE I NEED TO IMPLEMENT SORTING OF LAMBDA? OR JUST THROW AWAY SOME VECS OF THE LIST SETTING NDEC TO MIN OF PRO AND REF?
@@ -609,11 +1020,11 @@ if (!boundary_rank) {
     delete[] VT;
     cout << "TIME FOR SOME MATRIX MATRIX MULTIPLICATIONS " << get_time(sabtime) << endl;
     if (0) {
-    CPX *KSeig=new CPX[neigbas*neigbas*(2*bandwidth+1)];
+    CPX *KSeig=new CPX[neigbas*neigbas*nblocksband];
     CPX *invgtmp=new CPX[neigbas*neigbas];
     sabtime=get_time(d_zer);
 // KSeig is KScpx in V-base
-    for (int iband=bandwidth;iband<(2*bandwidth+1);iband++) {
+    for (int iband=bandwidth;iband<nblocksband;iband++) {
         c_zgemm('N','N',ndof,neigbas,ndof,z_one,&KScpx[ndofsq*iband],ndof,Vtra,ntriblock,z_zer,matcpx,ntriblock);
         c_zgemm('C','N',neigbas,neigbas,ndof,z_one,Vtra,ntriblock,matcpx,ntriblock,z_zer,&KSeig[neigbas*neigbas*iband],neigbas);
     }
@@ -670,7 +1081,7 @@ if (!boundary_rank) {
     c_zaxpy(neigbas*neigbas,z_one,invgtmp,1,invgls,1);
 // now for grs
     if (complexenergypoint||1)
-        for (int iband=bandwidth;iband<(2*bandwidth+1);iband++) {
+        for (int iband=bandwidth;iband<nblocksband;iband++) {
             c_zgemm('N','N',ndof,neigbas,ndof,z_one,&KScpx[ndofsq*iband],ndof,Vref,ntriblock,z_zer,matcpx,ntriblock);
             c_zgemm('C','N',neigbas,neigbas,ndof,z_one,Vref,ntriblock,matcpx,ntriblock,z_zer,&KSeig[neigbas*neigbas*iband],neigbas);
         }
@@ -680,13 +1091,13 @@ if (!boundary_rank) {
         double *Vimag=new double[bandwidth*ndof*neigbas];
         double *matdb=new double[bandwidth*ndof*neigbas];
         double *KStmp=new double[neigbas*neigbas];
-        double* KSfull=new double[ndofsqbandwidth];
-        c_dcopy(ndofsqbandwidth,(double*)KScpx,2,KSfull,1);
+        double* KSfull=new double[ndofsq*nblocksband];
+        c_dcopy(ndofsq*nblocksband,(double*)KScpx,2,KSfull,1);
         for (int ii=0;ii<bandwidth*ndof*neigbas;ii++) {
             Vreal[ii]=real(Vref[ii]);
             Vimag[ii]=imag(Vref[ii]);
         }
-        for (int iband=bandwidth;iband<(2*bandwidth+1);iband++) {
+        for (int iband=bandwidth;iband<nblocksband;iband++) {
             c_dgemm('N','N',ndof,neigbas,ndof,d_one,&KSfull[ndofsq*iband],ndof,Vreal,ntriblock,d_zer,matdb,ntriblock);
             c_dgemm('T','N',neigbas,neigbas,ndof,d_one,Vreal,ntriblock,matdb,ntriblock,d_zer,KStmp,neigbas);
             for (int imat=0;imat<neigbas*neigbas;imat++)
@@ -884,17 +1295,15 @@ if (!boundary_rank) {
 
     delete[] matctri;
 
-    if (method==transport_methods::WF) {
+    if (compute_inj) {
         sabtime=get_time(d_zer);
         n_propagating=nprotra;
         c_dscal(nprotra*ntriblock,-d_one,((double*)Vtra)+1,2);
         c_dscal(nprotra*ntriblock,-d_one,((double*)Vref)+1,2);
         injl=new CPX[ntriblock*nprotra];
         injr=new CPX[ntriblock*nprotra];
-//        c_zgemm('C','N',ntriblock,nprotra,ntriblock,z_one,H1cpx,ntriblock,Vtracp,ntriblock,z_zer,injl,ntriblock);
-//        c_zgemm('N','N',ntriblock,nprotra,ntriblock,z_one,H1cpx,ntriblock,Vrefcp,ntriblock,z_zer,injr,ntriblock);
-        H1t->mat_vec_mult(Vtra,injl,nprotra,1);
-        H1->mat_vec_mult(Vref,injr,nprotra,1);
+        H1t->mat_vec_mult(Vtra,injl,nprotra);
+        H1->mat_vec_mult(Vref,injr,nprotra);
         CPX *injl1=new CPX[ntriblock*nprotra];
         CPX *injr1=new CPX[ntriblock*nprotra];
         c_zcopy(ntriblock*nprotra,injl,1,injl1,1);
@@ -903,10 +1312,8 @@ if (!boundary_rank) {
             c_zscal(ntriblock,pow(lambdavec[protravec[ipro]],-bandwidth),&injl1[ipro*ntriblock],1);
             c_zscal(ntriblock,pow(lambdavec[prorefvec[ipro]],+bandwidth),&injr1[ipro*ntriblock],1);
         }
-//        c_zgemm('N','N',ntriblock,nprotra,ntriblock,z_one,H0cpx,ntriblock,Vtracp,ntriblock,z_one,injl1,ntriblock);
-//        c_zgemm('N','N',ntriblock,nprotra,ntriblock,z_one,H0cpx,ntriblock,Vrefcp,ntriblock,z_one,injr1,ntriblock);
-        H0->mat_vec_mult(Vtra,injl1,nprotra,1);
-        H0->mat_vec_mult(Vref,injr1,nprotra,1);
+        H0->mat_vec_mult_add(Vtra,injl1,nprotra,z_one);
+        H0->mat_vec_mult_add(Vref,injr1,nprotra,z_one);
 // add I1 to I0 to form I
         c_zgemm('N','N',ntriblock,nprotra,ntriblock,-z_one,presigmal,ntriblock,injl1,ntriblock,z_one,injl,ntriblock);
         c_zgemm('N','N',ntriblock,nprotra,ntriblock,-z_one,presigmar,ntriblock,injr1,ntriblock,z_one,injr,ntriblock);
@@ -919,9 +1326,6 @@ if (!boundary_rank) {
         delete[] injr1;
         do_delete_inj=1;
     }
-//    delete[] H0cpx;
-//    delete[] H1cpx;
-//    delete[] H1cpxt;
     delete[] presigmal;
     delete[] presigmar;
     delete[] Vtra;

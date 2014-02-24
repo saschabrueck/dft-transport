@@ -10,6 +10,9 @@
 #include "WireGenerator.H"
 #include "FEMGrid.H"
 #include "Poisson.H"
+// WRITE IN MATRIX
+#include "CSR.H"
+int energyvector(TCSR<double>*,TCSR<double>*,int,double*,int*,double*,double*,c_transport_type);
 
 extern "C" {
     void yyrestart(FILE *);
@@ -83,10 +86,13 @@ int main (int argc, char **argv)
    mpi_comm = MPI::COMM_WORLD;
    fcomm = MPI_Comm_c2f(mpi_comm);
 
-   cp_c_init_cp2k(&init_mpi, &error);
-   cp_c_create_fenv_comm(&f_env_id, input_file, output_file, &fcomm, &error);
-   cp_c_ext_scf_set_ptr(&f_env_id, &c_scf_method, &error);
-   cp_c_get_natom(&f_env_id, &natom, &error);
+   int run_cp2k=1;
+   if (run_cp2k) {
+      cp_c_init_cp2k(&init_mpi, &error);
+      cp_c_create_fenv_comm(&f_env_id, input_file, output_file, &fcomm, &error);
+      cp_c_ext_scf_set_ptr(&f_env_id, &c_scf_method, &error);
+      cp_c_get_natom(&f_env_id, &natom, &error);
+   }
 
    n_el = natom*3;
    n_el_pos = natom*3;
@@ -123,18 +129,49 @@ int main (int argc, char **argv)
 
 
 int iam;MPI_Comm_rank(MPI_COMM_WORLD,&iam);
-if(!iam){
+if(!iam&&do_omen_poisson){
 ofstream femgridfile("femgrid");
 for (int ix=0;ix<FEM->NGrid;ix++) femgridfile<<FEM->grid[3*ix]<<" "<<FEM->grid[3*ix+1]<<" "<<FEM->grid[3*ix+2]<<endl;
 femgridfile.close();
 }
- 
-   cp_c_calc_energy_force(&f_env_id, &calc_force, &error);
-   cp_c_get_energy(&f_env_id, &e_pot, &error);
-   cp_c_get_force(&f_env_id, force, &n_el_force, &error);
-   cp_c_get_pos(&f_env_id, pos, &n_el, &error);
-   cp_c_destroy_fenv(&f_env_id, &error);
-   cp_c_finalize_cp2k(&finalize_mpi, &error);
+
+   if (run_cp2k) {
+      cp_c_calc_energy_force(&f_env_id, &calc_force, &error);
+      cp_c_get_energy(&f_env_id, &e_pot, &error);
+      cp_c_get_force(&f_env_id, force, &n_el_force, &error);
+      cp_c_get_pos(&f_env_id, pos, &n_el, &error);
+      cp_c_destroy_fenv(&f_env_id, &error);
+      cp_c_finalize_cp2k(&finalize_mpi, &error);
+   } else {
+      int w_size, w_rank;
+      MPI_Comm_size(MPI_COMM_WORLD,&w_size);
+      MPI_Comm_rank(MPI_COMM_WORLD,&w_rank);
+      TCSR<double>* Overlap = new TCSR<double>("Overlap",w_size,w_rank);
+      TCSR<double>* KohnSham = new TCSR<double>("KohnSham",w_size,w_rank);
+      c_transport_type transport_env_params;
+      ifstream paraminfile("TransportParams");
+      paraminfile >> transport_env_params.method;
+      paraminfile >> transport_env_params.bandwidth;
+      paraminfile >> transport_env_params.n_cells;
+      paraminfile >> transport_env_params.n_occ;
+      paraminfile >> transport_env_params.n_abscissae;
+      paraminfile >> transport_env_params.n_kpoint;
+      paraminfile >> transport_env_params.extra_int_param1;
+      paraminfile >> transport_env_params.extra_int_param2;
+      paraminfile >> transport_env_params.extra_int_param3;
+      paraminfile >> transport_env_params.evoltfactor;
+      paraminfile >> transport_env_params.colzero_threshold;
+      paraminfile >> transport_env_params.eps_limit;
+      paraminfile >> transport_env_params.eps_decay;
+      paraminfile >> transport_env_params.eps_singularities;
+      paraminfile >> transport_env_params.extra_param1;
+      paraminfile >> transport_env_params.extra_param2;
+      paraminfile >> transport_env_params.extra_param3;
+      paraminfile.close();
+      energyvector(Overlap,KohnSham,2,NULL,NULL,NULL,NULL,transport_env_params);
+      delete Overlap;
+      delete KohnSham;
+   }
 
    if (do_omen_poisson) {
       delete OMEN_Poisson_Solver;

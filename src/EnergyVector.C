@@ -21,37 +21,37 @@ int energyvector(TCSR<double> *Overlap,TCSR<double> *KohnSham,int n_mu,double* m
         return (LOGCERR, EXIT_FAILURE);
     }
 // additional parameters not needed in the future
-    int bw=transport_params.bandwidth;
     int ncells=transport_params.n_cells;
     int size=Overlap->size_tot;
     int ndof=size/ncells;
     int begin;
     int number;
-// only a writeoutthing
-/*
-            TCSR<double> *Hcut = new TCSR<double>(KohnSham,0,ndof,0,(bw+1)*ndof);
-            TCSR<double> *Hsp = new TCSR<double>(Hcut,0,MPI_COMM_WORLD);
-            delete Hcut;
-            if (!iam) {
-                Hsp->shift_resize(0,ndof,0,(bw+1)*ndof);
-                Hsp->change_findx(1);
-                Hsp->write("H012");
-            }
-            delete Hsp;
-            TCSR<double> *Scut = new TCSR<double>(Overlap,0,ndof,0,(bw+1)*ndof);
-            TCSR<double> *Ssp = new TCSR<double>(Scut,MPI_COMM_WORLD);
-            delete Scut;
-            if (!iam) {
-                Ssp->shift_resize(0,ndof,0,(bw+1)*ndof);
-                Ssp->change_findx(1);
-                Ssp->write("S012");
-            }
-            delete Ssp;
-            return EXIT_FAILURE;
-*/
-// end the writeoutthing
+// only to write out unit cell Hamiltonian and Overlap matrix
+#ifdef _CONTACT_WRITEOUT
+    TCSR<double> *Hcut = new TCSR<double>(KohnSham,0,ndof,0,(transport_params.bandwidth+1)*ndof);
+    TCSR<double> *Hsp = new TCSR<double>(Hcut,0,MPI_COMM_WORLD);
+    delete Hcut;
+    if (!iam) {
+        Hsp->shift_resize(0,ndof,0,(transport_params.bandwidth+1)*ndof);
+        Hsp->change_findx(1);
+        Hsp->write("H012");
+    }
+    delete Hsp;
+    TCSR<double> *Scut = new TCSR<double>(Overlap,0,ndof,0,(transport_params.bandwidth+1)*ndof);
+    TCSR<double> *Ssp = new TCSR<double>(Scut,MPI_COMM_WORLD);
+    delete Scut;
+    if (!iam) {
+        Ssp->shift_resize(0,ndof,0,(transport_params.bandwidth+1)*ndof);
+        Ssp->change_findx(1);
+        Ssp->write("S012");
+    }
+    delete Ssp;
+    MPI_Barrier(MPI_COMM_WORLD);
+    exit(0);
+#endif
     c_dscal(KohnSham->n_nonzeros,transport_params.evoltfactor,KohnSham->nnz,1);
 // allocate matrices to gather on every node
+    sabtime=get_time(0.0);
     TCSR<double> *KohnShamCollect;
     TCSR<double> *OverlapCollect;
     TCSR<double> *Ps=NULL;
@@ -85,7 +85,36 @@ int energyvector(TCSR<double> *Overlap,TCSR<double> *KohnSham,int n_mu,double* m
         Ps = new TCSR<double>(OverlapCollect->size,OverlapCollect->n_nonzeros,OverlapCollect->findx);
         Ps->copy_index(OverlapCollect);
         Ps->init_variable(Ps->nnz,Ps->n_nonzeros);
+#ifdef _CP2K_WRITEOUT
+if (!iam) {
+c_dscal(KohnShamCollect->n_nonzeros,1.0/transport_params.evoltfactor,KohnShamCollect->nnz,1);
+KohnShamCollect->write_CSR("KohnSham");
+OverlapCollect->write_CSR("Overlap");
+ofstream paramoutfile("TransportParams");
+paramoutfile << transport_params.method << endl;
+paramoutfile << transport_params.bandwidth << endl;
+paramoutfile << transport_params.n_cells << endl;
+paramoutfile << transport_params.n_occ << endl;
+paramoutfile << transport_params.n_abscissae << endl;
+paramoutfile << transport_params.n_kpoint << endl;
+paramoutfile << transport_params.extra_int_param1 << endl;
+paramoutfile << transport_params.extra_int_param2 << endl;
+paramoutfile << transport_params.extra_int_param3 << endl;
+paramoutfile << transport_params.evoltfactor << endl;
+paramoutfile << transport_params.colzero_threshold << endl;
+paramoutfile << transport_params.eps_limit << endl;
+paramoutfile << transport_params.eps_decay << endl;
+paramoutfile << transport_params.eps_singularities << endl;
+paramoutfile << transport_params.extra_param1 << endl;
+paramoutfile << transport_params.extra_param2 << endl;
+paramoutfile << transport_params.extra_param3 << endl;
+paramoutfile.close();
+}
+MPI_Barrier(MPI_COMM_WORLD);
+exit(0);
+#endif
     }
+    if (!iam) cout << "TIME FOR DISTRIBUTING MATRICES " << get_time(sabtime) << endl;
 // determine singularity stuff
     double Temp=0.0;
     if (electronchargeperatom==NULL) {
@@ -98,12 +127,14 @@ int energyvector(TCSR<double> *Overlap,TCSR<double> *KohnSham,int n_mu,double* m
         dopingvec[1]=0.0;
     }
     sabtime=get_time(0.0);
-    Singularities singularities(KohnSham,Overlap,n_mu,muvec,dopingvec,contactvec,transport_params);
+    Singularities singularities(transport_params);
+    if ( singularities.Execute(KohnSham,Overlap,n_mu,muvec,dopingvec,contactvec) ) return (LOGCERR, EXIT_FAILURE);
+muvec[0]=(muvec[0]+muvec[1])/2.0;muvec[1]=muvec[0];
     if (!iam) cout << "TIME FOR SINGULARITIES " << get_time(sabtime) << endl;
 // determine elements in nonequilibrium range
     double k_b=K_BOLTZMANN;
     double nonequi_start=muvec[0]-35.0*k_b*Temp;
-int integral_over_real_axis=0;
+int integral_over_real_axis=transport_params.extra_int_param2;
 if (!iam) if (integral_over_real_axis) cout << "Integral over real axis" << endl;
 if (integral_over_real_axis) nonequi_start=singularities.energy_gs;
     double nonequi_end=muvec[n_mu-1]+35.0*k_b*Temp;
@@ -130,7 +161,6 @@ if (integral_over_real_axis) nonequi_start=singularities.energy_gs;
     std::vector<transport_methods::transport_method> methodvector(gausslegendre.abscissae.size(),transport_methods::NEGF);
 // get integration points along real axis with gauss cheby
     double smallest_energy_distance=transport_params.extra_param2;
-transport_params.extra_int_param1=40;
 if (!iam) cout<<"Smallest enery distance "<<smallest_energy_distance<<endl;
 if (!iam) cout<<"Max number of points per small interval "<<transport_params.extra_int_param1<<endl;
 if (!iam) cout<<"Average distance for big intervals "<<transport_params.extra_param1<<endl;
@@ -147,23 +177,40 @@ if (!iam) cout<<"Average distance for big intervals "<<transport_params.extra_pa
         }
     }
 /*
-Quadrature trapez(quadrature_types::TR,nonequi_start,nonequi_end,Temp,muvec[0],2000);
-energyvector.resize(2000);
-stepvector.resize(2000);
-methodvector.resize(2000);
+int ntrapez=2000;
+Quadrature trapez(quadrature_types::TR,nonequi_start,nonequi_end,Temp,muvec[0],ntrapez);
+energyvector.resize(ntrapez);
+stepvector.resize(ntrapez);
+methodvector.resize(ntrapez);
 copy(trapez.abscissae.begin(),trapez.abscissae.end(),energyvector.begin());
 copy(trapez.weights.begin(),trapez.weights.end(),stepvector.begin());
 fill(methodvector.begin(),methodvector.end(),transport_methods::WF);
 */
 /*
 energyvector.resize(1);
-energyvector[0]=CPX(-10.6400633547,0.0);
+energyvector[0]=CPX(-9.12376,0.0);
 stepvector.resize(1);
 stepvector[0]=CPX(1.0,0.0);
 methodvector.resize(1);
 methodvector[0]=transport_methods::WF;
 */
     if (!iam) cout << "Size of Energyvector " << energyvector.size() << endl;
+// get propagating modes from bandstructure OF RIGHT CONTACT ONLY -> ONLY FOR EQUILIBRIUM OR I HAVE TO IMPLEMENT LEFT CONTACT AS WELL
+    std::vector< std::vector<double> > propagating;
+    if (!iam) singularities.get_propagating(propagating,energyvector);
+    singularities.delete_matrices();
+    int *propagating_sizes = new int[energyvector.size()];
+    if (!iam) {
+        for (int ie=0;ie<energyvector.size();ie++) {
+            propagating_sizes[ie]=propagating[ie].size();
+        }
+    }
+    MPI_Bcast(propagating_sizes,energyvector.size(),MPI_INT,0,MPI_COMM_WORLD);
+if (!iam) {
+ofstream myfile("Propagating");
+for (int ii=0;ii<energyvector.size();ii++) myfile << real(energyvector[ii]) << " " << propagating[ii].size() << endl;
+myfile.close();
+}
 // run distributed
     std::vector<double> currentvector(energyvector.size(),0.0);
     int matrix_id, n_mat_comm;
@@ -171,11 +218,13 @@ methodvector[0]=transport_methods::WF;
     MPI_Comm_rank(eq_rank_matrix_comm,&matrix_id);
     uint jpos;
     for (int iseq=0;iseq<int(ceil(double(energyvector.size())/n_mat_comm));iseq++)
+//    for (int iseq=0;iseq<1;iseq++)
         if ( (jpos=matrix_id+iseq*n_mat_comm)<energyvector.size())
             if (abs(stepvector[jpos])>0.0)
-                if (density(KohnShamCollect,OverlapCollect,Ps,energyvector[jpos],stepvector[jpos],methodvector[jpos],n_mu,muvec,contactvec,currentvector[jpos],transport_params,matrix_comm))
+                if (density(KohnShamCollect,OverlapCollect,Ps,energyvector[jpos],stepvector[jpos],methodvector[jpos],n_mu,muvec,contactvec,currentvector[jpos],propagating_sizes[jpos],transport_params,matrix_comm))
                     return (LOGCERR, EXIT_FAILURE);
     delete KohnShamCollect;
+    delete[] propagating_sizes;
 // trPS per energy point
     ofstream myfile;
     std::vector<double> currentvector2(energyvector.size(),0.0);
@@ -248,7 +297,11 @@ methodvector[0]=transport_methods::WF;
     }
     delete Ps;
     delete OverlapCollect;
-    delete[] muvec;
+    if (electronchargeperatom==NULL) {
+        delete[] muvec;
+        delete[] contactvec;
+        delete[] dopingvec;
+    }
     MPI_Comm_free(&matrix_comm);
     MPI_Comm_free(&eq_rank_matrix_comm);
 

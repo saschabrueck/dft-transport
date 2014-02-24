@@ -24,7 +24,7 @@ int ldlt_free__(int *);
 int ldlt_blkselinv__(int *, int*, int*, CPX *, int*);
 }
 
-int density(TCSR<double> *KohnSham,TCSR<double> *Overlap,TCSR<double> *Ps,CPX energy,CPX weight,transport_methods::transport_method method,int n_mu,double *muvec,int *contactvec,double &current,c_transport_type parameter_sab,MPI_Comm matrix_comm)
+int density(TCSR<double> *KohnSham,TCSR<double> *Overlap,TCSR<double> *Ps,CPX energy,CPX weight,transport_methods::transport_method method,int n_mu,double *muvec,int *contactvec,double &current,int propnum,c_transport_type parameter_sab,MPI_Comm matrix_comm)
 {
     double d_one=1.0;
     double d_zer=0.0;
@@ -33,12 +33,19 @@ int density(TCSR<double> *KohnSham,TCSR<double> *Overlap,TCSR<double> *Ps,CPX en
     double sabtime;
     int iinfo=0;
     TCSR<CPX> *HamSig;
+    CPX* inj = NULL;
+    int nprol, npror;
+    int *dist_sol;
+    int *displc_sol;
+    int matrix_procs,matrix_rank;
+    MPI_Comm_size(matrix_comm,&matrix_procs);
+    MPI_Comm_rank(matrix_comm,&matrix_rank);
 // get parameters
     int ncells=parameter_sab.n_cells;
     int bandwidth=parameter_sab.bandwidth;
     int ndof=Overlap->size_tot/parameter_sab.n_cells;
     int ntriblock=bandwidth*ndof;
-//    {
+    {
         TCSR<CPX> *SumHamC = new TCSR<CPX>(z_one,KohnSham,-energy,Overlap);
 // set pbc to zero 
         SumHamC->settozeropbc(bandwidth,ndof);
@@ -58,18 +65,18 @@ int density(TCSR<double> *KohnSham,TCSR<double> *Overlap,TCSR<double> *Ps,CPX en
         for (int iseq=0;iseq<n_mu/n_bound_comm;iseq++) {
             int ipos=boundary_id+iseq*n_bound_comm;
             if (ipos<n_mu) {
-                if ( selfenergies[ipos].Set_vars(energy,matrix_comm,boundary_comm) ) return (LOGCERR, EXIT_FAILURE);
+                if ( selfenergies[ipos].Set_master(matrix_comm,boundary_comm) ) return (LOGCERR, EXIT_FAILURE);
             }
             for (int i_bound_id=0;i_bound_id<n_bound_comm;i_bound_id++) {
                 int ibpos=i_bound_id+iseq*n_bound_comm;
-                selfenergies[ibpos].Cutout(SumHamC,contactvec[ibpos],matrix_comm,parameter_sab);
+                if ( selfenergies[ibpos].Cutout(SumHamC,contactvec[ibpos],energy,method,parameter_sab,matrix_comm) ) return (LOGCERR, EXIT_FAILURE);
             }
             if (ipos<n_mu) {
-                if ( selfenergies[ipos].GetSigma(method,parameter_sab,boundary_comm) ) return (LOGCERR, EXIT_FAILURE);
+                if ( selfenergies[ipos].GetSigma(boundary_comm) ) return (LOGCERR, EXIT_FAILURE);
             }
             for (int i_bound_id=0;i_bound_id<n_bound_comm;i_bound_id++) {
                 int ibpos=i_bound_id+iseq*n_bound_comm;
-                selfenergies[ibpos].Distribute(SumHamC,parameter_sab,matrix_comm);
+                selfenergies[ibpos].Distribute(SumHamC,matrix_comm);
             }
         }
         MPI_Comm_free(&boundary_comm);
@@ -78,7 +85,27 @@ int density(TCSR<double> *KohnSham,TCSR<double> *Overlap,TCSR<double> *Ps,CPX en
         delete SumHamC;
         HamSig = new TCSR<CPX>(z_one,SumHamCplusSigmal,-z_one,selfenergies[1].spsigmardist);
         delete SumHamCplusSigmal;
-//    }
+        if (method==transport_methods::WF) {
+            nprol=selfenergies[0].n_propagating;
+            npror=selfenergies[1].n_propagating;
+if (npror!=propnum) cout << "WARNING: FOUND " << npror << " OF " << propnum << " MODES AT " << real(energy) << endl;
+            if (selfenergies[0].spainjldist->n_nonzeros || selfenergies[1].spainjrdist->n_nonzeros) {
+                inj = new CPX[HamSig->size*(nprol+npror)]();
+            }
+            if (selfenergies[0].spainjldist->n_nonzeros) {
+                selfenergies[0].spainjldist->sparse_to_full(inj,HamSig->size,nprol);
+            }
+            if (selfenergies[1].spainjrdist->n_nonzeros) {
+                selfenergies[1].spainjrdist->sparse_to_full(&inj[HamSig->size*nprol],HamSig->size,npror);
+            }
+            dist_sol=new int[matrix_procs];
+            MPI_Allgather(&HamSig->size,1,MPI_INT,dist_sol,1,MPI_INT,matrix_comm);
+            displc_sol=new int[matrix_procs+1]();
+            for (int iii=1;iii<matrix_procs+1;iii++) {
+                displc_sol[iii]=displc_sol[iii-1]+dist_sol[iii-1];
+            }
+        }
+    }
     if (method==transport_methods::TEST) {
 // this is only a lil debugging thing
         int triblocksize=ntriblock*ntriblock;
@@ -126,7 +153,7 @@ TCSR<CPX> *HamSigG = new TCSR<CPX>(HamSig,0,matrix_comm);
 delete HamSig;
 HamSig = HamSigG;
         sabtime=get_time(d_zer);
-        int inversion_method=0;
+        int inversion_method=parameter_sab.extra_int_param3;
         if (inversion_method==0) {
             if (ncells%bandwidth) return (LOGCERR, EXIT_FAILURE);
 if (!matrix_rank) {
@@ -184,35 +211,41 @@ if (!matrix_rank) {
         cout << "TIME FOR SPARSE INVERSION " << get_time(sabtime) << endl;
     } else if (method==transport_methods::WF) {
 // sparse solver
-        int nprol=selfenergies[0].n_propagating;
-        int npror=selfenergies[1].n_propagating;
-        MPI_Bcast(&nprol,1,MPI_INT,0,matrix_comm);
-        MPI_Bcast(&npror,1,MPI_INT,0,matrix_comm);
-        CPX *injl=selfenergies[0].injl;
-        CPX *injr=selfenergies[1].injr;
-/*
-        CPX *injr2=selfenergies[0].injr;
-cout << "COMPARE INJR " << injr[ntriblock-1] << " AND INJR2 " << injr2[ntriblock-1] << endl;
-*/
-        CPX *Sol=new CPX[HamSig->size_tot*(nprol+npror)];
-        CPX *Inj=new CPX[HamSig->size_tot*(nprol+npror)]();
-        if (injl!=NULL) c_zlacpy('A',ntriblock,nprol,injl,ntriblock,Inj,HamSig->size_tot);
-        if (injr!=NULL) c_zlacpy('A',ntriblock,npror,injr,ntriblock,&Inj[HamSig->size_tot*(nprol+1)-ntriblock],HamSig->size_tot);
-        MPI_Bcast(Inj,HamSig->size_tot*(nprol+npror),MPI_DOUBLE_COMPLEX,0,matrix_comm);
         TCSR<CPX> *H1cut = new TCSR<CPX>(HamSig,0,ntriblock,ntriblock,ntriblock);
         TCSR<CPX> *H1 = new TCSR<CPX>(H1cut,0,matrix_comm);
         delete H1cut;
+        CPX *Inj = NULL;
+        if (!matrix_rank) {
+            Inj = new CPX[displc_sol[matrix_procs]*(nprol+npror)];
+        }
+        if (inj==NULL) inj = new CPX[dist_sol[matrix_rank]*(nprol+npror)](); 
+        for (int icol=0;icol<nprol+npror;icol++) {
+            MPI_Gatherv(&inj[dist_sol[matrix_rank]*icol],dist_sol[matrix_rank],MPI_DOUBLE_COMPLEX,&Inj[displc_sol[matrix_procs]*icol],dist_sol,displc_sol,MPI_DOUBLE_COMPLEX,0,matrix_comm);
+        }
+        delete[] inj;
         LinearSolver<CPX>* solver;
         sabtime=get_time(d_zer);
-//        solver = new Umfpack<CPX>(HamSig,matrix_comm);
-        solver = new MUMPS<CPX>(HamSig,matrix_comm,2);
+        int do_umfpack=0;
+        if (matrix_procs==1 && do_umfpack==1) {
+            solver = new Umfpack<CPX>(HamSig,matrix_comm);
+        } else {
+            solver = new MUMPS<CPX>(HamSig,matrix_comm,2);
+        }
         delete HamSig;
         solver->prepare();
+        CPX *Sol = NULL;
+if (!matrix_rank) {
+        Sol = new CPX[displc_sol[matrix_procs]*(nprol+npror)];
+}
         solver->solve_equation(Sol,Inj,nprol+npror);
         cout << "TIME FOR WAVEFUNCTION SPARSE SOLVER WITH "<< ncells <<" UNIT CELLS " << get_time(sabtime) << endl;
-        delete[] Inj;
         delete solver;
+        if (!matrix_rank) {
+            delete[] Inj;
+        }
         sabtime=get_time(d_zer);
+        delete[] dist_sol;
+        delete[] displc_sol;
         double fermil=0.0;
         if (real(energy)<=muvec[0]) fermil=1.0;
         double fermir=0.0;
@@ -226,25 +259,19 @@ if (!matrix_rank) {
 }//end if !matrix_rank
 // transmission
         double transml=d_zer;
-//        CPX *vecoutdof=new CPX[ndof];
-//        for (int iband=1;iband<=bandwidth;iband++) {
-//            for (int ipro=0;ipro<nprol;ipro++) {
-//                c_zgemv('N',ndof,ndof,z_one,&KScpx[ndofsq*(bandwidth+iband)],ndof,&Sol[ndof*(iband+ncells*ipro)],1,z_zer,vecoutdof,1);
-//                transml+=iband*4*M_PI*imag(c_zdotc(ndof,&Sol[ndof*ncells*ipro],1,vecoutdof,1));
-//            }
-//        }
         CPX *vecoutdof=new CPX[ntriblock];
-        if (matrix_rank==0) {
+        if (!matrix_rank) {
             H1->shift_resize(0,ntriblock,ntriblock,ntriblock);
             for (int ipro=0;ipro<nprol;ipro++) {
                 H1->mat_vec_mult(&Sol[Ps->size_tot*ipro+ntriblock],vecoutdof,1);
                 transml+=4*M_PI*imag(c_zdotc(ntriblock,&Sol[Ps->size_tot*ipro],1,vecoutdof,1));
             }
+            delete[] Sol;
         }
-        delete[] vecoutdof;
-        delete[] Sol;
         delete H1;
-        cout << "Energy " << energy << " Transmission " << transml << endl;
+        delete[] vecoutdof;
+int worldrank; MPI_Comm_rank(MPI_COMM_WORLD,&worldrank);
+        cout << worldrank << " Energy " << energy << " Transmission " << transml << endl;
     } else return (LOGCERR, EXIT_FAILURE);
 
     return 0;
