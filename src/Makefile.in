@@ -12,7 +12,7 @@ LDFLAGS = $(LFLAGS) $(DFLAGS)
 
 MAIN = main.cpp
 SOURCES_CPP = cDBCSR_tools.cpp c_scf.cpp
-SOURCES_C = InputParameter.C WireGenerator.C FEMGrid.C Poisson.C Utilities.C CSR.C DiagScaLapack.C Density.C EnergyVector.C Quadrature.C KPointIntegration.C GetSingularities.C GetSigma.C rGF.C tmprGF.C SemiSelfConsistent.C AtomStrain.C Macopt.C Material.C Fermi.C @pardiso@
+SOURCES_C = InputParameter.C WireGenerator.C FEMGrid.C Poisson.C Utilities.C CSR.C DiagScaLapack.C Density.C EnergyVector.C Quadrature.C KPointIntegration.C GetSingularities.C GetSigma.C rGF.C tmprGF.C SemiSelfConsistent.C AtomStrain.C Macopt.C Material.C Fermi.C Arpack.C @pardiso@
 SOURCES_c = y.tab.c lex.yy.c
 
 OBJECTS = $(SOURCES_CPP:.cpp=.o) $(SOURCES_C:.C=.o) $(SOURCES_c:.c=.o)
