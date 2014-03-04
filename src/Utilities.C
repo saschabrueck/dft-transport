@@ -502,6 +502,44 @@ int max_active_vec(int N,int *vec,int *active)
 
 /************************************************************************************************/
 
+double fermi(double E,double mu,double temp,int mode)
+{
+    double k_b=K_BOLTZMANN;
+    if (mode==0) {
+        if (temp<=0.0) {
+            if (E<=mu) {
+                return 1.0;
+            } else {
+                return 0.0;
+            }
+        } else {
+            return 1.0/(1.0+exp((E-mu)/(k_b*temp)));
+        }
+    } else if (mode==1) {
+        if (temp<=0.0) {
+            return 0.0;
+        } else {
+            return log(1.0+exp(-(E-mu)/(k_b*temp)));
+        }
+    } else if (mode==2) {
+        if (temp<=0.0) {
+            return 0.0;
+        } else {
+            return exp((E-mu)/(k_b*temp))/(k_b*temp)/pow(1.0+exp((E-mu)/(k_b*temp)),2);
+        }
+    } else if (mode==3) {
+        if (temp<=0.0) {
+            return 0.0;
+        } else {
+            return exp((E-mu)/(k_b*temp))/(k_b*temp)/(1.0+exp(-(E-mu)/(k_b*temp)));
+        }
+    } else {
+        return 0.0;
+    }
+}
+
+/************************************************************************************************/
+
 
 // some extra helper functions
 template <typename T>

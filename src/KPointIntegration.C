@@ -1,6 +1,6 @@
 #include "ScaLapack.H"
 
-int kpointintegration(TCSR<double> *Overlap,TCSR<double> *KohnSham,TCSR<double> *P_Matrix,c_transport_type trans_params)
+int kpointintegration(TCSR<double> *Overlap,TCSR<double> *KohnSham,c_transport_type trans_params)
 {
     int bw=trans_params.bandwidth;
     int ncells=trans_params.n_cells;

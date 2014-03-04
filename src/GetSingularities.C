@@ -7,6 +7,7 @@ Singularities::Singularities(c_transport_type parameter_sab)
     n_cells=parameter_sab.n_cells;
     bandwidth=parameter_sab.bandwidth;
     noccunitcell=parameter_sab.n_occ/parameter_sab.n_cells;
+    Temp=parameter_sab.extra_param3;
 
     energies_matrix    = NULL;
     derivatives_matrix = NULL;
@@ -97,8 +98,7 @@ int Singularities::Execute(TCSR<double> *KohnSham,TCSR<double> *Overlap,int n_mu
         MPI_Gather(derivatives_local,ndof*seq_per_cpu,MPI_DOUBLE,derivatives_matrix,ndof*seq_per_cpu,MPI_DOUBLE,0,MPI_COMM_WORLD);
         MPI_Gather(curvatures_local,ndof*seq_per_cpu,MPI_DOUBLE,curvatures_matrix,ndof*seq_per_cpu,MPI_DOUBLE,0,MPI_COMM_WORLD);
         if (!iam) {
-// DO I HAVE TO DETERMINE THE FERMI LEVEL WITH THE ORIGINAL OR THE BAND SORTED BANDSTRUCTURE ???
-            determine_fermi(muvec[i_mu],dopingvec[i_mu]);
+            determine_fermi(muvec[i_mu],dopingvec[i_mu],Temp);
             follow_band();
             write_bandstructure(i_mu);
             for (int i=0;i<ndof;i++) {
@@ -183,29 +183,29 @@ void Singularities::delete_matrices()
     }
 }
 
-void Singularities::determine_fermi(double &mu,double doping)
+void Singularities::determine_fermi(double &mu,double doping,double Temp)
 {
     mu=(energies_matrix[noccunitcell-1]+energies_matrix[noccunitcell])/2;
     cout << "Starting Fermi Level " << mu << endl;
-    int nocctry=0;
+    double nocciter = 0.0;
     for (int j=0;j<n_k;j++) {
-        int nocc_k=-1;
-        while (energies_matrix[++nocc_k+j*ndof]<mu);
-        nocctry+=nocc_k;
+        for (int i=0;i<ndof;i++) {
+            nocciter+=fermi(energies_matrix[i+j*ndof],mu,Temp,0);
+        }
     }
-    double nocciter = (double) nocctry/n_k;
+    nocciter /= (double) n_k;
     cout << "Starting Number of Electrons " << nocciter << endl;
     double nocctol=1.0/n_k;
     while (nocciter<noccunitcell+doping-nocctol || nocciter>noccunitcell+doping+nocctol) {
         mu+=(noccunitcell+doping-nocciter)/10.0;
         cout << "New Fermi Level " << mu << endl;
-        nocctry=0;
+        nocciter=0.0;
         for (int j=0;j<n_k;j++) {
-            int nocc_k=-1;
-            while (energies_matrix[++nocc_k+j*ndof]<mu);
-            nocctry+=nocc_k;
+            for (int i=0;i<ndof;i++) {
+                nocciter+=fermi(energies_matrix[i+j*ndof],mu,Temp,0);
+            }
         }
-        nocciter = (double) nocctry/n_k;
+        nocciter /= (double) n_k;
         cout << "New Number of Electrons " << nocciter << endl;
     }
 }
@@ -342,6 +342,7 @@ int Singularities::determine_velocities(CPX *H,CPX *S,double k_in,double *energi
             curvatures_k[ivec]=-2.0*derivatives_k[ivec]*real(S_Sum_dk[ivec+ndof*ivec]);
         }
 
+        c_zcopy(ndofsq,S_Sum_dk,1,ovlmat,1);
         for (int ivec=0;ivec<ndof;ivec++) {
             c_zscal(ndof,CPX(-energies_k[ivec],d_zer),&S_Sum_dk[ivec*ndof],1);
         }
@@ -350,7 +351,8 @@ int Singularities::determine_velocities(CPX *H,CPX *S,double k_in,double *energi
         for (int ii=0;ii<ndof;ii++) {
             for (int jj=0;jj<ndof;jj++) {
                 double delta_e=energies_k[jj]-energies_k[ii];
-                if (abs(delta_e)>5.0E-2) {
+//                if (abs(delta_e)>5.0E-2) {
+                if (abs(-conj(H_Sum_dk[jj+ndof*ii])/delta_e+H_Sum_dk[ii+ndof*jj]/delta_e+ovlmat[ii+ndof*jj])<1.0E-12) {
                     curvatures_k[jj]+=2.0*norm(H_Sum_dk[ii+ndof*jj])/delta_e;
                 }
             }

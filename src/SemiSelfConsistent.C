@@ -8,44 +8,31 @@ extern WireGenerator* Wire;
 extern Poisson *OMEN_Poisson_Solver;
 extern FEMGrid *FEM;
 
-int energyvector(TCSR<double>*,TCSR<double>*,int,double*,int*,double*,double*,c_transport_type);
+int energyvector(TCSR<double>*,TCSR<double>*,int,double*,int*,double*,double*,double*,int,int*,c_transport_type);
         
 int semiselfconsistent(TCSR<double> *Overlap,TCSR<double> *KohnSham,c_transport_type transport_params)
 {
+int iam;MPI_Comm_rank(MPI_COMM_WORLD,&iam);
+    int do_semiself=0;
+    if (transport_params.method==3) do_semiself=1;
+    int NAtom_work=transport_params.extra_int_param3;
+    if (do_semiself) NAtom_work=FEM->NAtom;
+
     double Vs=0.0;
 //    double Vg=1.5;
 //    double Vd=0.5;
     double Vg=0.0;
     double Vd=0.0;
-    double Ls=nanowire->Ls;
-    double Lg=nanowire->Lc;
-    double residual;
-    double Temp=0.0;
-    double *Vnew = new double[FEM->NGrid];
-    double *Vold = new double[FEM->NGrid];
+    double Temp=transport_params.extra_param3;
     double *Vbf = new double[Overlap->size_tot];
-    double *rho_atom = new double[FEM->NAtom]();
-    double *drho_atom_dV = new double[FEM->NAtom]();
-    double *rho_atom_previous = new double[FEM->NAtom];
-    double dens_tol = 1.0E-4;
-    int i_iter;
-    int max_iter=10;
-
-    for (int ix=0;ix<FEM->NGrid;ix++) {
-        double x=FEM->grid[3*ix]-FEM->grid[0];
-        if (x<=Ls) Vnew[ix]=Vs;
-        else if (x>Ls && x<=Ls+Lg) Vnew[ix]=Vg;
-        else Vnew[ix]=Vd;
+    double *rho_atom = new double[NAtom_work]();
+    double *drho_atom_dV = new double[NAtom_work]();
+    double *rho_atom_previous = new double[NAtom_work];
+    int *atom_of_bf = new int[Overlap->size_tot];
+    for (int ibf=0;ibf<Overlap->size_tot;ibf++) {
+        atom_of_bf[ibf]=ibf/(Overlap->size_tot/NAtom_work);
     }
-/*
-    int na=2;
-    int nb=na+1;
-    int nc=5;
-    for (int ivvec=0;          ivvec<na*4*13*12; ivvec++) Vbf[ivvec] = Vs;
-    for (int ivvec=na*4*13*12; ivvec<nb*4*13*12; ivvec++) Vbf[ivvec] = Vg;
-    for (int ivvec=nb*4*13*12; ivvec<nc*4*13*12; ivvec++) Vbf[ivvec] = Vd;
-*/
-    std::vector<double> nuclearchargeperatom(FEM->NAtom,2.0);
+//    int *nbf_of_atom = new int[NAtom_work];
 
     int n_mu=2;
     double *muvec = new double[n_mu];
@@ -53,16 +40,58 @@ int semiselfconsistent(TCSR<double> *Overlap,TCSR<double> *KohnSham,c_transport_
     contactvec[0]=1;
     contactvec[1]=2;
     double *dopingvec = new double[n_mu];
+
+    if (!do_semiself) {
+        dopingvec[0]=0.0;
+        dopingvec[1]=0.0;
+        int addpotential=0;
+        if (addpotential) {
+            int na=2;
+            int nb=na+1;
+            int nc=transport_params.n_cells;
+            for (int ivvec=0;          ivvec<na*4*13*12; ivvec++) Vbf[ivvec] = Vs;
+            for (int ivvec=na*4*13*12; ivvec<nb*4*13*12; ivvec++) Vbf[ivvec] = Vg;
+            for (int ivvec=nb*4*13*12; ivvec<nc*4*13*12; ivvec++) Vbf[ivvec] = Vd;
+            TCSR<double> *Pot = new TCSR<double>(Overlap,Vbf);
+            TCSR<double> *KohnShamPot = new TCSR<double>(1.0,KohnSham,1.0/transport_params.evoltfactor,Pot);
+            delete Pot;
+            delete KohnSham;
+            KohnSham=KohnShamPot;
+            KohnShamPot=NULL;
+        }
+        if (energyvector(Overlap,KohnSham,n_mu,muvec,contactvec,dopingvec,rho_atom,drho_atom_dV,NAtom_work,atom_of_bf,transport_params)) return (LOGCERR, EXIT_FAILURE);
+        return 0;
+    }
+
+    double *Vnew = new double[FEM->NGrid];
+    double *Vold = new double[FEM->NGrid];
     double *doping_atom = new double[FEM->NAtom];
     for (int ia=0;ia<FEM->NAtom;ia++) {
         doping_atom[ia]=FEM->doping[FEM->real_at_index[ia]];
     }
-    double *doping_cell = new double[6]();
+    double *doping_cell = new double[transport_params.n_cells]();
     for (int ia=0;ia<FEM->NAtom;ia++) {
-        doping_cell[ia/52]+=doping_atom[ia];
+        doping_cell[ia/(FEM->NAtom/transport_params.n_cells)]+=doping_atom[ia];
     }
     dopingvec[0]=doping_cell[0];
-    dopingvec[1]=doping_cell[5];
+    dopingvec[1]=doping_cell[transport_params.n_cells-1];
+
+    std::vector<double> nuclearchargeperatom(FEM->NAtom,2.0);
+
+    double Ls=nanowire->Ls;
+    double Lg=nanowire->Lc;
+
+    for (int ix=0;ix<FEM->NGrid;ix++) {
+        double x=FEM->grid[3*ix]-FEM->grid[0];
+        if (x<=Ls) Vnew[ix]=Vs;
+        else if (x>Ls && x<=Ls+Lg) Vnew[ix]=Vg;
+        else Vnew[ix]=Vd;
+    }
+
+    double residual;
+    double dens_tol = 1.0E-4;
+    int i_iter;
+    int max_iter=10;
 
     for (i_iter=1;i_iter<=max_iter;i_iter++) {
 
@@ -75,11 +104,10 @@ int semiselfconsistent(TCSR<double> *Overlap,TCSR<double> *KohnSham,c_transport_
         TCSR<double> *KohnShamPot = new TCSR<double>(1.0,KohnSham,1.0/transport_params.evoltfactor,Pot);
         delete Pot;
 
-int iam;MPI_Comm_rank(MPI_COMM_WORLD,&iam);
 if (!iam) cout << "DOPING " << dopingvec[0] << " " << dopingvec[1] << endl;
 
         c_dcopy(FEM->NAtom,rho_atom,1,rho_atom_previous,1);
-        if (energyvector(Overlap,KohnShamPot,n_mu,muvec,contactvec,dopingvec,rho_atom,transport_params)) return (LOGCERR, EXIT_FAILURE);
+        if (energyvector(Overlap,KohnShamPot,n_mu,muvec,contactvec,dopingvec,rho_atom,drho_atom_dV,FEM->NAtom,atom_of_bf,transport_params)) return (LOGCERR, EXIT_FAILURE);
 //for (int isab=0;isab<312;isab++) rho_atom[isab]=-2.004463;
 
         delete KohnShamPot;

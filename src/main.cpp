@@ -12,7 +12,8 @@
 #include "Poisson.H"
 // WRITE IN MATRIX
 #include "CSR.H"
-int energyvector(TCSR<double>*,TCSR<double>*,int,double*,int*,double*,double*,c_transport_type);
+
+int semiselfconsistent(TCSR<double>*,TCSR<double>*,c_transport_type);
 
 extern "C" {
     void yyrestart(FILE *);
@@ -168,7 +169,7 @@ femgridfile.close();
       paraminfile >> transport_env_params.extra_param2;
       paraminfile >> transport_env_params.extra_param3;
       paraminfile.close();
-      energyvector(Overlap,KohnSham,2,NULL,NULL,NULL,NULL,transport_env_params);
+      semiselfconsistent(Overlap,KohnSham,transport_env_params);
       delete Overlap;
       delete KohnSham;
    }
