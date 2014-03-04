@@ -1,7 +1,7 @@
 #include "ScaLapack.H"
 #include "array_tools.H"
 
-int diagscalapack(TCSR<double> *Overlap,TCSR<double> *KohnSham,TCSR<double> *P_Matrix,c_transport_type parameters_transport)
+int diagscalapack(TCSR<double> *Overlap,TCSR<double> *KohnSham,c_transport_type parameters_transport)
 {
     int iam, nprocs;
     MPI_Comm_size(MPI_COMM_WORLD,&nprocs);

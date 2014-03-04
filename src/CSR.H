@@ -119,6 +119,7 @@ public:
     void reducescatterconvert(TCSR<double>*,MPI_Comm);
     double psipsidaggerdosdebug(CPX*,int);
     void psipsidagger(CPX*,int,CPX);
+    void psipsidagger(CPX*,int,CPX,int*,double*);
     void moveawaypbc(T*,T*,int,int);
     void settozeropbc(int,int);
     void tr_full_to_sparse(T*,int,int);
@@ -2203,6 +2204,20 @@ if (first_row) throw CSR_Exception(__LINE__,__FILE__);
     for(i=0;i<size;i++){
         for(e=edge_i[i]-findx;e<edge_i[i+1]-findx;e++){
             nnz[e]+=real(factor*c_zdotc(nkval,&psi[index_j[e]-findx],size_tot,&psi[first_row+i],size_tot));
+        }
+    }
+}
+
+/************************************************************************************************/
+
+template <>
+inline void TCSR<double>::psipsidagger(CPX* psi,int nkval,CPX factor,int* atom_of_bf,double* result)
+{
+if (first_row) throw CSR_Exception(__LINE__,__FILE__);
+    int i,e;
+    for(i=0;i<size;i++){
+        for(e=edge_i[i]-findx;e<edge_i[i+1]-findx;e++){
+            result[atom_of_bf[first_row+i]]+=nnz[e]*real(factor*c_zdotc(nkval,&psi[index_j[e]-findx],size_tot,&psi[first_row+i],size_tot));
         }
     }
 }

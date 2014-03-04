@@ -70,6 +70,8 @@ int min_active_vec(int,int*,int*);
 
 int max_active_vec(int,int*,int*);
 
+double fermi(double,double,double,int);
+
 template <typename T>
 void set_to_zero(int, T*);
 

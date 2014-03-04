@@ -1,8 +1,7 @@
 #include "c_scf.H"
 
-int kpointintegration(TCSR<double>*,TCSR<double>*,TCSR<double>*,c_transport_type);
-int diagscalapack(TCSR<double>*,TCSR<double>*,TCSR<double>*,c_transport_type);
-int energyvector(TCSR<double>*,TCSR<double>*,int,double*,int*,double*,double*,c_transport_type);
+int kpointintegration(TCSR<double>*,TCSR<double>*,c_transport_type);
+int diagscalapack(TCSR<double>*,TCSR<double>*,c_transport_type);
 int semiselfconsistent(TCSR<double>*,TCSR<double>*,c_transport_type);
 
 class SCF_Exception{
@@ -62,11 +61,11 @@ void c_scf_method(c_transport_type transport_env_params, c_DBCSR S, c_DBCSR KS, 
    switch (transport_env_params.method) {
       case 1:
          if (!rank) cout << "Starting ScaLaPackDiag" << endl;
-         if (diagscalapack(Overlap,KohnSham,NULL,transport_env_params)) throw SCF_Exception(__LINE__,__FILE__);
+         if (diagscalapack(Overlap,KohnSham,transport_env_params)) throw SCF_Exception(__LINE__,__FILE__);
          break;
       case 2:
          if (!rank) cout << "Starting KPointIntegration" << endl;
-         if (kpointintegration(Overlap,KohnSham,NULL,transport_env_params)) throw SCF_Exception(__LINE__,__FILE__);
+         if (kpointintegration(Overlap,KohnSham,transport_env_params)) throw SCF_Exception(__LINE__,__FILE__);
          break;
      case 3:
          if (!rank) cout << "Starting CP2K core/valence Hamiltonian + OMEN Poisson semi self consistent code" << endl;
@@ -74,11 +73,11 @@ void c_scf_method(c_transport_type transport_env_params, c_DBCSR S, c_DBCSR KS, 
          break;
      case 4:
          if (!rank) cout << "Starting Transport" << endl;
-         if (energyvector(Overlap,KohnSham,2,NULL,NULL,NULL,NULL,transport_env_params)) throw SCF_Exception(__LINE__,__FILE__);
+         if (semiselfconsistent(Overlap,KohnSham,transport_env_params)) throw SCF_Exception(__LINE__,__FILE__);
          break;
      default:
          if (!rank) cout << "Starting Transport" << endl;
-         if (energyvector(Overlap,KohnSham,2,NULL,NULL,NULL,NULL,transport_env_params)) throw SCF_Exception(__LINE__,__FILE__);
+         if (semiselfconsistent(Overlap,KohnSham,transport_env_params)) throw SCF_Exception(__LINE__,__FILE__);
    }
 
    CSR_to_cDBCSR(Overlap, *P, row_block_size, col_block_size, row_dist, col_dist, local_rows, nblkrows_local_all);
