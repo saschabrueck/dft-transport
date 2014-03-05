@@ -1,7 +1,10 @@
+#include <math.h>
+
 #include <exception>
 #include <iostream>   // TODO: remove that later
 
 #include "Quadrature.H"
+#include "Blas.H"
 
 class excQuadrature: public std::exception {
  public:
@@ -13,14 +16,14 @@ class excQuadrature: public std::exception {
   std::string errmsg;
 };
 
-#include "Quadrature_GL.H"
-
 /** \brief Constructor
  *
  *  Currently implemented methods for quadrature:
+ *
  *    - 'quadrature_type::GL'
- *      Real line Gauss-Legendre. Abscissae and weights are precalculated
- *      up to machine precision, maximum number of abscissae is 140.
+ *      Real line Gauss-Legendre. Abscissae and weights are calculated by
+ *      constructing a symmetric companion matrix whose eigenvalues are the 
+ *      abscissa. The weights are derived from the first eigenvector.
  *    - 'quadrature_type::CCGL'
  *      Complex contour Gauss Legendre. Same as above but abscissae are
  *      located on a half circle in the upper complex plane.
@@ -37,26 +40,31 @@ class excQuadrature: public std::exception {
  *      on the fly. This method allows for a pole on the upper end of the
  *      integration domain.
  *
- * \param quadrature_type The type of quadrature for which the 
- *                        abscissae/weights are to be loaded or 
- *                        calculated. See above for a list of 
- *                        supported values.
+ * \param[in]           quadrature_type
+ *                      The type of quadrature for which the abscissae/weights
+ *                      are to be loaded or calculated. See above for a list of
+ *                      supported values.
  *
- * \param start           Lower bound of range with nonzero state density 
- *                        in [eV].
+ * \param[in]           start     
+ *                      Lower bound of range with nonzero state density in
+ *                      [eV].
  *
- * \param end             Upper bound of range with nonzero state density 
- *                        in [eV].
+ * \param[in]           end
+ *                      Upper bound of range with nonzero state density in
+ *                      [eV].
  *
- * \param T               Temperature in [K].
+ * \param[in]           T
+ *                      Temperature in [K].
  *
- * \param Ef              Fermi level in [eV].
+ * \param[in]           Ef
+ *                      Fermi level in [eV].
  *
- * \param num_abscissae   For GL, CCGL and GC: How many abscissae to use 
- *                        for the quadrature. For ANPS: exponent specifying
- *                        the precision to base e. Example: set to 6 to 
- *                        specify a precision of exp(-6) ~= 0.0025. Machine
- *                        precision for a 64bit double is roughly exp(-36).
+ * \param[in]           num_abscissae
+ *                      For GL, CCGL and GC: How many abscissae to use for the
+ *                      quadrature. For ANPS: exponent specifying the precision
+ *                      to base e. Example: set to 6 to specify a precision of
+ *                      exp(-6) ~= 0.0025. Machine precision for a 64bit double
+ *                      is roughly exp(-36).
  */
 Quadrature::Quadrature(quadrature_types::quadrature_type type, double start, 
                        double end, double T, double Ef, 
@@ -85,10 +93,56 @@ Quadrature::Quadrature(quadrature_types::quadrature_type type, double start,
       } 
       double radius = (band_end - band_start) / 2.0;
       double center = (band_start + band_end) / 2.0;
+
+      // old, precomputed
+      /*
       const std::vector<double> abscissae_precalc = 
                                     GaussLegendre::get_abscissae(num_abscissae-1);
       const std::vector<double> weights_precalc = 
                                     GaussLegendre::get_weights(num_abscissae-1);
+      */
+      
+      // Calculation of the abscissae and weights (trick):
+
+      // Companion matrix (tridiagonal, symmetric)
+      double* offdiagonal = new double[num_abscissae - 1];
+      for (uint i = 0; i < num_abscissae - 1; ++i) {
+        offdiagonal[i] = (i + 1) / sqrt(4.0 * ((i + 1) * (i + 1)) - 1);
+      }
+      double* diagonal = new double[num_abscissae];
+      for (uint i = 0; i < num_abscissae; ++i) {
+        diagonal[i] = 0.0;
+      }
+
+      // Solve
+      int status = 0;
+      double* workspace = new double[2 * num_abscissae - 1];
+      double* eigenvectors = new double[num_abscissae * num_abscissae];
+      c_dsteqr('I', num_abscissae, diagonal, offdiagonal, eigenvectors,
+               num_abscissae, workspace, &status);
+      if (status != 0) {
+        throw excQuadrature("LAPACK error while computing eigenvalues");
+      }
+
+      delete[] offdiagonal;
+      delete[] workspace;
+
+
+      // Eigenvalues are unshifted abscissae
+      std::vector<double> abscissae_precalc(num_abscissae);
+      for (uint i = 0; i < num_abscissae; ++i) {
+        abscissae_precalc[i] = diagonal[i];
+      }
+      delete[] diagonal;
+
+      // 2 * square of first element of each eigenvector are unshifted weights
+      std::vector<double> weights_precalc(num_abscissae);
+      for (uint i = 0; i < num_abscissae; ++i) {
+        double eig1 = eigenvectors[i * num_abscissae]; // column major
+        weights_precalc[i] = 2 * eig1 * eig1;
+      }
+      delete[] eigenvectors;
+
       CPX fermi(1.0, 0.0);
       for (uint i = 0; i <= num_abscissae - 1; ++i) {
         // Shift the precalculated abscissa from [-1 1] to [0, pi] interval
@@ -113,23 +167,81 @@ Quadrature::Quadrature(quadrature_types::quadrature_type type, double start,
       if (num_abscissae == 0) {
         throw excQuadrature("Invalid number of abscissae");
       }
+
+
+      // Old, precomputed
+      /*
       const std::vector<double> abscissae_precalc = 
                                   GaussLegendre::get_abscissae(num_abscissae-1);
       const std::vector<double> weights_precalc = 
                                   GaussLegendre::get_weights(num_abscissae-1);
+      */
+
+      // Calculation of the abscissae and weights (trick):
+
+      // Companion matrix (tridiagonal, symmetric)
+      double* offdiagonal = new double[num_abscissae - 1];
+      for (uint i = 0; i < num_abscissae - 1; ++i) {
+        offdiagonal[i] = (i + 1) / sqrt(4.0 * ((i + 1) * (i + 1)) - 1);
+      }
+      double* diagonal = new double[num_abscissae];
+      for (uint i = 0; i < num_abscissae; ++i) {
+        diagonal[i] = 0.0;
+      }
+
+      // Solve
+      int status = 0;
+      double* workspace = new double[2 * num_abscissae - 1];
+      double* eigenvectors = new double[num_abscissae * num_abscissae];
+      c_dsteqr('I', num_abscissae, diagonal, offdiagonal, eigenvectors,
+               num_abscissae, workspace, &status);
+      if (status != 0) {
+        throw excQuadrature("LAPACK error while computing eigenvalues");
+      }
+
+      delete[] offdiagonal;
+      delete[] workspace;
+
+
+      // Eigenvalues are unshifted abscissae
+      std::vector<double> abscissae_precalc(num_abscissae);
+      for (uint i = 0; i < num_abscissae; ++i) {
+        abscissae_precalc[i] = diagonal[i];
+      }
+      delete[] diagonal;
+
+      // 2 * square of first element of each eigenvector are unshifted weights
+      std::vector<double> weights_precalc(num_abscissae);
+      for (uint i = 0; i < num_abscissae; ++i) {
+        double eig1 = eigenvectors[i * num_abscissae]; // column major
+        weights_precalc[i] = 2 * eig1 * eig1;
+      }
+      delete[] eigenvectors;
+
+
+      
       double fermi = 1.0;
       for (uint i = 0; i <= num_abscissae - 1; ++i) {
-        double abscissa = abscissae_precalc[i] * (band_end - band_start) / 2.0 + 
-                       (band_end + band_start) / 2.0;
+
+        double abscissa = (abscissae_precalc[i] * (band_end - band_start) / 2.0) + 
+                          (band_end + band_start) / 2.0;
         abscissae.push_back(abscissa);
+
         if (T != 0) {
           fermi = 1.0 / (exp((abscissa - Ef) / (k * T)) + 1.0);
         } else if (abscissa > Ef) {
           fermi = 0.0;
         }
-        weights.push_back(weights_precalc[i] * (band_end - band_start) / 2.0 *
-                          fermi);
+        
+        double weight = weights_precalc[i] * (band_end - band_start) / 2.0 *
+                        fermi;
+        weights.push_back(weight);
       }
+
+      //for (int i = 0; i < num_abscissae; ++i)
+      //  cout << weights[i] << " ";
+      //cout << "\n";
+
       break;
     }
     case quadrature_types::ANPS: {
