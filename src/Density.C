@@ -160,7 +160,8 @@ if (!matrix_rank) {
             std::vector<int> Bvec(ncells/bandwidth,0);
             for (int ii=0;ii<ncells/bandwidth;ii++) Bvec[ii]=(ii+1)*ntriblock-1;
             tmprGF::sparse_invert(HamSig,Bvec);
-            Ps->add_imag(HamSig,-weight/M_PI);
+            Ps->add_imag(HamSig,+weight/M_PI);
+            Overlap->atomdensity(HamSig,+2.0*weight/M_PI,atom_of_bf,erhoperatom);
             Ps->contactdensity(ndof,bandwidth);
 }
             delete HamSig;
@@ -168,7 +169,7 @@ if (!matrix_rank) {
         } else if (inversion_method==1) {
 if (!matrix_rank) {
             Pardiso::sparse_invert(HamSig);
-            Ps->add_imag(HamSig,-weight/M_PI);
+            Ps->add_imag(HamSig,+weight/M_PI);
             Ps->contactdensity(ndof,bandwidth);
 }
             delete HamSig;
@@ -200,7 +201,7 @@ if (!matrix_rank) {
                 InverseMatTotal->nnz[InverseMatTotal->diag_pos[idiag]]*=CPX(0.5,0.0);
             delete InverseMat;
             delete InverseMatTrans;
-            Ps->add_imag(InverseMatTotal,-weight/M_PI);
+            Ps->add_imag(InverseMatTotal,+weight/M_PI);
             delete InverseMatTotal;
             Ps->contactdensity(ndof,bandwidth);
 } else {
@@ -261,16 +262,16 @@ if (!matrix_rank) {
         double fermir=fermi(real(energy),muvec[1],Temp,0);
 if (!matrix_rank) {
 // WARNING THOSE ONLY WORK FOR COMPLETE MATRIX ON THIS RANK
-        Ps->psipsidagger(Sol,nprol,weight*fermil);
-        Ps->psipsidagger(&Sol[Ps->size_tot*nprol],npror,weight*fermir);
+        Ps->psipsidagger(Sol,nprol,-weight*fermil);
+        Ps->psipsidagger(&Sol[Ps->size_tot*nprol],npror,-weight*fermir);
         Ps->contactdensity(ndof,bandwidth);//do this later at the end of Energyvector in parallel
         current=Overlap->psipsidaggerdosdebug(Sol,nprol+npror);
-        Overlap->psipsidagger(Sol,nprol,weight*fermil,atom_of_bf,erhoperatom);
-        Overlap->psipsidagger(&Sol[Ps->size_tot*nprol],npror,weight*fermir,atom_of_bf,erhoperatom);
+        Overlap->psipsidagger(Sol,nprol,-2.0*weight*fermil,atom_of_bf,erhoperatom);
+        Overlap->psipsidagger(&Sol[Ps->size_tot*nprol],npror,-2.0*weight*fermir,atom_of_bf,erhoperatom);
         double dfermil=fermi(real(energy),muvec[0],Temp,2);
         double dfermir=fermi(real(energy),muvec[1],Temp,2);
-        Overlap->psipsidagger(Sol,nprol,weight*dfermil,atom_of_bf,drhoperatom);
-        Overlap->psipsidagger(&Sol[Ps->size_tot*nprol],npror,weight*dfermir,atom_of_bf,drhoperatom);
+        Overlap->psipsidagger(Sol,nprol,-2.0*weight*dfermil,atom_of_bf,drhoperatom);
+        Overlap->psipsidagger(&Sol[Ps->size_tot*nprol],npror,-2.0*weight*dfermir,atom_of_bf,drhoperatom);
         cout << "TIME FOR CONSTRUCTION OF S-PATTERN DENSITY MATRIX " << get_time(sabtime) << endl;
 }//end if !matrix_rank
 // transmission

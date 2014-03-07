@@ -118,23 +118,15 @@ int main (int argc, char **argv)
 //      Wire->execute_task(nanowire);
       FEM = new FEMGrid();
       MPI_Comm newcomm;
-      MPI_Comm_dup(MPI::COMM_WORLD,&newcomm);
-      int newcommsize;
-      MPI_Comm_size(newcomm,&newcommsize);
-      FEM->execute_task(Wire,nanowire,newcommsize,1,newcomm,MPI::COMM_WORLD);
+      int iam;
+      MPI_Comm_rank(MPI_COMM_WORLD,&iam);
+      MPI_Comm_split(MPI_COMM_WORLD,iam,iam,&newcomm);
+      FEM->execute_task(Wire,nanowire,1,1,newcomm,MPI::COMM_WORLD);
 //      FEM->execute_task(Wire,nanowire);
       OMEN_Poisson_Solver = new Poisson();
-      OMEN_Poisson_Solver->init(Wire,nanowire,FEM,newcommsize,1,MPI::COMM_WORLD);
+      OMEN_Poisson_Solver->init(Wire,nanowire,FEM,1,1,MPI::COMM_WORLD);
 //      OMEN_Poisson_Solver->init(nanowire,FEM);
    }
-
-
-int iam;MPI_Comm_rank(MPI_COMM_WORLD,&iam);
-if(!iam&&do_omen_poisson){
-ofstream femgridfile("femgrid");
-for (int ix=0;ix<FEM->NGrid;ix++) femgridfile<<FEM->grid[3*ix]<<" "<<FEM->grid[3*ix+1]<<" "<<FEM->grid[3*ix+2]<<endl;
-femgridfile.close();
-}
 
    if (run_cp2k) {
       cp_c_calc_energy_force(&f_env_id, &calc_force, &error);

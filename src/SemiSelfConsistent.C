@@ -13,16 +13,17 @@ int energyvector(TCSR<double>*,TCSR<double>*,int,double*,int*,double*,double*,do
 int semiselfconsistent(TCSR<double> *Overlap,TCSR<double> *KohnSham,c_transport_type transport_params)
 {
 int iam;MPI_Comm_rank(MPI_COMM_WORLD,&iam);
+
     int do_semiself=0;
     if (transport_params.method==3) do_semiself=1;
     int NAtom_work=transport_params.extra_int_param3;
     if (do_semiself) NAtom_work=FEM->NAtom;
 
+if (!iam) cout << "N_ATOMS " << NAtom_work << endl;
+
     double Vs=0.0;
-//    double Vg=1.5;
-//    double Vd=0.5;
-    double Vg=0.0;
-    double Vd=0.0;
+    double Vg=1.5;
+    double Vd=0.5;
     double Temp=transport_params.extra_param3;
     double *Vbf = new double[Overlap->size_tot];
     double *rho_atom = new double[NAtom_work]();
@@ -32,7 +33,6 @@ int iam;MPI_Comm_rank(MPI_COMM_WORLD,&iam);
     for (int ibf=0;ibf<Overlap->size_tot;ibf++) {
         atom_of_bf[ibf]=ibf/(Overlap->size_tot/NAtom_work);
     }
-//    int *nbf_of_atom = new int[NAtom_work];
 
     int n_mu=2;
     double *muvec = new double[n_mu];
@@ -46,24 +46,21 @@ int iam;MPI_Comm_rank(MPI_COMM_WORLD,&iam);
         dopingvec[1]=0.0;
         int addpotential=0;
         if (addpotential) {
-            int na=2;
-            int nb=na+1;
-            int nc=transport_params.n_cells;
-            for (int ivvec=0;          ivvec<na*4*13*12; ivvec++) Vbf[ivvec] = Vs;
-            for (int ivvec=na*4*13*12; ivvec<nb*4*13*12; ivvec++) Vbf[ivvec] = Vg;
-            for (int ivvec=nb*4*13*12; ivvec<nc*4*13*12; ivvec++) Vbf[ivvec] = Vd;
+            int na=4;
+            int nb=na+4;
+            for (int ivvec=0;                                               ivvec<na*(Overlap->size_tot/transport_params.n_cells); ivvec++) Vbf[ivvec] = Vs;
+            for (int ivvec=na*(Overlap->size_tot/transport_params.n_cells); ivvec<nb*(Overlap->size_tot/transport_params.n_cells); ivvec++) Vbf[ivvec] = Vg;
+            for (int ivvec=nb*(Overlap->size_tot/transport_params.n_cells); ivvec<Overlap->size_tot; ivvec++)                               Vbf[ivvec] = Vd;
             TCSR<double> *Pot = new TCSR<double>(Overlap,Vbf);
             TCSR<double> *KohnShamPot = new TCSR<double>(1.0,KohnSham,1.0/transport_params.evoltfactor,Pot);
-            delete Pot;
-            delete KohnSham;
-            KohnSham=KohnShamPot;
-            KohnShamPot=NULL;
+            if (energyvector(Overlap,KohnShamPot,n_mu,muvec,contactvec,dopingvec,rho_atom,drho_atom_dV,NAtom_work,atom_of_bf,transport_params)) return (LOGCERR, EXIT_FAILURE);
+        } else {
+            if (energyvector(Overlap,KohnSham,n_mu,muvec,contactvec,dopingvec,rho_atom,drho_atom_dV,NAtom_work,atom_of_bf,transport_params)) return (LOGCERR, EXIT_FAILURE);
         }
-        if (energyvector(Overlap,KohnSham,n_mu,muvec,contactvec,dopingvec,rho_atom,drho_atom_dV,NAtom_work,atom_of_bf,transport_params)) return (LOGCERR, EXIT_FAILURE);
         return 0;
     }
 
-    double *Vnew = new double[FEM->NGrid];
+    double *Vnew = new double[FEM->NGrid]();
     double *Vold = new double[FEM->NGrid];
     double *doping_atom = new double[FEM->NAtom];
     for (int ia=0;ia<FEM->NAtom;ia++) {
@@ -76,7 +73,7 @@ int iam;MPI_Comm_rank(MPI_COMM_WORLD,&iam);
     dopingvec[0]=doping_cell[0];
     dopingvec[1]=doping_cell[transport_params.n_cells-1];
 
-    std::vector<double> nuclearchargeperatom(FEM->NAtom,2.0);
+    std::vector<double> nuclearchargeperatom(FEM->NAtom,-4.0);
 
     double Ls=nanowire->Ls;
     double Lg=nanowire->Lc;
@@ -95,11 +92,9 @@ int iam;MPI_Comm_rank(MPI_COMM_WORLD,&iam);
 
     for (i_iter=1;i_iter<=max_iter;i_iter++) {
 
-        for (int ibf=0;ibf<Overlap->size_tot;ibf++)
-            Vbf[ibf]=Vnew[FEM->real_at_index[ibf/12]];
-//ifstream vbfin("vbffileinput");
-//for (int isab=0;isab<Overlap->size_tot;isab++) vbfin >> Vbf[isab];
-//vbfin.close();
+        for (int ibf=0;ibf<Overlap->size_tot;ibf++) {
+            Vbf[ibf]=Vnew[FEM->real_at_index[atom_of_bf[ibf]]];
+        }
         TCSR<double> *Pot = new TCSR<double>(Overlap,Vbf);
         TCSR<double> *KohnShamPot = new TCSR<double>(1.0,KohnSham,1.0/transport_params.evoltfactor,Pot);
         delete Pot;
@@ -123,7 +118,11 @@ for (int ig=0;ig<FEM->NAtom;ig++) rhofile<<rho_atom[ig]<<endl;
 rhofile.close();
 }
         c_dscal(FEM->NGrid,0.0,Vold,1);
-        OMEN_Poisson_Solver->solve(Vnew,Vold,rho_atom,drho_atom_dV,1,NULL,FEM,Wire,Temp,Vg,Vs,Vs,Vd,&residual,1.0E-4,10,1,1,MPI_COMM_WORLD,MPI_COMM_WORLD,1,MPI_COMM_WORLD,0);
+        MPI_Comm newcomm;
+        int iam;
+        MPI_Comm_rank(MPI_COMM_WORLD,&iam);
+        MPI_Comm_split(MPI_COMM_WORLD,iam,iam,&newcomm);
+        OMEN_Poisson_Solver->solve(Vnew,Vold,rho_atom,drho_atom_dV,1,NULL,FEM,Wire,Temp,Vg,Vs,Vs,Vd,&residual,1.0E-4,10,1,1,newcomm,MPI_COMM_WORLD,1,MPI_COMM_WORLD,0);
 
 if(!iam){
 ofstream potfile("potfile");
@@ -131,7 +130,7 @@ for (int ig=0;ig<FEM->NGrid;ig++) potfile<<Vnew[ig]<<endl;
 potfile.close();
 }
         for (int ibf=0;ibf<Overlap->size_tot;ibf++)
-            Vbf[ibf]=Vnew[FEM->real_at_index[ibf/12]];
+            Vbf[ibf]=Vnew[FEM->real_at_index[atom_of_bf[ibf]]];
 if(!iam){
 ofstream vbffile("vbffile");
 for (int ig=0;ig<Overlap->size_tot;ig++) vbffile<<Vbf[ig]<<endl;

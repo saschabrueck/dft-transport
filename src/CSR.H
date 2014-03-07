@@ -98,6 +98,7 @@ public:
     void get_full_index_i(int*);
     int get_msize(int,int,int,int*);
 // sab begin
+    void write_CSR_bin(const char*);
     void sparse_to_full(T*,int,int);
     void mat_vec_mult_add(T*,T*,int,T);
     int get_bandwidth(int);
@@ -120,8 +121,10 @@ public:
     double psipsidaggerdosdebug(CPX*,int);
     void psipsidagger(CPX*,int,CPX);
     void psipsidagger(CPX*,int,CPX,int*,double*);
+    void atomdensity(TCSR<CPX>*,CPX,int*,double*);
     void moveawaypbc(T*,T*,int,int);
     void settozeropbc(int,int);
+    void removepbc(int,int);
     void tr_full_to_sparse(T*,int,int);
     void full_to_sparse(T*,int,int,int,int);
     void sparse_transpose(TCSR<T> *mat);
@@ -2224,6 +2227,33 @@ if (first_row) throw CSR_Exception(__LINE__,__FILE__);
 
 /************************************************************************************************/
 
+template <>
+inline void TCSR<double>::atomdensity(TCSR<CPX>* A,CPX factor,int* atom_of_bf,double* result)
+{
+if (first_row) throw CSR_Exception(__LINE__,__FILE__);
+
+    if (size      != A->size      ) throw CSR_Exception(__LINE__,__FILE__);
+    if (size_tot  != A->size_tot  ) throw CSR_Exception(__LINE__,__FILE__);
+    if (type      != A->type      ) throw CSR_Exception(__LINE__,__FILE__);
+    if (first_row != A->first_row ) throw CSR_Exception(__LINE__,__FILE__);
+
+    int i,e;
+    double *linefull=new double[size_tot];
+
+    for (i=0;i<size;i++) {
+        init_variable(linefull,size_tot);
+        for (e=A->edge_i[i]-A->findx;e<A->edge_i[i+1]-A->findx;e++) {
+            linefull[A->index_j[e]-A->findx]=imag(factor*A->nnz[e]);
+        }
+        for (e=edge_i[i]-findx;e<edge_i[i+1]-findx;e++) {
+            result[atom_of_bf[first_row+i]]+=nnz[e]*linefull[index_j[e]-findx];
+        }
+    }
+    delete[] linefull;
+}
+
+/************************************************************************************************/
+
 template <class T>
 void TCSR<T>::moveawaypbc(T *left, T *right, int bw, int ndof)
 {
@@ -2275,6 +2305,63 @@ void TCSR<T>::settozeropbc(int bw, int ndof)
             }
         }
     }
+}
+
+/************************************************************************************************/
+
+template <class T>
+void TCSR<T>::removepbc(int bw, int ndof)
+{
+    int i,e;
+
+//    T*   nnz_tmp     = new T[max(n_nonzeros,1)];//I DO NOT EVEN NEED THE TEMPORARY MATRICES
+//    int* index_j_tmp = new int[max(n_nonzeros,1)];
+
+//    c_tcopy(n_nonzeros,nnz,1,nnz_tmp,1);
+//    c_icopy(n_nonzeros,index_j,1,index_j_tmp,1);
+
+    for (i=0;i<max(0,min(size,bw*ndof-first_row));i++) {
+        for (e=edge_i[i]-findx;e<edge_i[i+1]-findx;e++) {
+            if ( (index_j[e]-findx)/ndof - (i+first_row)/ndof > bw ) {
+//                index_j_tmp[e]=-1;
+                index_j[e]=-1;
+            }
+        }
+    }
+
+    for (i=max(0,min(size,size_tot-bw*ndof-first_row));i<size;i++) {
+        for (e=edge_i[i]-findx;e<edge_i[i+1]-findx;e++) {
+            if ( (index_j[e]-findx)/ndof - (i+first_row)/ndof < -bw ) {
+//                index_j_tmp[e]=-1;
+                index_j[e]=-1;
+            }
+        }
+    }
+
+    n_nonzeros = 0;
+    init_variable(index_i,size);
+
+    for (int i=0;i<size;i++) {
+        for(int e=edge_i[i]-findx;e<edge_i[i+1]-findx;e++){
+//            if(index_j_tmp[e]>=0){
+            if(index_j[e]>=0){
+                index_i[i]++;
+//                index_j[n_nonzeros]=index_j_tmp[e];
+                index_j[n_nonzeros]=index_j[e];
+//                nnz[n_nonzeros]=nnz_tmp[e];
+                nnz[n_nonzeros]=nnz[e];
+                n_nonzeros++;
+            }
+        }
+    }
+
+//    delete nnz_tmp;
+//    delete index_j_tmp;
+
+    get_row_edge();
+    get_diag_pos();
+
+    if (n_nonzeros!=edge_i[size]-findx) throw CSR_Exception(__LINE__,__FILE__);
 }
 
 /************************************************************************************************/
@@ -2516,6 +2603,70 @@ void TCSR<CPX>::cmp_full_to_sparse(CPX *B,int nrow,int ncol,CPX factor)
     get_diag_pos();
 }
 */
+/************************************************************************************************/
+
+template <>
+inline void TCSR<double>::write_CSR_bin(const char* filename)
+{
+    int i,j,u=0;
+    
+    ofstream myfile;
+    myfile.open (filename,ios::out | ios::binary);
+    double dsize = (double) size;
+    double dnnon = (double) n_nonzeros;
+    double dfind = (double) findx;
+    myfile.write((char*)&dsize,sizeof(double));
+    myfile.write((char*)&dnnon,sizeof(double));
+    myfile.write((char*)&dfind,sizeof(double));
+    for(i=0;i<size;i++){                                              
+        for(j=0;j<index_i[i];j++){                                    
+            double ipos = (double) (i+findx);
+            double jpos = (double) index_j[u];
+            double rval = nnz[u];
+            double ival = 0.0;
+            myfile.write((char*)&ipos,sizeof(double));
+            myfile.write((char*)&jpos,sizeof(double));
+            myfile.write((char*)&rval,sizeof(double));
+            myfile.write((char*)&ival,sizeof(double));
+            u++;                                                      
+        }                                                             
+    }                                                                 
+    myfile.close();                                                   
+
+}
+
+/************************************************************************************************/
+
+template <>
+inline void TCSR<CPX>::write_CSR_bin(const char* filename)
+{
+    int i,j,u=0;
+    
+    ofstream myfile;
+    myfile.open (filename,ios::out | ios::binary);
+    double dsize = (double) size;
+    double dnnon = (double) n_nonzeros;
+    double dfind = (double) findx;
+    myfile.write((char*)&dsize,sizeof(double));
+    myfile.write((char*)&dnnon,sizeof(double));
+    myfile.write((char*)&dfind,sizeof(double));
+    for(i=0;i<size;i++){                                              
+        for(j=0;j<index_i[i];j++){                                    
+            double ipos = (double) (i+findx);
+            double jpos = (double) index_j[u];
+            double rval = real(nnz[u]);
+            double ival = imag(nnz[u]);
+            myfile.write((char*)&ipos,sizeof(double));
+            myfile.write((char*)&jpos,sizeof(double));
+            myfile.write((char*)&rval,sizeof(double));
+            myfile.write((char*)&ival,sizeof(double));
+            u++;                                                      
+        }                                                             
+    }                                                                 
+    myfile.close();                                                   
+
+}
+
 /************************************************************************************************/
 
 template <>

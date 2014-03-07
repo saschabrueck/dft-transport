@@ -110,6 +110,19 @@ paramoutfile.close();
 MPI_Barrier(MPI_COMM_WORLD);
 exit(0);
 #endif
+#ifdef _OMEN_WRITEOUT
+if (!iam) {
+int ndof=Overlap->size_tot/n_cells;
+KohnShamCollect->removepbc(transport_params.bandwidth,ndof);
+KohnShamCollect->change_findx(1);
+KohnShamCollect->write_CSR_bin("H_4.bin");
+OverlapCollect->removepbc(transport_params.bandwidth,ndof);
+OverlapCollect->change_findx(1);
+OverlapCollect->write_CSR_bin("S_4.bin");
+}
+MPI_Barrier(MPI_COMM_WORLD);
+exit(0);
+#endif
     }
     if (!iam) cout << "TIME FOR DISTRIBUTING MATRICES " << get_time(sabtime) << endl;
 // determine singularity stuff
@@ -117,7 +130,7 @@ exit(0);
     sabtime=get_time(0.0);
     Singularities singularities(transport_params);
     if ( singularities.Execute(KohnSham,Overlap,n_mu,muvec,dopingvec,contactvec) ) return (LOGCERR, EXIT_FAILURE);
-muvec[0]=(muvec[0]+muvec[1])/2.0;muvec[1]=muvec[0];
+//muvec[0]=(muvec[0]+muvec[1])/2.0;muvec[1]=muvec[0];
     if (!iam) cout << "TIME FOR SINGULARITIES " << get_time(sabtime) << endl;
 // determine elements in nonequilibrium range
     double k_b=K_BOLTZMANN;
