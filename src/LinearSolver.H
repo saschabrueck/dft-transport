@@ -1,6 +1,7 @@
 #ifndef __LINEARSOLVER
 #define __LINEARSOLVER
 
+#include <vector>
 #include "Types.H"
 #include "CSR.H"
 #include "mpi.h"
@@ -17,6 +18,7 @@ public:
     virtual ~LinearSolver(){}
     virtual void prepare() = 0;
     virtual void prepare(int*,int*,int,int,int*,int) = 0;
+    virtual void prepare(int, std::vector<int>) {}; // for SPIKE
     virtual void solve_equation(T* res, T* rhs, int no_rhs) = 0;
 	
 };

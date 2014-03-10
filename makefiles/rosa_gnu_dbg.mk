@@ -1,8 +1,8 @@
 CPP = CC
 GCC = cc
 
-CFLAGS = -g -Wall -fopenmp -dynamic
-CXXFLAGS = -std=c++11 $(CFLAGS) -DMKL_PARDISO  # or just any 'old' pardiso
+CFLAGS = -g -Wall -fopenmp -dynamic 
+CXXFLAGS = -std=c++11 $(CFLAGS) -DSPIKE_DEBUG -DMKL_PARDISO
 
 LEX           = flex
 YACC          = bison
@@ -39,6 +39,7 @@ LINLIN = $(LIB_TOP)/CSelInv/EXAMPLES/C2Finterface.o $(LIB_TOP)/CSelInv/LIB/libcs
 
 DMALLOC = -L/apps/rosa/ddt/4.1.1/lib/64/ -ldmallocthcxx -z muldefs
 
+#PARDISO_SO = $(LIB_TOP)/Pardiso_SelInv/libpardiso491-GNU430-X86-64.so
 #PARDISO_SO = -L$(LIB_TOP)/Pardiso_SelInv -lpardiso491-GNU430-X86-64 -Wl,-rpath=$(LIB_TOP)/Pardiso_SelInv
 PARDISO_SO = -L$(MKLROOT)/lib/intel64 -lmkl_intel_lp64 -lmkl_intel_thread -lmkl_core -liomp5 -lpthread
 

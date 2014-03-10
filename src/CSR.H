@@ -84,9 +84,10 @@ public:
     void trans_mat_vec_mult(T*,T*,int,int,int);
     void spec_mat_vec_mult(T*,T*,int,int*,int*,int,int);
     void spec_mat_vec_mult(T*,T*,int,int*,int*,int,int,int*);
-    //void sparse_to_full(T*,int,int);
+    void sparse_to_full(T*,int,int);
     void sparse_to_cmp_full(CPX*,int,int);
     void full_to_sparse(T*,int,int);
+    void sparse_to_full_trans(T *,int ,int );
     void cmp_full_to_sparse(CPX*,int,int,CPX);
     void write_CSR(const char*);
     void write(const char*);
@@ -99,7 +100,6 @@ public:
     int get_msize(int,int,int,int*);
 // sab begin
     void write_CSR_bin(const char*);
-    void sparse_to_full(T*,int,int);
     void mat_vec_mult_add(T*,T*,int,T);
     int get_bandwidth(int);
     void shift_resize(int,int,int,int);
@@ -135,6 +135,10 @@ public:
     void set_index_i(int,int*);
     void set_index_j(int,int*);
     void set_edge_i(int,int*);
+    
+    
+    void get_dense_by_range(T* matrix_out, int start_row, int start_col, int end_row, int end_col);
+    void get_dense_by_range_trans(T* matrix_out, int start_row, int start_col, int end_row, int end_col);
 
     int pos,size,size_tot,n_nonzeros,type,findx,first_row;
     T *nnz;
