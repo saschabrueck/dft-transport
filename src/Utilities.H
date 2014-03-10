@@ -88,10 +88,18 @@ void print_mat(TCSR<CPX>*, int, int);
 void print_mat(CPX*, int, int, int);
 
 void print_mat(CPX*, int, int, int, int, int);
+ 
+void print_mat_spy(CPX *, int , int , int );
 
-void write_mat(CPX*, int, int, const char*);
+void print_mat_spy(TCSR<CPX> *, int , int );
 
-void write_mat(CPX*, int, int, std::basic_string<char>);
+void write_mat_c(CPX*, int, int, const char*);
+
+void write_mat_c(CPX*, int, int, std::basic_string<char>);
+
+void write_mat_f(CPX*, int, int, const char*);
+
+void write_mat_f(CPX*, int, int, std::basic_string<char>);
 
 /************************************************************************************************/
 

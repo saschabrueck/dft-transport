@@ -12,12 +12,18 @@ LDFLAGS = $(LFLAGS) $(DFLAGS)
 
 MAIN = main.cpp
 SOURCES_CPP = cDBCSR_tools.cpp c_scf.cpp
-SOURCES_C = InputParameter.C WireGenerator.C FEMGrid.C Poisson.C Utilities.C CSR.C DiagScaLapack.C Density.C EnergyVector.C Quadrature.C KPointIntegration.C GetSingularities.C GetSigma.C rGF.C tmprGF.C SemiSelfConsistent.C AtomStrain.C Macopt.C Material.C Fermi.C Arpack.C @pardiso@
+SOURCES_C = InputParameter.C WireGenerator.C FEMGrid.C Poisson.C Utilities.C CSR.C DiagScaLapack.C Density.C EnergyVector.C Quadrature.C KPointIntegration.C GetSingularities.C GetSigma.C rGF.C tmprGF.C SemiSelfConsistent.C AtomStrain.C Macopt.C Material.C Fermi.C Arpack.C Spike.C SpikeSolver.C @pardiso@
 SOURCES_c = y.tab.c lex.yy.c
-
 OBJECTS = $(SOURCES_CPP:.cpp=.o) $(SOURCES_C:.C=.o) $(SOURCES_c:.c=.o)
 EXECUTABLE = interface
+
+
+MYMAIN = mymain.cc
 MYEXECUTABLE = mymain
+SOURCES_CPP_MYMAIN =
+SOURCES_C_MYMAIN = WireGenerator.C FEMGrid.C Poisson.C Utilities.C CSR.C DiagScaLapack.C Density.C EnergyVector.C Quadrature.C KPointIntegration.C GetSingularities.C GetSigma.C rGF.C tmprGF.C AtomStrain.C Macopt.C Material.C Fermi.C Arpack.C Spike.C SpikeSolver.C @pardiso@
+SOURCES_c_MYMAIN =
+OBJECTS_MYMAIN = $(SOURCES_CPP_MYMAIN:.cpp=.o) $(SOURCES_C_MYMAIN:.C=.o) $(SOURCES_c_MYMAIN:.c=.o)
 
 all: $(SOURCES_CPP) $(SOURCES_C) $(SOURCES_c) $(EXECUTABLE)
 
@@ -25,6 +31,9 @@ $(EXECUTABLE): $(MAIN:.cpp=.o) $(OBJECTS)
 	$(CPP) $(CXXFLAGS) $(INCLUDES) -o $@ $(MAIN:.cpp=.o) $(OBJECTS) $(LINLIN) @pardiso_so@ $(LDFLAGS) $(LIBS)
 
 .cpp.o:
+	$(CPP) $(INCLUDES) $(CXXFLAGS) -c $< -o $@ $(LDFLAGS)
+
+.cc.o:
 	$(CPP) $(INCLUDES) $(CXXFLAGS) -c $< -o $@ $(LDFLAGS)
 
 .C.o:
@@ -39,9 +48,9 @@ y.tab.c: parser.y
 lex.yy.c: parser.lex y.tab.c
 	$(LEX) $<
 
-$(MYEXECUTABLE): $(MYEXECUTABLE).cc $(SOURCES_CPP) $(SOURCES_C) $(OBJECTS)
-	$(CPP) $(CXXFLAGS) $(INCLUDES) $(MYEXECUTABLE).cc -o $@ $(OBJECTS) @pardiso_so@ $(LDFLAGS) $(LIBS)
+$(MYEXECUTABLE): $(MYMAIN:.cc=.o) $(OBJECTS_MYMAIN)
+	$(CPP) $(CXXFLAGS) $(INCLUDES) -o $@ $(MYMAIN:.cc=.o) $(OBJECTS_MYMAIN) @pardiso_so@ $(LINLIN) $(LDFLAGS) $(LIBS)
 
 .PHONY: clean
 clean:
-	rm -rf *.o lex.yy.c  y.tab.c $(EXECUTABLE) $(MYEXECUTABLE) $(INP_DIR)/output.out csr.*
+	rm -rf *.o lex.yy.c y.tab.c $(EXECUTABLE) $(MYEXECUTABLE) $(INP_DIR)/output.out csr.*

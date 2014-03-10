@@ -220,8 +220,8 @@ myfile.close();
     MPI_Comm_size(eq_rank_matrix_comm,&n_mat_comm);
     MPI_Comm_rank(eq_rank_matrix_comm,&matrix_id);
     uint jpos;
-    for (int iseq=0;iseq<int(ceil(double(energyvector.size())/n_mat_comm));iseq++)
-//    for (int iseq=0;iseq<1;iseq++)
+    //for (int iseq=0;iseq<int(ceil(double(energyvector.size())/n_mat_comm));iseq++)
+      for (int iseq=0;iseq<1;iseq++)
         if ( (jpos=matrix_id+iseq*n_mat_comm)<energyvector.size())
             if (abs(stepvector[jpos])>0.0)
                 if (density(KohnShamCollect,OverlapCollect,Ps,energyvector[jpos],stepvector[jpos],methodvector[jpos],n_mu,muvec,contactvec,currentvector[jpos],propagating_sizes[jpos],atom_of_bf,eperatom,dperatom,transport_params,matrix_comm))

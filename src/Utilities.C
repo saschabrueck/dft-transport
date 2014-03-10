@@ -4,6 +4,7 @@
 #include <string>
 #include "Utilities.H"
 #include "Blas.H"
+#include <random>
 
 bool sortx(const XYZPOS& a, const XYZPOS& b)
 {
@@ -549,6 +550,45 @@ void set_to_zero(int length, T *array) {
   }
 }
 
+void set_random(int length, int seed, CPX *array)
+{
+  std::default_random_engine generator(seed);
+  std::uniform_real_distribution<double> distribution(-1.0, 1.0);
+  for (int i=0; i < length; ++i) {
+    double real = distribution(generator);
+    double imag = distribution(generator);
+    array[i] = CPX(real, imag);
+  }
+}
+
+
+/** \brief Write a double complex matrix to a file
+ *
+ *  \param filename Name of the file to write to.
+ *
+ *  \param matrix Array containing the matrix to be written to the file.
+ *
+ *  \param num_rows Number of rows.
+ *
+ *  \param num_cols Number of columns.
+ */
+void write_matrix_to_file(const char *filename, CPX *matrix, int num_rows,
+                          int num_cols)
+{
+    ofstream output_file;
+ 
+    output_file.open(filename);
+    output_file.precision(8);
+    for(int row=0; row < num_rows; ++row){
+        for(int column=0; column < num_cols; ++column){
+            output_file << real(matrix[row + column * num_rows]) << " "
+                   << imag(matrix[row + column * num_rows]) << " ";
+        }
+        output_file<<"\n";
+    }
+    output_file.close();
+}
+
 
 /// Returns the width of a matrix stored in a CSR file
 int get_csr_rows(const char *filename)
@@ -623,6 +663,38 @@ void print_mat(TCSR<CPX> *matrix, int rows, int columns)
     u = u + elements_left_in_row;
   }
 }
+
+/// Prints the first 'rows' rows and 'columns' columns of a matrix
+void print_mat_spy(TCSR<CPX> *matrix, int rows, int columns)
+{
+  int u = 0;
+  int field_width = 2;   // adjust to print fields with more or less chars
+  int fortran_index = matrix->findx;
+  for (int i = 0; i < rows; ++i) {
+    int elements_left_in_row = matrix->edge_i[i];
+    for (int j = 0; j < columns; ++j) {
+      if (j == matrix->index_j[u] - fortran_index) {
+        std::stringstream number_to_print;
+        number_to_print << real(matrix->nnz[u]) << "+"
+                        << imag(matrix->nnz[u]) << "i";
+        std::cout << "\033[0;31m" <<std::setw(field_width) << "*" << "\033[0;30m";
+        // This condition ensures we don't accidentially jump to the next
+        // line if all elements are printed and the next line's element
+        // is at the next j position than the one just printed.
+        if (elements_left_in_row > 1) {
+          --elements_left_in_row;
+          ++u;
+        }
+      }
+      else {
+        std::cout << std::setw(field_width) << "*";
+      }
+    }
+    std::cout << endl;
+    u = u + elements_left_in_row;
+  }
+}
+
 void print_mat(CPX *matrix, int rows, int columns, int rowlength)
 {
   int field_width = 30;   // adjust to print fields with more or less chars
@@ -632,7 +704,25 @@ void print_mat(CPX *matrix, int rows, int columns, int rowlength)
       std::stringstream number_to_print;
       number_to_print << real(matrix[position]) << "+" 
                       << imag(matrix[position]) << "i";
-      std::cout << std::setw(field_width) << number_to_print.str();
+     std::cout << "\033[0;31m" <<std::setw(field_width) << number_to_print.str() << "\033[0;30m";
+    } 
+    std::cout << endl;
+  }
+}
+
+
+void print_mat_spy(CPX *matrix, int rows, int columns, int rowlength)
+{
+  //int field_width = 30;   // adjust to print fields with more or less chars
+  for (int i=0; i < rows; ++i) {
+    for (int j=0; j < columns; ++j) {
+        int position = i * rowlength + j;
+       if(real(matrix[position]) != 0 || imag(matrix[position]) != 0){
+
+        std::cout << "\033[0;31m" << "*" << "\033[0;30m";
+        }else
+                std::cout << "*";     
+        
     } 
     std::cout << endl;
   }
@@ -645,27 +735,72 @@ void print_mat(CPX *matrix, int rows, int columns, int row_start,
     for (int j=column_start; j < column_start + columns; ++j) {
       int pos = i * rowlength + j;
       std::stringstream number_to_print;
+      
+      if(real(matrix[pos]) != 0 || imag(matrix[pos]) != 0){
       number_to_print << real(matrix[pos]) << "+" 
                       << imag(matrix[pos]) << "i";
-      std::cout << std::setw(field_width) << number_to_print.str();
+
+      std::cout << "\033[0;31m" <<std::setw(field_width) << number_to_print.str() << "\033[0;30m";
+      }else
+      std::cout <<std::setw(field_width) << 0;
+      
     }
     std::cout << endl;
   }
 }
-void write_mat(CPX *matrix, int rowlength, int columnlength, 
-               const char *filename)
-{
+
+void write_mat_c(CPX *matrix, int rows, int columns, 
+                 const char *filename) {
+
   int fortran_index = 1;
-  int precision = 15;
+  int precision     = 15;
+
   ofstream outfile;
   outfile.open(filename);
   outfile.precision(precision);
-  for (int i=0; i < rowlength; ++i) {
-    for (int j=0; j < columnlength; ++j) {
-      int position = i * rowlength + j;
+
+  for (int i = 0; i < rows; ++i) {
+    for (int j = 0; j < columns; ++j) {
+
+      int position = i * columns + j;
+ 
       outfile << (i + fortran_index) << " " << (j + fortran_index) << " "
       << real(matrix[position]) << " " << imag(matrix[position]) << "\n";
+
     }
   }
+
   outfile.close();
+}
+void write_mat_c(CPX *matrix, int rows, int columns, 
+               std::basic_string<char> filename) {
+  write_mat_c(matrix, rows, columns, filename.c_str());
+}
+
+void write_mat_f(CPX *matrix, int rows, int columns, 
+                 const char *filename) {
+
+  int fortran_index = 1;
+  int precision     = 15;
+
+  ofstream outfile;
+  outfile.open(filename);
+  outfile.precision(precision);
+
+  for (int i = 0; i < rows; ++i) {
+    for (int j = 0; j < columns; ++j) {
+
+      int position = j * rows + i;
+
+      outfile << (i + fortran_index) << " " << (j + fortran_index) << " "
+      << real(matrix[position]) << " " << imag(matrix[position]) << "\n";
+
+    }
+  }
+
+  outfile.close();
+}
+void write_mat_f(CPX *matrix, int rows, int columns, 
+               std::basic_string<char> filename) {
+  write_mat_f(matrix, rows, columns, filename.c_str());
 }

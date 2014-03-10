@@ -15,6 +15,7 @@ using namespace std;
 #include "Pardiso.H"
 #include "tmprGF.H"
 #include "GetSigma.H"
+#include "SpikeSolver.H"
 #include "Density.H"
 
 extern "C" {
@@ -247,12 +248,29 @@ if (!matrix_rank) {
             }
             sabtime=get_time(d_zer);
         } else if (solver_method==1) {
-// SPIKE solver
+            if (matrix_procs != 2) {
+              printf("WARNING: SpikeSolver needs to be tested with more than two partitions\n");
+            }
+            LinearSolver<CPX>* solver;
+            // SPIKE solver
+            solver = new SpikeSolver<CPX>(HamSig, matrix_comm);
+            int bandwidth = 1092;     // TODO: write routine to find bandwidth
+            std::vector<int> p_lines(matrix_procs+1);
+            for (int i = 0; i < matrix_procs + 1; ++i) {
+              p_lines[i] = displc_sol[i];
+            }
+            solver->prepare(bandwidth, p_lines);
+            // TODO: populate inj
+            inj = new CPX[dist_sol[matrix_rank]*(nprol+npror)](); 
+            CPX* sol = new CPX[dist_sol[matrix_rank]*(nprol+npror)]();
+            solver->solve_equation(sol, inj, nprol+npror);
+
             delete[] inj;
             delete HamSig;
 if (!matrix_rank) {
             Sol = new CPX[displc_sol[matrix_procs]*(nprol+npror)];
 }
+            // TODO: redistribute / gather sol
         } else return (LOGCERR, EXIT_FAILURE);
         cout << "TIME FOR WAVEFUNCTION SPARSE SOLVER WITH "<< ncells <<" UNIT CELLS " << get_time(sabtime) << endl;
         delete[] dist_sol;

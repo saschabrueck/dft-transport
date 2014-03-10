@@ -249,3 +249,25 @@ void TCSR<CPX>::cmp_full_to_sparse(CPX *B,int nrow,int ncol,CPX factor)
     get_row_edge();
     get_diag_pos();
 }
+
+template<>
+void TCSR<CPX>::get_dense_by_range(CPX* matrix_out, int start_row, int start_col, int end_row, int end_col)
+{
+    int r_length = end_row - start_row +1;
+    int c_length = end_col - start_col +1;
+    
+    int b,a,i,j;
+    //int index;
+
+    init_variable(matrix_out,r_length*c_length);
+    
+    for(i=start_row,a=0;i<=end_row;i++,a++){
+        for(j=edge_i[i]-findx,b=0;j<edge_i[i+1]-findx;j++,b++){
+            int indx = index_j[j];
+            if( indx < start_col)  continue;
+            if( indx > end_col)    break;
+           // printf("i = %d ;  edge[i=%d]=%d ; j=%d  ; index=%d  a = %d   length_r = %d\n  ",i,i,edge_i[i],j,indx,a,r_length);
+            matrix_out[(indx-findx-start_col)+((i-start_row)*c_length)]   = nnz[j];
+        }
+    }
+}

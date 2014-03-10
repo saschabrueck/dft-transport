@@ -111,7 +111,7 @@ void rGF::solve_blocks(std::vector<int> Bmin, std::vector<int> Bmax, CPX *GR,
   c_zcopy(diagonal_block_size, tmp2, 1, GR, 1);
   std::swap(tmp0, tmp2);
 
-  //write_mat(GR, diagonal_length, diagonal_length, "tests/rGF/GR_0.csv");
+  //write_mat_c(GR, diagonal_length, diagonal_length, "tests/rGF/GR_0.csv");
 
   //std::cout << "rGF, stage1 total: " << get_time(time_start) << "\n";
   //time_start = get_time(0.0);
@@ -166,11 +166,11 @@ void rGF::solve_blocks(std::vector<int> Bmin, std::vector<int> Bmax, CPX *GR,
     /*std::stringstream filename;
     filename.str("");
     filename << "tests/rGF/GR_" << block << ".csv";
-    write_mat(&GR[GR_start_index[block]], diagonal_length, diagonal_length, 
+    write_mat_c(&GR[GR_start_index[block]], diagonal_length, diagonal_length, 
               filename.str());
     filename.str("");
     filename << "tests/rGF/GRNNp1_" << block << ".csv";
-    write_mat(&GRNNp1[GRNNp1_start_index[block - 1]], Bmax[block - 1] - 
+    write_mat_c(&GRNNp1[GRNNp1_start_index[block - 1]], Bmax[block - 1] - 
               Bmin[block - 1] + 1, diagonal_length, filename.str());*/
   }
 
@@ -424,7 +424,7 @@ void rGF::calculate_gR_rec(int block, std::vector<int> Bmin,
 
   /*std::stringstream gR_filename;
   gR_filename << "tests/rGF/gR_" << block << ".csv";
-  write_mat(&gR[GR_start_index[block]], diagonal_length, diagonal_length,
+  write_mat_c(&gR[GR_start_index[block]], diagonal_length, diagonal_length,
             gR_filename.str());*/
 
   delete[] pivot_vector;
@@ -473,7 +473,7 @@ void rGF::calculate_gR_init(int block, std::vector<int> Bmin,
 
   /*std::stringstream gR_filename;
   gR_filename << "tests/rGF/gR_" << block << ".csv";
-  write_mat(&gR[GR_start_index[block]], diagonal_length, diagonal_length,
+  write_mat_c(&gR[GR_start_index[block]], diagonal_length, diagonal_length,
             gR_filename.str());*/
 
   delete[] pivot_vector;
@@ -609,9 +609,9 @@ void rGF::calculate_GR(int block, std::vector<int> Bmin, std::vector<int> Bmax,
   // Check preconditions
   /*std::stringstream filename;
   filename.str(""); filename << "tests/rGF/GR_" << block-1 << "_it" << block << ".csv";
-  write_mat(tmp, precursor_size, precursor_size, filename.str());
+  write_mat_c(tmp, precursor_size, precursor_size, filename.str());
   filename.str(""); filename << "tests/rGF/gR_" << block << "_it" << block << ".csv";
-  write_mat(gR, result_size, result_size, filename.str());
+  write_mat_c(gR, result_size, result_size, filename.str());
   filename.str(""); filename << "tests/rGF/T_" << block-1 << block << ".csv";
   const std::string &filename_str = filename.str();
   const char *cfilename = filename_str.c_str();
@@ -623,7 +623,7 @@ void rGF::calculate_GR(int block, std::vector<int> Bmin, std::vector<int> Bmax,
   // NOTE: vec_mat_mult(in, out, number_of_rows for 'in')
   T_im1i->vec_mat_mult(tmp, GR_block, precursor_size);
   /*filename.str(""); filename << "tests/rGF/A_" << block << ".csv";
-  write_mat(GR_block, result_size, precursor_size, filename.str());*/
+  write_mat_c(GR_block, result_size, precursor_size, filename.str());*/
 
   // GRNNp1[..] = GR_block * gR_{i} = GR_{i-1} * T_{i-1,i} * gR_{i}, 
   // dim: precursor_size*result_size
@@ -633,20 +633,20 @@ void rGF::calculate_GR(int block, std::vector<int> Bmin, std::vector<int> Bmax,
           gR, result_size, GR_block, result_size, CPX(0.0, 0.0), GRNNp1,
           result_size);
   /*filename.str(""); filename << "tests/rGF/B_" << block << ".csv";
-  write_mat(GRNNp1, precursor_size, result_size, filename.str());*/
+  write_mat_c(GRNNp1, precursor_size, result_size, filename.str());*/
 
   // tmp = T_{i,i-1} * GRNNp1 = T_{i,i-1} * GR_block * T_{i-1,i} * gR_{i},
   // dim: result_size*result_size
   // NOTE: trans_mat_vec_mult(in, out, cols_of_non_transposed_in, <ignored>)
   T_iim1->trans_mat_vec_mult(GRNNp1, tmp, result_size, result_size);
   /*filename.str(""); filename << "tests/rGF/C_" << block << ".csv";
-  write_mat(tmp, result_size, result_size, filename.str());*/
+  write_mat_c(tmp, result_size, result_size, filename.str());*/
 
   // GRNNp1 *= -1, dim: precursor_size*result_size
   // M_TODO: we could also account for the factor at result construction time
   c_zscal(precursor_size * result_size, CPX(-1.0, 0.0), GRNNp1, 1);
   /*filename.str(""); filename << "tests/rGF/D_" << block << ".csv";
-  write_mat(GRNNp1, precursor_size, result_size, filename.str());*/
+  write_mat_c(GRNNp1, precursor_size, result_size, filename.str());*/
 
   // GR_block = gR * tmp = gR_{i} * T_{i,i-1} * GR_block * T_{i-1,i} * gR_{i},
   // dim: result_size*result_size
@@ -654,14 +654,14 @@ void rGF::calculate_GR(int block, std::vector<int> Bmin, std::vector<int> Bmax,
           tmp, result_size, gR, result_size, CPX(0.0, 0.0), GR_block, 
           result_size);
   /*filename.str(""); filename << "tests/rGF/E_" << block << ".csv";
-  write_mat(GR_block, result_size, result_size, filename.str());*/
+  write_mat_c(GR_block, result_size, result_size, filename.str());*/
 
   // GR_block += gR = gR_{i} + gR_{i} * T_{i,i-1} * GR_block * T_{i-1,i} * gR_{i},
   // dim: result_size*result_size
   c_zaxpy(result_size * result_size, CPX(1.0, 0.0), gR, 1, GR_block, 1);
   c_zcopy(result_size * result_size, GR_block, 1, GR, 1);
   /*filename.str(""); filename << "tests/rGF/F_" << block << ".csv";
-  write_mat(GR_block, result_size, result_size, filename.str());*/
+  write_mat_c(GR_block, result_size, result_size, filename.str());*/
 
   //std::cout << "GR_" << block << ": " << get_time(start_time) << "\n"; */
 

@@ -102,10 +102,14 @@ extern "C" {
     void fortran_name(dlasrt,DLASRT)(char*,int*,double*,int*);
 
 // MMC
-    void fortran_name(dsterf,DSTERF)(int *N, double *D, double *E, int *INFO);
-    void fortran_name(dsteqr,DSTEQR)(char *COMPZ, int *N, double *D, 
-                                     double *E, double *Z, int *LDZ,
-                                     double *WORK, int *INFO);
+    void fortran_name(dsterf,DSTERF)(int* N, double* D, double* E, int* INFO);
+    void fortran_name(dsteqr,DSTEQR)(char* COMPZ, int* N, double* D, 
+                                     double* E, double* Z, int* LDZ,
+                                     double* WORK, int* INFO);
+    void fortran_name(dlacpy,DLACPY)(char* UPLO, int* M, int* N, double* A,
+                                     int* LDA, double* B, int* LDB);
+    void fortran_name(zlacpy,ZLACPY)(char* UPLO, int* M, int* N, CPX* A,
+                                     int* LDA, CPX* B, int* LDB);
 
 }
 
@@ -561,6 +565,17 @@ inline void c_dsteqr(char COMPZ, int N, double *D, double *E, double *Z,
                      int LDZ, double *WORK, int *INFO)
 {
   fortran_name(dsteqr,DSTEQR)(&COMPZ, &N, D, E, Z, &LDZ, WORK, INFO);
+}
+
+inline void c_dlacpy(char UPLO, int M, int N, double* A, int LDA, double* B,
+                     int LDB)
+{
+  fortran_name(dlacpy,DLACPY)(&UPLO, &M, &N, A, &LDA, B, &LDB);
+}
+
+inline void c_zlacpy(char UPLO, int M, int N, CPX* A, int LDA, CPX* B, int LDB)
+{
+  fortran_name(zlacpy,ZLACPY)(&UPLO, &M, &N, A, &LDA, B, &LDB);
 }
 
 
