@@ -5,16 +5,28 @@
 #include "Types.H"
 #include "CSR.H"
 
+// Support for various pardiso versions
+#ifdef SRC_PARDISO
+#define OLD_PARDISO_INTERFACE
+#endif
+#ifdef MKL_PARDISO
+#define OLD_PARDISO_INTERFACE
+#endif
+
+
 extern "C" {
 
-#ifdef MKL_PARDISO
+#ifndef SRC_PARDISO
+// The sources based pardiso doesn't have a pardisoinit function
+#ifdef OLD_PARDISO_INTERFACE
   void fortran_name(pardisoinit, PARDISOINIT)(void*, int*, int*);
 #else
   void fortran_name(pardisoinit, PARDISOINIT)(void*, int*, int*, int*, 
                                               double*, int*);
 #endif
+#endif /* SRC_PARDISO */
 
-#ifdef MKL_PARDISO
+#ifdef OLD_PARDISO_INTERFACE
   int fortran_name(pardiso, PARDISO)(void*, int*, int*, int*, int*, int*,
                                      void*, int*, int*, int*, int*, int*, int*,
                                      void*, void*, int*);
@@ -32,7 +44,7 @@ namespace Pardiso {
 template <typename T>
 void sparse_solve(TCSR<T>* A, T* b, int b_cols, T* x);
 
-#ifndef MKL_PARDISO
+#ifndef OLD_PARDISO_INTERFACE
 template <typename T>
 void sparse_invert(TCSR<T>* A);
 #endif
@@ -95,6 +107,10 @@ void sparse_solve(TCSR<T>* A, T* b, int b_cols, T* x) {
   iparm[7] = 2;         // Max numbers of iterative refinement steps
   iparm[9] = 13;        // Perturb the pivot elements with 1E-13
   iparm[10] = 1;        // Use nonsymmetric permutation and scaling MPS
+#ifdef SRC_PARDISO
+  iparm[3] = 80;
+  iparm[20] = 1;
+#endif
 
   int maxfct = 1;       // Maximum number of numerical factorizations.
   int mnum = 1;         // Which factorization to use.
@@ -105,12 +121,14 @@ void sparse_solve(TCSR<T>* A, T* b, int b_cols, T* x) {
       pt[i] = 0;
   }
 
+#ifndef SRC_PARDISO
   // Initialize pardiso
-#ifdef MKL_PARDISO
-  //printf("***** Using old interface *****\n");
+  printf("Pardiso init start\n");
+#ifdef OLD_PARDISO_INTERFACE
+  printf("***** Using old interface *****\n");
   fortran_name(pardisoinit,PARDISOINIT)(pt, &mtype, iparm);
 #else
-  //printf("***** Using new interface *****\n");
+  printf("***** Using new interface *****\n");
   double dparm[64];
   int solver = 0;       // Use the sparse direct solver
   fortran_name(pardisoinit,PARDISOINIT)(pt, &mtype, &solver, iparm, dparm,
@@ -136,13 +154,19 @@ void sparse_solve(TCSR<T>* A, T* b, int b_cols, T* x) {
       break;
   }
 #endif
+  printf("Pardiso init done\n");
+#endif /* SRC_PARDISO */
 
 
 
-  // Reordering and Symbolic Factorization.
-  int phase = 11;
-  //printf("entering phase %d\n", phase);
-#ifdef MKL_PARDISO
+  // Factorization
+#ifndef SRC_PARDISO
+  int phase = 11; // Newer pardiso: reordering and symbolic factorization
+#else
+  int phase = 12; // SRC pardiso: analysis & numerical factorization
+#endif
+  printf("entering phase %d\n", phase);
+#ifdef OLD_PARDISO_INTERFACE
   fortran_name(pardiso,PARDISO)(pt, &maxfct, &mnum, &mtype, &phase,
                                 &n, a, ia, ja, NULL, &b_cols, iparm, &msglvl,
                                 NULL, NULL, &error);
@@ -156,10 +180,11 @@ void sparse_solve(TCSR<T>* A, T* b, int b_cols, T* x) {
       exit(error);
   }
 
-  // Numerical factorization
+#ifndef SRC_PARDISO
+  // Numerical factorization (not needed for SRC pardiso)
   phase = 22;
-  //printf("entering phase %d\n", phase);
-#ifdef MKL_PARDISO
+  printf("entering phase %d\n", phase);
+#ifdef OLD_PARDISO_INTERFACE
   fortran_name(pardiso,PARDISO)(pt, &maxfct, &mnum, &mtype, &phase,
                                 &n, a, ia, ja, NULL, &b_cols, iparm, &msglvl,
                                 NULL, NULL, &error);
@@ -172,12 +197,13 @@ void sparse_solve(TCSR<T>* A, T* b, int b_cols, T* x) {
       printf("\nERROR during numerical factorization: %d", error);
       exit(error);
   }
+#endif /* SRC_PARDISO */
  
   // Back substitution and iterative refinement 
   phase = 33;
   iparm[7] = 2;       // Max number of refinement steps
-  //printf("entering phase %d\n", phase);
-#ifdef MKL_PARDISO
+  printf("entering phase %d\n", phase);
+#ifdef OLD_PARDISO_INTERFACE
   fortran_name(pardiso,PARDISO)(pt, &maxfct, &mnum, &mtype, &phase,
                                 &n, a, ia, ja, NULL, &b_cols, iparm, &msglvl,
                                 b, x, &error);
@@ -193,8 +219,8 @@ void sparse_solve(TCSR<T>* A, T* b, int b_cols, T* x) {
 
   // Release of memory
   phase = -1;
-  //printf("entering phase %d\n", phase);
-#ifdef MKL_PARDISO
+  printf("entering phase %d\n", phase);
+#ifdef OLD_PARDISO_INTERFACE
   fortran_name(pardiso,PARDISO)(pt, &maxfct, &mnum, &mtype, &phase, &n,
                                 NULL, ia, ja, NULL, &b_cols, iparm, &msglvl,
                                 NULL, NULL, &error);
@@ -209,7 +235,7 @@ void sparse_solve(TCSR<T>* A, T* b, int b_cols, T* x) {
   }
 }
 
-#ifndef MKL_PARDISO
+#ifndef OLD_PARDISO_INTERFACE
 /** \brief Function to selectively invert a CSR matrix using Pardiso
  * 
  *  The sparsity pattern in the input is preserved in the output, i.e. 
@@ -333,7 +359,7 @@ void sparse_invert(TCSR<T> *A) {
       exit(error);
   }
 }
-#endif
+#endif /* OLD_PARDISO_INTERFACE */
 
 } /* namespace Pardiso */
 

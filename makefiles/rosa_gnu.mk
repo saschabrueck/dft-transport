@@ -2,7 +2,7 @@ CPP = CC
 GCC = cc
 
 CFLAGS = -g -Wall -fopenmp -dynamic
-CXXFLAGS = -std=c++11 $(CFLAGS) -DMKL_PARDISO  # or just any 'old' pardiso
+CXXFLAGS = -std=c++11 $(CFLAGS) -DSRC_PARDISO
 
 LEX           = flex
 YACC          = bison
@@ -18,7 +18,6 @@ INCSLU        = -I$(LIB_TOP)/SuperLU_DIST_2.0/SRC/
 INCMPS        = -I$(LIB_TOP)/MUMPS_4.10.0/include/
 INCPDI        = -I$(LIB_TOP)/PDIV/
 INCPOR        = -I$(LIB_TOP)/MUMPS_4.10.0/PORD/include/
-INCSLU        = -I$(LIB_TOP)/SuperLU_DIST_2.0/SRC
 INCUFC        = -I$(LIB_TOP)/UFconfig/
 INCUMF        = -I$(LIB_TOP)/UMFPACK/Include
 
@@ -39,10 +38,16 @@ LINLIN = $(LIB_TOP)/CSelInv/EXAMPLES/C2Finterface.o $(LIB_TOP)/CSelInv/LIB/libcs
 
 DMALLOC = -L/apps/rosa/ddt/4.1.1/lib/64/ -ldmallocthcxx -z muldefs
 
+# selective inversion pardiso (or pardiso 5.0)
 #PARDISO_SO = -L$(LIB_TOP)/Pardiso_SelInv -lpardiso491-GNU430-X86-64 -Wl,-rpath=$(LIB_TOP)/Pardiso_SelInv
-PARDISO_SO = -L$(MKLROOT)/lib/intel64 -lmkl_intel_lp64 -lmkl_intel_thread -lmkl_core -liomp5 -lpthread
 
-LFLAGS = -L$(LIB_TOP)/cp2k/lib/CRAY-XE6-gfortran-hwtopo/popt/ #-Wl,-rpath,/opt/cray/mpt/5.6.1/gni/mpich2-gnu/47/lib/ -Wl,-rpath,/opt/fftw/3.3.0.1/interlagos/lib/
+# when using the MKL pardiso set -DMKL_PARDISO in CXXFLAGS
+#PARDISO_SO = -L$(MKLROOT)/lib/intel64 -lmkl_intel_lp64 -lmkl_intel_thread -lmkl_core -liomp5 -lpthread -Wl,-rpath=$(MKLROOT)/lib/intel64
+
+# when using our source based pardiso set -DSRC_PARDISO in CXXFLAGS
+PARDISO_SO = -L$(LIB_TOP)/Pardiso -lpardiso
+
+LFLAGS = -L$(LIB_TOP)/cp2k/lib/CRAY-XE6-gfortran-hwtopo/popt/ -Wl,-rpath,/opt/cray/mpt/5.6.1/gni/mpich2-gnu/47/lib/ -Wl,-rpath,/opt/fftw/3.3.0.1/interlagos/lib/
 DFLAGS = -DAdd_
 LIBS = $(UMFPACKLIB) $(AMDLIB) $(MUMPSLIB) $(MUMPDLIB) $(MUMPSCOM) $(PORDLIB) $(METISLIB) $(AZTECLIB) $(QHULLLIB) $(ARPACKLIB) \
 	-lcp2k_lib -lcp2k_base_lib -lcp2k_dbcsr_lib -lcp2k_fft_lib -lcp2k_ma_lib -lcp2k_elpa_lib \
