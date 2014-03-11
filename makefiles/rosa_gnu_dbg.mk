@@ -2,7 +2,7 @@ CPP = CC
 GCC = cc
 
 CFLAGS = -g -Wall -fopenmp -dynamic 
-CXXFLAGS = -std=c++11 $(CFLAGS) -DSPIKE_DEBUG -DMKL_PARDISO
+CXXFLAGS = -std=c++11 $(CFLAGS) -DSPIKE_DEBUG #-DOLD_PARDISO_INTERFACE
 
 LEX           = flex
 YACC          = bison
@@ -41,9 +41,10 @@ DMALLOC = -L/apps/rosa/ddt/4.1.1/lib/64/ -ldmallocthcxx -z muldefs
 
 #PARDISO_SO = $(LIB_TOP)/Pardiso_SelInv/libpardiso491-GNU430-X86-64.so
 #PARDISO_SO = -L$(LIB_TOP)/Pardiso_SelInv -lpardiso491-GNU430-X86-64 -Wl,-rpath=$(LIB_TOP)/Pardiso_SelInv
+# when using the MKL pardiso, set -DOLD_PARDISO_INTERFACE in CXXFLAGS
 PARDISO_SO = -L$(MKLROOT)/lib/intel64 -lmkl_intel_lp64 -lmkl_intel_thread -lmkl_core -liomp5 -lpthread
 
-LFLAGS = -L$(LIB_TOP)/cp2k/lib/CRAY-XE6-gfortran-hwtopo/popt/ #-Wl,-rpath,/opt/cray/mpt/5.6.1/gni/mpich2-gnu/47/lib/ -Wl,-rpath,/opt/fftw/3.3.0.1/interlagos/lib/
+LFLAGS = -L$(LIB_TOP)/cp2k/lib/CRAY-XE6-gfortran-hwtopo/popt/ -Wl,-rpath,/opt/cray/mpt/5.6.1/gni/mpich2-gnu/47/lib/ -Wl,-rpath,/opt/fftw/3.3.0.1/interlagos/lib/
 DFLAGS = -DAdd_
 LIBS = $(UMFPACKLIB) $(AMDLIB) $(MUMPSLIB) $(MUMPDLIB) $(MUMPSCOM) $(PORDLIB) $(METISLIB) $(AZTECLIB) $(QHULLLIB) $(ARPACKLIB) \
 	-lcp2k_lib -lcp2k_base_lib -lcp2k_dbcsr_lib -lcp2k_fft_lib -lcp2k_ma_lib -lcp2k_elpa_lib \

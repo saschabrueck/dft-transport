@@ -348,8 +348,8 @@ double randn()
 {
     double r1,r2;
 
-    r1 = (double)rand()/(RAND_MAX+1);
-    r2 = (double)rand()/(RAND_MAX+1);
+    r1 = (double)rand()/RAND_MAX;
+    r2 = (double)rand()/RAND_MAX;
 
     return sqrt(-2.0*log(r1))*cos(2*PI*r2);
 }
@@ -567,8 +567,8 @@ void set_random(int length, int seed, CPX *array)
   for (int i=0; i < length; ++i) {
 
 #if __cplusplus <= 199711L
-    double real = rand() / (RAND_MAX+1);
-    double imag = rand() / (RAND_MAX+1);
+    double real = rand()/RAND_MAX;
+    double imag = rand()/RAND_MAX;
 #else
     double real = distribution(generator);
     double imag = distribution(generator);
