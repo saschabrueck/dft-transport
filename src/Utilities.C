@@ -4,7 +4,11 @@
 #include <string>
 #include "Utilities.H"
 #include "Blas.H"
+#if __cplusplus <= 199711L
+#include <cstdlib>
+#else
 #include <random>
+#endif
 
 bool sortx(const XYZPOS& a, const XYZPOS& b)
 {
@@ -344,8 +348,8 @@ double randn()
 {
     double r1,r2;
 
-    r1 = (double)rand()/RAND_MAX;
-    r2 = (double)rand()/RAND_MAX;
+    r1 = (double)rand()/(RAND_MAX+1);
+    r2 = (double)rand()/(RAND_MAX+1);
 
     return sqrt(-2.0*log(r1))*cos(2*PI*r2);
 }
@@ -552,12 +556,26 @@ void set_to_zero(int length, T *array) {
 
 void set_random(int length, int seed, CPX *array)
 {
+
+#if __cplusplus <= 199711L
+  srand(seed);
+#else
   std::default_random_engine generator(seed);
   std::uniform_real_distribution<double> distribution(-1.0, 1.0);
+#endif
+
   for (int i=0; i < length; ++i) {
+
+#if __cplusplus <= 199711L
+    double real = rand() / (RAND_MAX+1);
+    double imag = rand() / (RAND_MAX+1);
+#else
     double real = distribution(generator);
     double imag = distribution(generator);
+#endif
+
     array[i] = CPX(real, imag);
+
   }
 }
 
