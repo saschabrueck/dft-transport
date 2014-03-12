@@ -260,17 +260,19 @@ if (!matrix_rank) {
               p_lines[i] = displc_sol[i];
             }
             solver->prepare(bandwidth, p_lines);
-            // TODO: populate inj
-            inj = new CPX[dist_sol[matrix_rank]*(nprol+npror)](); 
             CPX* sol = new CPX[dist_sol[matrix_rank]*(nprol+npror)]();
             solver->solve_equation(sol, inj, nprol+npror);
 
             delete[] inj;
+            //delete solver; // TODO: probably
             delete HamSig;
 if (!matrix_rank) {
             Sol = new CPX[displc_sol[matrix_procs]*(nprol+npror)];
 }
-            // TODO: redistribute / gather sol
+            for (int icol=0;icol<nprol+npror;icol++) {
+                MPI_Gatherv(&sol[dist_sol[matrix_rank]*icol],dist_sol[matrix_rank],MPI_DOUBLE_COMPLEX,&Sol[displc_sol[matrix_procs]*icol],dist_sol,displc_sol,MPI_DOUBLE_COMPLEX,0,matrix_comm);
+            }
+            delete[] sol;
         } else return (LOGCERR, EXIT_FAILURE);
         cout << "TIME FOR WAVEFUNCTION SPARSE SOLVER WITH "<< ncells <<" UNIT CELLS " << get_time(sabtime) << endl;
         delete[] dist_sol;
