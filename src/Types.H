@@ -44,12 +44,17 @@ using namespace std;
 #define scale_norm 1.0
 #endif
 
-// This breaks the Pardiso header
-//#ifndef __MINMAX
-//#define __MINMAX
-//#define min(a,b) (((a)<(b))?(a):(b))
-//#define max(a,b) (((a)>(b))?(a):(b))
-//#endif
+#ifndef max_diff_gate
+#define max_diff_gate 4
+#endif
+
+/*
+#ifndef __MINMAX
+#define __MINMAX
+#define min(a,b) (((a)<(b))?(a):(b))
+#define max(a,b) (((a)>(b))?(a):(b))
+#endif
+*/
 
 #ifdef Add_
 #define fortran_name(x,y) (x ## _)
@@ -147,6 +152,12 @@ struct Roughness
     double rms,Lms;
 };
 
+struct Alloy
+{ 
+    int on,seed;
+    double composition;
+};
+
 struct MAT
 {
     POINT3D** p;
@@ -228,13 +239,16 @@ struct WireStructure
     double a0,c0,u0;
     double x[3],y[3],z[3];
     double max_bond_deformation;
+    double bs_target;
     MAT **mat;
     SURFACE **surf;
     Strain *strain;
     StrainDomain **strain_domain;
     Roughness *rough;
+    Alloy *alloy;
     Contact *Schottky;    
     int QMregion;
+    int update_bs_target;
     int update_fermi;
     int update_at;
     int update_dop;
@@ -254,8 +268,10 @@ struct WireStructure
     int sc_dist_dep;
     int sc_diag_def;
     int sc_k_coupling;
+    int sc_e_ph_coupling;
     double sc_scale_fact;
     double sc_vbound;
+    double sc_memory_fact;
     int incoherent_injection;
     int full_current;
     int robust_numerics;
@@ -272,6 +288,7 @@ struct WireStructure
     int no_gate;
     int no_doping;
     int no_ground;
+    int no_diff_gate;
     GATE **gate;
     DOPING **doping;
     DopingDomain **doping_domain;
@@ -287,6 +304,10 @@ struct WireStructure
     int charge_transfer;
     int replicate_unit_cell;
     int read_atom_pos;
+    int open_system;
+    int periodic_system;
+    int read_hamiltonian;
+    int bulk_mat_id;
 };
 
 struct XYZPOS
@@ -323,8 +344,11 @@ struct ENERGY
     double Emin_tail;     //energy offset below first mode
     double EOffset;       //energy offset above first mode
     double dE_in;         //energy interval after a mode
+    double dE_in_tot[2];  //[0] for electrons [1] for phonons
     double dE_f;          //energy interval after mode energy + Elimit
+    double dE_f_tot[2];   //[0] for electrons [1] for phonons
     double dE_sep;        //minimum distance between mode and discretization point
+    double dE_sep_tot[2]; //[0] for electrons [1] for phonons
     double EExt;          //energy added after Emax (only for phonons)
     int NEmax;            //maximum number of energy points
     int regular_mesh;
@@ -333,6 +357,7 @@ struct ENERGY
 struct PARAM
 {
     char *mat_name;
+    char *table_file;
     int strain_model;
     double mat_binary_x[3];
     int tb;
@@ -368,6 +393,9 @@ struct PARAM
     int plot_all_k;
     int lattype;
     int transport_type;
+    int injection_type;
+    int NM_for_feast;
+    double electron_weight;
 };
 
 struct FermiStructure
@@ -385,8 +413,8 @@ struct FermiStructure
 struct VOLTAGE
 {
     int NVG;
-    double Vgmin;
-    double Vgmax;
+    double Vgmin[max_diff_gate];
+    double Vgmax[max_diff_gate];
     int NVS;
     double Vsmin;
     double Vsmax;

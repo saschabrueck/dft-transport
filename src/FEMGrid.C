@@ -1,5 +1,4 @@
 #include "FEMGrid.H"
-#include <cstring>
 extern "C" {
 #include <qhull.h>
 #include <qset.h>
@@ -19,19 +18,27 @@ FEMGrid::FEMGrid()
 
 FEMGrid::~FEMGrid()
 {
+
+    int ndg;
+
     delete[] grid;
     delete[] doping;
     delete[] Eps;
     delete[] real_at_index;
+    delete[] NGate;
     if(del_all_var){
         delete[] atom_index;
 	delete[] ratom_index;
 	delete[] channel_index;
 	delete[] poisson_index;
-	delete[] gate_index;
 	delete[] ground_index;
         delete[] source_index;
         delete[] drain_index;
+
+	for(ndg=0;ndg<no_diff_gate;ndg++){
+	    delete[] gate_index[ndg];
+	}
+	delete[] gate_index;
     }
 
 }
@@ -53,7 +60,9 @@ void FEMGrid::execute_task(WireGenerator *Wire,WireStructure *nanowire,int max_p
         printf("Generating the %iD Grid\n",nanowire->NDim);
     }
 
-    NB = Wire->NB;
+    NB           = Wire->NB;
+    no_diff_gate = nanowire->no_diff_gate;
+    NGate        = new int[no_diff_gate];
 
     if(nanowire->NDim>1){
         make_grid(Wire,nanowire->grid_accuracy);
@@ -69,7 +78,7 @@ void FEMGrid::execute_task(WireGenerator *Wire,WireStructure *nanowire,int max_p
 	find_1D_doping(nanowire);
 	find_1D_permittivity(nanowire);
 	del_all_var = 0;
-	NGate       = 0;
+	NGate[0]    = 0;
         NGround     = 0;
         NSource     = 0;
         NDrain      = 0;
@@ -91,7 +100,9 @@ void FEMGrid::execute_reduced_task(WireGenerator *Wire,WireStructure *nanowire,i
         printf("Generating the %iD Grid\n",nanowire->NDim);
     }
 
-    NB = Wire->NB;
+    NB           = Wire->NB;
+    no_diff_gate = nanowire->no_diff_gate;
+    NGate        = new int[no_diff_gate];
 
     if(nanowire->NDim>1){
         make_grid(Wire,nanowire->grid_accuracy);
@@ -105,7 +116,7 @@ void FEMGrid::execute_reduced_task(WireGenerator *Wire,WireStructure *nanowire,i
 	find_1D_doping(nanowire);
 	find_1D_permittivity(nanowire);
 	del_all_var = 0;
-	NGate       = 0;
+	NGate[0]    = 0;
         NGround     = 0;
         NSource     = 0;
         NDrain      = 0;
@@ -279,17 +290,18 @@ void FEMGrid::sort_grid_point(WireGenerator *Wire,double *gpoints,int NP,int No_
 void FEMGrid::find_contact(WireStructure *nanowire)
 {
 
-    int IP,IG;
+    int IP,IG,ndg;
     int condition1,condition2;
     int condition3,condition4;
     double xmin,xmax;
     double max_dist = 1.5*nanowire->a0/4;
     
     poisson_index   = new int[NGrid];
-    gate_index      = new int[NGrid];
     ground_index    = new int[NGrid];
     source_index    = new int[NGrid];
     drain_index     = new int[NGrid];
+
+    gate_index      = new int*[no_diff_gate];
 
     init_var(poisson_index,NGrid);
 
@@ -312,22 +324,31 @@ void FEMGrid::find_contact(WireStructure *nanowire)
     }
     
     NPoisson = 0;
-    NGate    = 0;
     NGround  = 0;
     NSource  = 0;
     NDrain   = 0;
 
+    for(ndg=0;ndg<no_diff_gate;ndg++){
+        NGate[ndg]      = 0;
+	gate_index[ndg] = new int[NGrid];
+    }
+
     xmin     = min_vec(grid,NGrid,N3D);
     xmax     = max_vec(grid,NGrid,N3D);
-    
+
     for(IP=0;IP<NGrid;IP++){
             
         condition1 = 0;
         for(IG=0;IG<nanowire->no_gate;IG++){
             if(is_in_gate(nanowire->gate[IG],&grid[N3D*IP],max_dist)){
                 condition1        = 1;
-                gate_index[NGate] = IP;
-                NGate++;
+		if(no_diff_gate>1){
+		    gate_index[IG][NGate[IG]] = IP;
+		    NGate[IG]++;
+		}else{
+		    gate_index[0][NGate[0]] = IP;
+		    NGate[0]++;
+		}
                 break;
             }
         }
@@ -888,12 +909,15 @@ void FEMGrid::write_tetrahedron(const char *filename)
 
 void FEMGrid::write_gate(const char *filename)
 {
-    int i;
+    int i,ndg;
     
     ofstream myfile;
     myfile.open (filename);
-    for(i=0;i<NGate;i++){
-        myfile<<gate_index[i]<<"\n";
+    for(ndg=0;ndg<no_diff_gate;ndg++){
+        for(i=0;i<NGate[ndg];i++){
+	    myfile<<gate_index[ndg][i]<<" ";
+	}
+	myfile<<endl;
     }
     myfile.close();
 }

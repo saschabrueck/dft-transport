@@ -130,7 +130,7 @@ exit(0);
     sabtime=get_time(0.0);
     Singularities singularities(transport_params);
     if ( singularities.Execute(KohnSham,Overlap,n_mu,muvec,dopingvec,contactvec) ) return (LOGCERR, EXIT_FAILURE);
-//muvec[0]=(muvec[0]+muvec[1])/2.0;muvec[1]=muvec[0];
+muvec[0]=(muvec[0]+muvec[1])/2.0;muvec[1]=muvec[0];
     if (!iam) cout << "TIME FOR SINGULARITIES " << get_time(sabtime) << endl;
 // determine elements in nonequilibrium range
     double k_b=K_BOLTZMANN;
@@ -220,8 +220,8 @@ myfile.close();
     MPI_Comm_size(eq_rank_matrix_comm,&n_mat_comm);
     MPI_Comm_rank(eq_rank_matrix_comm,&matrix_id);
     uint jpos;
-    //for (int iseq=0;iseq<int(ceil(double(energyvector.size())/n_mat_comm));iseq++)
-      for (int iseq=0;iseq<1;iseq++)
+    for (int iseq=0;iseq<int(ceil(double(energyvector.size())/n_mat_comm));iseq++)
+//      for (int iseq=0;iseq<1;iseq++)
         if ( (jpos=matrix_id+iseq*n_mat_comm)<energyvector.size())
             if (abs(stepvector[jpos])>0.0)
                 if (density(KohnShamCollect,OverlapCollect,Ps,energyvector[jpos],stepvector[jpos],methodvector[jpos],n_mu,muvec,contactvec,currentvector[jpos],propagating_sizes[jpos],atom_of_bf,eperatom,dperatom,transport_params,matrix_comm))

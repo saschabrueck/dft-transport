@@ -110,7 +110,7 @@ int main (int argc, char **argv)
       yyrestart(yyin);
       yyparse();
       fclose(yyin);
-      Material* material = new Material(parameter->mat_name,parameter->mat_binary_x,parameter->strain_model,parameter->Temp);
+      Material* material = new Material(parameter->mat_name,parameter->table_file,nanowire->read_hamiltonian,parameter->mat_binary_x,parameter->strain_model,parameter->Temp);
       material->initialize(nanowire->sc_dist_dep);
       Wire = new WireGenerator(parameter->lattype,0);
       Wire->execute_task(nanowire,material,0,MPI::COMM_WORLD);

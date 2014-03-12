@@ -1,5 +1,5 @@
-#ifndef _FERMI
-#define _FERMI
+#ifndef __FERMI
+#define __FERMI
 
 #include <mpi.h>
 #include "Utilities.H"

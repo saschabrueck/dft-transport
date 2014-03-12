@@ -2,6 +2,7 @@
 #define __FEMGRID
 
 #include <mpi.h>
+#include <string.h>
 #include <algorithm>
 #include "WireGenerator.H"
 #include "Utilities.H"
@@ -13,9 +14,10 @@ public:
 
     double *grid,*tetraVol,*doping,*Eps;
     int *tetrahedron,*atom_index,*real_at_index,*ratom_index;
-    int *channel_index,*poisson_index,*gate_index,*ground_index;
+    int *channel_index,*poisson_index,**gate_index,*ground_index;
     int *source_index,*drain_index;    
-    int NAtom,NGrid,NTetra,NChannel,NPoisson,NGate,NGround;
+    int NAtom,NGrid,NTetra,NChannel,NPoisson,*NGate,NGround;
+    int no_diff_gate;
     int NSource,NDrain;    
     
     FEMGrid();

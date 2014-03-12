@@ -38,11 +38,12 @@ int ncm,nom;
 %token NUMBER VAR
 %token X Y Z
 %token PLOTALLK
-%token TRANSTYPE
+%token TRANSTYPE INJTYPE EWEIGHT
+%token OPENSYS PERIODICSYS READHAM
 %token PSOLVER PCRITERION PITERATION PMAXPROC PINCRITERION PINITERATION CHAVG CHTRS
-%token NDIM NKY NKZ NXFOLD NYFOLD NZFOLD PHIYFILE PHIZFILE ROTSYM BSSOLVER
+%token NDIM NKY NKZ NXFOLD NYFOLD NZFOLD PHIYFILE PHIZFILE ROTSYM BSSOLVER UPDATEBST BSTARGET
 %token EQUAL PLUS MINUS MULT LBRACE RBRACE LPAR RPAR COMMA POINT
-%token DSP3 HPASS TB NM NK LF NAME BINARYX ETAR ETA MBD LATTICE FIRSTATOM
+%token DSP3 HPASS TB NM NK LF NAME BGDATA BINARYX ETAR ETA MBD LATTICE FIRSTATOM
 %token NPCS SPDEC NPR NPC CPU CPUKZ CPUSAMP CPUVG CPUVD CPUTEMP CPUWI CPUBC ALL
 %token ALPHA BETA RELAX_ATOMS STRAIN_BC
 %token SCHOTTKY ACTIVE TYPE BARRIER VIRTUALCB
@@ -51,11 +52,12 @@ int ncm,nom;
 %token STRAINMOD STRAIN ON EXX EYY EZZ EXY EXZ EYZ ZETA
 %token NOSTRAIND SDOM XMIN XMAX YMIN YMAX ZMIN ZMAX EPSVEC
 %token NODOPD DDOM SLOPE DCONC
+%token ALDIS COMP
 %token ROUGHNESS SEED FORM RMS LMS
 %token REPUC READATPOS UPDATEAT ATOMFILE UPDATEDOP DOPFILE UPDATEPERM PERMFILE
 %token UPDATEFERM FERMIL
 %token PHENFILE NOPHEN PHMOFILE PHFILETY NOPHK 
-%token SCMAXIT SCRESTART SCIDCRIT SCRHCRIT SCDISTDEP SCDIAGDEF SCKCOUP SCSCALE SCVBOUND INCINJ
+%token SCMAXIT SCRESTART SCIDCRIT SCRHCRIT SCDISTDEP SCDIAGDEF SCKCOUP SCEPHCOUP SCSCALE SCVBOUND SCMEM INCINJ
 %token QMSTART QMSTOP
 %token GRID UPDATETETRA TETRAFILE UPDATEFIT FITFILE UPDATEGRID GRIDFILE
 %token NOMAT NOCMAT NOOMAT LS LC LD YC ZC MCOORD OCOORD MTYPE OTYPE MID OID MCS OCS MRADIUS ORADIUS
@@ -94,6 +96,7 @@ command		: inittbpar
                 | initstrain
                 | initstdomain
                 | initroughness
+                | initalloy
                 | initqmregion
                 | initupdateat
                 | initupdatedop
@@ -125,6 +128,12 @@ command		: inittbpar
 inittbpar       : DSP3 EQUAL double {init_dsp3($3);}
                 | HPASS EQUAL INTEGER {init_hpass($3);}
                 | TRANSTYPE EQUAL INTEGER {init_transport_type($3);}
+                | INJTYPE EQUAL INTEGER {init_injection_type($3,-1);}
+                | INJTYPE EQUAL LBRACE INTEGER INTEGER RBRACE {init_injection_type($4,$5);}
+                | EWEIGHT EQUAL double {init_electron_weight($3);}
+                | OPENSYS EQUAL INTEGER {init_open_system($3);}
+                | PERIODICSYS EQUAL INTEGER {init_periodic_system($3);}
+                | READHAM EQUAL INTEGER {init_read_hamiltonian($3);}
                 | TB EQUAL INTEGER {init_tb($3);}
                 | MBD EQUAL double {init_mbd($3);}
                 | FIRSTATOM EQUAL CHAR {init_first_atom($3);}
@@ -134,6 +143,7 @@ inittbpar       : DSP3 EQUAL double {init_dsp3($3);}
                 | LF EQUAL INTEGER {init_last_first($3);}
                 | NDIM EQUAL INTEGER {init_ndim($3);}
                 | NAME EQUAL CHAR {init_mat_name($3);} 
+                | BGDATA EQUAL CHAR {init_bg_data($3);}
                 | BINARYX EQUAL DOUBLE {init_mat_binary_x($3,0.0,0.0);}
                 | BINARYX EQUAL LBRACE DOUBLE RBRACE {init_mat_binary_x($4,0.0,0.0);}
                 | BINARYX EQUAL LBRACE DOUBLE DOUBLE RBRACE {init_mat_binary_x($4,$5,0.0);}
@@ -155,6 +165,8 @@ initbspar       : NM EQUAL INTEGER {init_n_of_modes($3);}
 		| NYFOLD EQUAL INTEGER {init_nyfold($3);}
 		| NZFOLD EQUAL INTEGER {init_nzfold($3);}
                 | BSSOLVER EQUAL CHAR {init_bs_solver($3);}
+                | UPDATEBST EQUAL INTEGER {init_update_bs_target($3);}
+                | BSTARGET EQUAL DOUBLE {init_bs_target($3);}
 		;
 
 initcpu         : NPR EQUAL INTEGER {init_NPROW($3);}
@@ -195,9 +207,12 @@ initxyz         : X EQUAL LBRACE double double double RBRACE {init_x($4,$5,$6);}
 initenergy      : ELIMIT EQUAL double {init_Elimit($3);}
                 | EMIN EQUAL double {init_Emin_tail($3);}
                 | EOFFSET EQUAL expr {init_EOffset($3);}
-                | DEIN EQUAL double {init_dE_in($3);}
-                | DEF EQUAL double {init_dE_f($3);}
-                | DESEP EQUAL double {init_dE_sep($3);}
+                | DEIN EQUAL double {init_dE_in($3,$3);}
+                | DEIN EQUAL LBRACE double double RBRACE {init_dE_in($4,$5);}
+                | DEF EQUAL double {init_dE_f($3,$3);}
+                | DEF EQUAL LBRACE double double RBRACE {init_dE_f($4,$5);}
+                | DESEP EQUAL double {init_dE_sep($3,$3);}
+                | DESEP EQUAL LBRACE double double RBRACE {init_dE_sep($4,$5);}
                 | EEXT EQUAL expr {init_EExt($3);}
                 | NE EQUAL INTEGER {init_NE($3);}
                 | REMESH EQUAL INTEGER {init_reg_mesh($3);}
@@ -220,8 +235,10 @@ initphonon      : PHENFILE EQUAL CHAR {init_ph_energy_file($3);}
                 | SCDISTDEP EQUAL INTEGER {init_sc_dist_dep($3);}
                 | SCDIAGDEF EQUAL INTEGER {init_sc_diag_def($3);}
                 | SCKCOUP EQUAL INTEGER {init_sc_k_coupling($3);}
+                | SCEPHCOUP EQUAL INTEGER {init_sc_e_ph_coupling($3);}
                 | SCSCALE EQUAL double {init_sc_scale_fact($3);}
                 | SCVBOUND EQUAL double {init_sc_vbound($3);}
+                | SCMEM EQUAL double {init_sc_memory_fact($3);}
                 | INCINJ EQUAL INTEGER {init_incoherent_injection($3);}
                 ;
 
@@ -265,6 +282,10 @@ initroughness   : ROUGHNESS POINT ON EQUAL INTEGER {init_roughness($5);}
                 | ROUGHNESS POINT RMS EQUAL double {init_roughness_rms($5);}
                 | ROUGHNESS POINT LMS EQUAL double {init_roughness_lms($5);}
 		;
+
+initalloy       : ALDIS POINT ON EQUAL INTEGER {init_alloy_disorder($5);}
+                | ALDIS POINT SEED EQUAL INTEGER {init_alloy_seed($5);}
+                | ALDIS POINT COMP EQUAL DOUBLE {init_alloy_composition($5);} 
 
 initqmregion    : QMSTART EQUAL expr {init_qmstart($3);}
                 | QMSTOP EQUAL expr {init_qmstop($3);}
@@ -318,6 +339,7 @@ initmtype       : MTYPE LPAR INTEGER RPAR EQUAL CHAR {init_mat_type($3-1,$6);}
                 | OTYPE LPAR INTEGER RPAR EQUAL CHAR {init_mat_type(ncm+$3-1,$6);}
                 | RTYPE LPAR INTEGER RPAR EQUAL CHAR {init_mat_type(ncm+nom+$3-1,$6);}
                 | MID LPAR INTEGER RPAR EQUAL INTEGER {init_mat_id($3-1,$6);}
+                | MID EQUAL INTEGER {init_bulk_mat_id($3);}
                 | OID LPAR INTEGER RPAR EQUAL INTEGER {init_mat_id(ncm+$3-1,$6);}
 		;
 
@@ -424,12 +446,19 @@ initgrid        : GRID EQUAL INTEGER {init_grid($3);}
        		| GRIDFILE EQUAL CHAR {init_grid_file($3);}       
 		;
 
-initvolt        : NVG EQUAL INTEGER {init_nvg($3);}
+initvolt        : NVG EQUAL INTEGER {init_nvg($3,1);}
+                | NVG EQUAL LBRACE INTEGER INTEGER RBRACE {init_nvg($4,$5);}
                 | NVS EQUAL INTEGER {init_nvs($3);}
                 | NVD EQUAL INTEGER {init_nvd($3);}
                 | NTEMP EQUAL INTEGER {init_ntemp($3);}
-                | VGMIN EQUAL double {init_vgmin($3);}
-                | VGMAX EQUAL double {init_vgmax($3);}
+                | VGMIN EQUAL double {init_vgmin($3,0.0,0.0,0.0);}
+                | VGMIN EQUAL LBRACE double double RBRACE {init_vgmin($4,$5,0.0,0.0);}
+                | VGMIN EQUAL LBRACE double double double RBRACE {init_vgmin($4,$5,$6,0.0);}
+                | VGMIN EQUAL LBRACE double double double double RBRACE {init_vgmin($4,$5,$6,$7);}
+                | VGMAX EQUAL double {init_vgmax($3,0.0,0.0,0.0);}
+                | VGMAX EQUAL LBRACE double double RBRACE {init_vgmax($4,$5,0.0,0.0);}
+                | VGMAX EQUAL LBRACE double double double RBRACE {init_vgmax($4,$5,$6,0.0);}
+                | VGMAX EQUAL LBRACE double double double double RBRACE {init_vgmax($4,$5,$6,$7);}
                 | VSMIN EQUAL double {init_vsmin($3);}
                 | VSMAX EQUAL double {init_vsmax($3);}
                 | VDMIN EQUAL double {init_vdmin($3);}

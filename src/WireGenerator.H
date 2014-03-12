@@ -1,8 +1,19 @@
 #ifndef __WIREGENERATOR
 #define __WIREGENERATOR
 
+#include <mpi.h>
+#include <stdio.h>
+#include <math.h>
+#include <iostream>
+#include <algorithm>
+#include <fstream>
+#include <stdlib.h>
+#include <string.h>
+
 #include "Utilities.H"
 #include "Material.H"
+#include "Blas.H"
+//#include "AtomStrain.H"
 
 class WireGenerator{
 
@@ -37,13 +48,17 @@ public:
     int *Smin_tot,*Smax_tot;
     int Channel_tot,Around_tot;
     int No_Atom,Around_Atom,Rough_Atom;
-    int *neighbor_layer,layer_per_slab,LB_size,RB_size;
+    int *neighbor_layer;
+    int layer_per_slab;
+    int l_per_slab_ref;
+    int LB_size,RB_size;
     int **index_boundary,*index_channel,**bound_pos,*ch_pos,**bound_conv,*ch_conv;
     int *index_arch,*arch_pos,*arch_conv;
     int *b_shift,*orb_per_at;
     int QMfirst,QMlast;
     int freedim,poisson_dim;
     int NA,NB,SP,SLM;
+    int NBlock;
     int lattice_type;
     int max_neighbors;
     WireStructure* nwire;
@@ -70,6 +85,7 @@ protected:
     void get_mid_gap_energy(Material*);
     void get_bulk_orbital_per_atom(int*);
     void generate_roughness(WireStructure*,int);
+    void generate_alloy_disorder(WireStructure*);
     void replicate_unit_cell(int,WireStructure*);
     void read_atom_position(int,WireStructure*);
     void get_face_info(int*,int*,int*,int,double*,int,int,WireStructure*);
@@ -102,11 +118,13 @@ protected:
     void get_cell_width();
     void cut_boundary_slab(WireStructure*);
     void update_boundary_slab(WireStructure*);
-    void cut_layer();
+    void cut_layer(WireStructure*);
     void boundary_dimension(int*,int*,int,int);
     void get_boundary_size(WireStructure*);
     void get_qm_region(WireStructure*);
     void roll_cnt();
+    void check_periodicity(WireStructure*);
+    void update_periodicity(WireStructure*);
     void hydrogen_passivation(WireStructure*);
     void adapt_parameters(Material*);
     void get_d_matrix(double*,double,double,double);

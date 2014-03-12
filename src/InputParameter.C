@@ -1,5 +1,5 @@
 #include <iostream>
-#include <cstring>
+#include <string.h>
 #include "InputParameter.H"
 #include "Types.H"
 #include "AtomStrain.H"
@@ -20,6 +20,7 @@ void init_parameters()
 	
     nanowire->strain         = new Strain();
     nanowire->rough          = new Roughness();
+    nanowire->alloy          = new Alloy();
     nanowire->rough->type    = new char[255];
     nanowire->first_atom     = new char[255];
     nanowire->at_file        = new char[255];
@@ -37,6 +38,7 @@ void init_parameters()
     nanowire->ph_mode_file   = new char[255];
     parameter->command       = new char*[MAX_COMM];
     parameter->mat_name      = new char[255];
+    parameter->table_file    = new char[255];
     parameter->directory     = new char[255];
 
     default_parameters();
@@ -197,11 +199,17 @@ void delete_parameters()
         delete nanowire->rough;
     }
 
+    if (nanowire->alloy!=NULL){
+        delete nanowire->alloy;
+    }
+
     if (nanowire->Schottky!=NULL){
         delete nanowire->Schottky;
     }
     
-    if(nanowire!=NULL){delete nanowire;}
+    if(nanowire!=NULL){
+        delete nanowire;
+    }
 
     for(i=0;i<parameter->no_comm;i++){
         delete[] parameter->command[i];
@@ -213,6 +221,10 @@ void delete_parameters()
 
     if(parameter->mat_name!=NULL){
         delete[] parameter->mat_name;
+    }
+
+    if(parameter->table_file!=NULL){
+        delete[] parameter->table_file;
     }
 
     if(parameter->directory!=NULL){
@@ -272,6 +284,8 @@ void default_parameters()
     nanowire->rough->seed              = -1;
     nanowire->rough->rms               = 0.0;
     nanowire->rough->Lms               = 0.0;
+    nanowire->alloy->on                = 0;
+    nanowire->alloy->seed              = -1;
     nanowire->QMregion                 = 0;
     nanowire->update_energy            = 0;
     nanowire->update_fermi             = 0;
@@ -289,6 +303,7 @@ void default_parameters()
     nanowire->Xi_wire                  = 4.05;
     nanowire->phi_m                    = 4.25;
     nanowire->no_gate                  = 0;
+    nanowire->no_diff_gate             = 1;
     nanowire->no_doping                = 0;
     nanowire->no_ground                = 0;
     nanowire->Ls                       = 10.0;
@@ -315,8 +330,10 @@ void default_parameters()
     nanowire->sc_dist_dep              = 0;
     nanowire->sc_diag_def              = 0;
     nanowire->sc_k_coupling            = 1;
+    nanowire->sc_e_ph_coupling         = 1;
     nanowire->sc_scale_fact            = 1.0;
     nanowire->sc_vbound                = 0.0;
+    nanowire->sc_memory_fact           = 0.0;
     nanowire->incoherent_injection     = 0;
     nanowire->full_current             = 0;
     nanowire->robust_numerics          = 0;
@@ -336,18 +353,28 @@ void default_parameters()
     nanowire->Schottky->type[1]        = 1;
     nanowire->Schottky->barrier[1]     = 0.2;
     nanowire->Schottky->virtual_CB[1]  = -0.2;
+    nanowire->open_system              = 1;
+    nanowire->periodic_system          = 0;
+    nanowire->read_hamiltonian         = 0;
+    nanowire->bulk_mat_id              = 1;
+    nanowire->update_bs_target         = 0;
+    nanowire->bs_target                = 0.0;
 
     En->Elimit                         = 50e-3;
     En->Emin_tail                      = 4e-3;
     En->EOffset                        = 0.5;
-    En->dE_in                          = 1e-3;
-    En->dE_f                           = 5e-3;
-    En->dE_sep                         = 1e-4;
+    En->dE_in_tot[0]                   = 1e-3;
+    En->dE_in_tot[1]                   = 1e-3;
+    En->dE_f_tot[0]                    = 5e-3;
+    En->dE_f_tot[1]                    = 5e-3;
+    En->dE_sep_tot[0]                  = 1e-4;
+    En->dE_sep_tot[1]                  = 1e-4;
     En->EExt                           = 0.0;
     En->NEmax                          = 100;
     En->regular_mesh                   = 0;
     
     strcpy(parameter->mat_name,"Si");
+    strcpy(parameter->table_file,"random");
     parameter->strain_model            = 1;
     parameter->mat_binary_x[0]         = 0.0;
     parameter->mat_binary_x[1]         = 0.0;
@@ -370,7 +397,7 @@ void default_parameters()
     parameter->CPU_per_kz_point        = -1;
     parameter->CPU_ppoint              = 1;
     parameter->CPU_per_wire            = 512;
-    parameter->CPU_per_bc              = 2;
+    parameter->CPU_per_bc              = 0;
     parameter->NPROW                   = 1;
     parameter->NPCOL                   = 1;
     parameter->NPCS                    = 1;
@@ -385,12 +412,15 @@ void default_parameters()
     parameter->poisson_inner_iteration = 15;
     parameter->lattype                 = 1;//ZB by default
     parameter->transport_type          = 0;
+    parameter->injection_type          = 0;
+    parameter->NM_for_feast            = -1;
+    parameter->electron_weight         = 0.5;
 
     strcpy(parameter->directory,".");	
 
     voltage->NVG                       = 1;
-    voltage->Vgmin                     = 0.0;
-    voltage->Vgmax                     = 0.0;
+    voltage->Vgmin[0]                  = 0.0;
+    voltage->Vgmax[0]                  = 0.0;
     voltage->NVS                       = 1;
     voltage->Vsmin                     = 0.0;
     voltage->Vsmax                     = 0.0;
@@ -536,9 +566,24 @@ extern "C"{
 	}
     }
 
+    void init_update_bs_target(int update_bs_target)
+    {
+        nanowire->update_bs_target = update_bs_target;
+    }
+
+    void init_bs_target(double bs_target)
+    {
+        nanowire->bs_target = bs_target;
+    }
+
     void init_mat_name(char *mat_name)
     {
         strcpy(parameter->mat_name,mat_name);
+    }
+
+    void init_bg_data(char *table_file)
+    {
+	strcpy(parameter->table_file,table_file);
     }
 
     void init_strain_model(int strain_model)
@@ -704,19 +749,22 @@ extern "C"{
         En->EOffset = EOffset;
     }
     
-    void init_dE_in(double dE_in)
+    void init_dE_in(double dE_in1,double dE_in2)
     {
-        En->dE_in = dE_in;
+        En->dE_in_tot[0] = dE_in1;
+	En->dE_in_tot[1] = dE_in2;
     }
     
-    void init_dE_f(double dE_f)
+    void init_dE_f(double dE_f1,double dE_f2)
     {
-        En->dE_f = dE_f;
+        En->dE_f_tot[0] = dE_f1;
+	En->dE_f_tot[1] = dE_f2;
     }
     
-    void init_dE_sep(double dE_sep)
+    void init_dE_sep(double dE_sep1,double dE_sep2)
     {
-        En->dE_sep = dE_sep;
+        En->dE_sep_tot[0] = dE_sep1;
+	En->dE_sep_tot[1] = dE_sep2;
     }
 
     void init_EExt(double EExt)
@@ -881,6 +929,21 @@ extern "C"{
     void init_roughness_lms(double Lms)
     {
         nanowire->rough->Lms = Lms;
+    }
+
+    void init_alloy_disorder(int on)
+    {
+        nanowire->alloy->on = on;
+    }
+
+    void init_alloy_seed(int seed)
+    {
+        nanowire->alloy->seed = seed;
+    }
+    
+    void init_alloy_composition(double composition)
+    {
+        nanowire->alloy->composition = composition;
     }
 
     void init_qmstart(double start)
@@ -1055,6 +1118,11 @@ extern "C"{
         nanowire->sc_k_coupling = sc_k_coupling;         
     }
 
+    void init_sc_e_ph_coupling(int sc_e_ph_coupling)           
+    {                                                
+        nanowire->sc_e_ph_coupling = sc_e_ph_coupling;         
+    }
+
     void init_sc_scale_fact(double sc_scale_fact)           
     {                                                
         nanowire->sc_scale_fact = sc_scale_fact;         
@@ -1063,6 +1131,11 @@ extern "C"{
     void init_sc_vbound(double sc_vbound)           
     {                                                
         nanowire->sc_vbound = sc_vbound;         
+    }
+
+    void init_sc_memory_fact(double sc_memory_fact)           
+    {                                                
+        nanowire->sc_memory_fact = sc_memory_fact;         
     }
 
     void init_incoherent_injection(int incoherent_injection)           
@@ -1151,6 +1224,11 @@ extern "C"{
     {
         nanowire->mat[mat_index]->id_number  = id_number;
         nanowire->surf[mat_index]->id_number = id_number;
+    }
+
+    void init_bulk_mat_id(int id_number)
+    {
+        nanowire->bulk_mat_id  = id_number;
     }
 
     void init_mat_cs(int mat_index,char* cs)
@@ -1504,19 +1582,26 @@ extern "C"{
         nanowire->NA_D = NA_D;
     }
 
-    void init_nvg(int NVG)
+    void init_nvg(int NVG,int no_diff_gate)
     {
-        voltage->NVG = NVG;
+        voltage->NVG           = NVG;
+	nanowire->no_diff_gate = max(no_diff_gate,1);
     }
 
-    void init_vgmin(double Vgmin)
+    void init_vgmin(double Vgmin1,double Vgmin2,double Vgmin3,double Vgmin4)
     {
-        voltage->Vgmin = Vgmin;
+        voltage->Vgmin[0] = Vgmin1;
+	voltage->Vgmin[1] = Vgmin2;
+	voltage->Vgmin[2] = Vgmin3;
+	voltage->Vgmin[3] = Vgmin4;
     }
 
-    void init_vgmax(double Vgmax)
+    void init_vgmax(double Vgmax1,double Vgmax2,double Vgmax3,double Vgmax4)
     {
-        voltage->Vgmax = Vgmax;
+        voltage->Vgmax[0] = Vgmax1;
+	voltage->Vgmax[1] = Vgmax2;
+	voltage->Vgmax[2] = Vgmax3;
+	voltage->Vgmax[3] = Vgmax4;
     }
 
     void init_nvs(int NVS)
@@ -1591,6 +1676,41 @@ extern "C"{
     {
         parameter->transport_type = transport_type;
     }
+
+    void init_injection_type(int injection_type,int NM_for_feast)
+    {
+        parameter->injection_type = injection_type;
+	parameter->NM_for_feast   = NM_for_feast;
+    }
+
+    void init_electron_weight(double electron_weight)
+    {
+        parameter->electron_weight = electron_weight;
+    }
+
+    void init_open_system(int open_system)
+    {
+        nanowire->open_system = open_system;
+
+	if(nanowire->open_system&&nanowire->periodic_system){
+	    printf("Warning: your structure cannot be open and periodic at the same time\n");
+	    exit(0);
+	}
+    }
+
+    void init_periodic_system(int periodic_system)
+    {
+        nanowire->periodic_system = periodic_system;
+	
+	if(nanowire->periodic_system){
+	    nanowire->open_system = 0;
+	}
+    }
+
+    void init_read_hamiltonian(int read_hamiltonian)
+    {
+        nanowire->read_hamiltonian = read_hamiltonian;
+    }
     
     void init_command(char *command)
     {
@@ -1627,6 +1747,15 @@ extern "C"{
 	}
         if(strcmp(latname,"multilayer_graphene")==0 || strcmp(latname,"multilayer")==0){
 	    parameter->lattype = 8;
+	}
+	if(strcmp(latname,"rocksalt")==0 || strcmp(latname,"rock_salt")==0){
+	    parameter->lattype = 9;
+	}
+	if(strcmp(latname,"dichalcogenide")==0 || strcmp(latname,"MoS2")==0){
+	    parameter->lattype = 10;
+	}
+	if(strcmp(latname,"ml_dichalcogenide")==0 || strcmp(latname,"multilayer_MoS2")==0){
+	    parameter->lattype = 11;
 	}
 
     }

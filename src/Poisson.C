@@ -60,7 +60,7 @@ void Poisson::init(WireGenerator *Wire,WireStructure *nanowire,FEMGrid *FEM,int 
     }else{
 
         if((vg_rank<max_proc_poisson)&&(poisson_solver)){
-
+     
 	    switch(nanowire->update_fitness){
 	    case 0:
 	        create_FEM_matrix(FEM->poisson_index,FEM->NPoisson,FEM->tetrahedron,\
@@ -93,7 +93,7 @@ void Poisson::init(WireGenerator *Wire,WireStructure *nanowire,FEMGrid *FEM,int 
 
 void Poisson::solve(double *Vnew,double *Vold,double *rho_atom,double *drho_atom_dV,\
 		    double sign_rho,FermiStructure *FS,FEMGrid* FEM,WireGenerator *Wire,\
-		    double Temp,double Vg,double Vground,double Vsource,double Vdrain,\
+		    double Temp,double *Vg,double Vground,double Vsource,double Vdrain,\
                     double *residual,double poisson_criterion,int poisson_iteration,\
                     int max_proc_poisson,int poisson_solver,MPI_Comm loc_comm,\
 		    MPI_Comm glob_comm,int bcast_size,MPI_Comm bcast_comm,int no_task)
@@ -124,7 +124,7 @@ void Poisson::solve(double *Vnew,double *Vold,double *rho_atom,double *drho_atom
 
 void Poisson::solve_FDM(double *Vnew,double *Vold,double *rho_atom,double *drho_atom_dV,\
 			double sign_rho,FermiStructure *FS,FEMGrid* FEM,WireGenerator *Wire,\
-			double Temp,double Vg,double Vground,double *residual,\
+			double Temp,double *Vg,double Vground,double *residual,\
 			double poisson_criterion,int poisson_iteration,int max_proc_poisson,\
 			MPI_Comm loc_comm,MPI_Comm glob_comm)
 {
@@ -174,7 +174,7 @@ void Poisson::solve_FDM(double *Vnew,double *Vold,double *rho_atom,double *drho_
 	init_var(res,P->size);
 	init_var(delta_V,FEM->NGrid);
 
-	init_V(Vnew,Vold,FEM->NGrid,NULL,0,0.0,NULL,0,0.0,NULL,0,0.0,NULL,0,0.0);
+	init_V(Vnew,Vold,FEM->NGrid,NULL,NULL,0,NULL,NULL,0,0.0,NULL,0,0.0,NULL,0,0.0);
 	c_dcopy(P->size,&FEM->doping[start],1,doping,1);
 
 	find_1D_fermi(Ef,rhsign,Vnew,rho,drho_dV,FF,FS,rho_atom,drho_atom_dV,Wire->No_Atom,\
@@ -250,7 +250,7 @@ void Poisson::solve_FDM(double *Vnew,double *Vold,double *rho_atom,double *drho_
 /************************************************************************************************/
 
 void Poisson::solve_FEM(double *Vnew,double *Vold,double *rho_atom,double *drho_atom_dV,\
-			double sign_rho,FEMGrid* FEM,WireGenerator *Wire,double Temp,double Vg,\
+			double sign_rho,FEMGrid* FEM,WireGenerator *Wire,double Temp,double *Vg,\
 			double Vground,double Vsource,double Vdrain,double *residual,\
                         double poisson_criterion,int poisson_iteration,int max_proc_poisson,\
                         MPI_Comm loc_comm,MPI_Comm glob_comm,int bcast_size,MPI_Comm bcast_comm,\
@@ -302,9 +302,9 @@ void Poisson::solve_FEM(double *Vnew,double *Vold,double *rho_atom,double *drho_
 	init_var(res,RP2->size);
 	init_var(delta_V,FEM->NPoisson);
 
-	init_V(Vnew,Vold,FEM->NGrid,FEM->gate_index,FEM->NGate,Vg,FEM->ground_index,\
-	       FEM->NGround,Vground,FEM->source_index,FEM->NSource,Vsource,\
-               FEM->drain_index,FEM->NDrain,Vdrain);
+	init_V(Vnew,Vold,FEM->NGrid,FEM->gate_index,FEM->NGate,FEM->no_diff_gate,Vg,\
+	       FEM->ground_index,FEM->NGround,Vground,FEM->source_index,FEM->NSource,\
+	       Vsource,FEM->drain_index,FEM->NDrain,Vdrain);
 	init_doping(doping,FEM->doping,FEM->poisson_index,FEM->NGrid,start,stop);
 	find_fermi(Ef,rhsign,Vnew,rho_atom,NC,FEM->real_at_index,Wire->No_Atom,Temp);
 
@@ -403,16 +403,19 @@ void Poisson::solve_FEM(double *Vnew,double *Vold,double *rho_atom,double *drho_
 
 /************************************************************************************************/
 
-void Poisson::init_V(double *Vnew,double *Vold,int NGrid,int *gate_index,int NGate,double Vg,\
-		     int *ground_index,int NGround,double Vground,int *source_index,int NSource,\
-                     double Vsource,int *drain_index,int NDrain,double Vdrain)
+void Poisson::init_V(double *Vnew,double *Vold,int NGrid,int **gate_index,int *NGate,int no_diff_gate,\
+		     double *Vg,int *ground_index,int NGround,double Vground,int *source_index,\
+		     int NSource,double Vsource,int *drain_index,int NDrain,double Vdrain)
 {
     int IG,IS,ID;
+    int ndg;
 
     c_dcopy(NGrid,Vold,1,Vnew,1);
 
-    for(IG=0;IG<NGate;IG++){
-        Vnew[gate_index[IG]] = Vg;
+    for(ndg=0;ndg<no_diff_gate;ndg++){
+        for(IG=0;IG<NGate[ndg];IG++){
+	    Vnew[gate_index[ndg][IG]] = Vg[ndg];
+	}
     }
 
     for(IG=0;IG<NGround;IG++){

@@ -17,6 +17,7 @@ extern "C" {
   void init_nk(int);
   void init_last_first(int);
   void init_mat_name(char*);
+  void init_bg_data(char*);
   void init_strain_model(int);
   void init_mat_binary_x(double,double,double);
   void init_eta_res(double);
@@ -31,9 +32,9 @@ extern "C" {
   void init_Elimit(double);
   void init_Emin_tail(double);
   void init_EOffset(double);
-  void init_dE_in(double);
-  void init_dE_f(double);
-  void init_dE_sep(double);
+  void init_dE_in(double,double);
+  void init_dE_f(double,double);
+  void init_dE_sep(double,double);
   void init_EExt(double);
   void init_NE(int);
   void init_reg_mesh(int);
@@ -84,9 +85,9 @@ extern "C" {
   void init_NAS(double);
   void init_NDD(double);
   void init_NAD(double);
-  void init_nvg(int);
-  void init_vgmin(double);
-  void init_vgmax(double);
+  void init_nvg(int,int);
+  void init_vgmin(double,double,double,double);
+  void init_vgmax(double,double,double,double);
   void init_nvs(int);
   void init_vsmin(double);
   void init_vsmax(double);
@@ -110,6 +111,8 @@ extern "C" {
   void init_nyfold(int);
   void init_nzfold(int);
   void init_bs_solver(char *);
+  void init_update_bs_target(int);
+  void init_bs_target(double);
   void init_NPCS(int);
   void init_spec_decomp(int);
   void init_CPU_per_kz_point(int);
@@ -137,6 +140,9 @@ extern "C" {
   void init_roughness_type(char*);
   void init_roughness_rms(double);
   void init_roughness_lms(double);
+  void init_alloy_disorder(int);
+  void init_alloy_seed(int);
+  void init_alloy_composition(double);
   void init_qmstart(double);
   void init_qmstop(double);
   void init_update_fermi(int);
@@ -149,6 +155,7 @@ extern "C" {
   void init_perm_file(char*);
   void init_no_ro_mat(int);
   void init_mat_id(int,int);
+  void init_bulk_mat_id(int);
   void init_grradius(int,double);
   void init_no_ground(int);
   void init_ground(int,int,double,double,double);
@@ -173,8 +180,10 @@ extern "C" {
   void init_sc_dist_dep(int);
   void init_sc_diag_def(int);
   void init_sc_k_coupling(int);
+  void init_sc_e_ph_coupling(int);
   void init_sc_scale_fact(double);
   void init_sc_vbound(double);
+  void init_sc_memory_fact(double);
   void init_incoherent_injection(int);
   void init_full_current(int);
   void init_robust_numerics(int);
@@ -183,6 +192,11 @@ extern "C" {
   void init_vtot_file(char*);
   void init_vact_file(char*);
   void init_transport_type(int);
+  void init_injection_type(int,int);
+  void init_electron_weight(double);
+  void init_open_system(int);
+  void init_periodic_system(int);
+  void init_read_hamiltonian(int);
   void init_lattype(const char*);
 #ifdef __cplusplus
 }
