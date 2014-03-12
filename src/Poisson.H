@@ -25,7 +25,7 @@ public:
     
     void init(WireGenerator*,WireStructure*,FEMGrid*,int,int,MPI_Comm);
     void solve(double*,double*,double*,double*,double,FermiStructure*,FEMGrid*,\
-	       WireGenerator*,double,double,double,double,double,double*,double,\
+	       WireGenerator*,double,double*,double,double,double,double*,double,\
                int,int,int,MPI_Comm,MPI_Comm,int,MPI_Comm,int);
     
 private:
@@ -35,10 +35,10 @@ private:
     double Eps0,e,kB,Vol;
       
     void solve_FDM(double*,double*,double*,double*,double,FermiStructure*,FEMGrid*,\
-		   WireGenerator*,double,double,double,double*,double,int,int,\
+		   WireGenerator*,double,double*,double,double*,double,int,int,\
 		   MPI_Comm,MPI_Comm);
     void solve_FEM(double*,double*,double*,double*,double,FEMGrid*,WireGenerator*,\
-		   double,double,double,double,double,double*,double,int,int,\
+		   double,double*,double,double,double,double*,double,int,int,\
                    MPI_Comm,MPI_Comm,int,MPI_Comm,int);
     void geometry(double*,double*,double*,double*,double*,double*);
     void create_FEM_matrix(int*,int,int*,double*,int,double*,int,double*);
@@ -49,8 +49,8 @@ private:
     void assemble_matrix(int,double*,double*,IJPOS*,int*,int,int);
     void reduce_P(int*,int);
     void init_j_shift(int*,int*,int);
-    void init_V(double*,double*,int,int*,int,double,int*,int,double,int*,int,double,\
-                int*,int,double);
+    void init_V(double*,double*,int,int**,int*,int,double*,int*,int,double,int*,int,\
+		double,int*,int,double);
     void iterate_V(double*,double*,int*,int);
     void find_fermi(double*,double*,double*,double*,double,int*,int,double);
     void find_1D_fermi(double*,double*,double*,double*,double*,Fermi*,FermiStructure*,\

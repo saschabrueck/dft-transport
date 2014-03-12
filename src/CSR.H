@@ -2318,16 +2318,9 @@ void TCSR<T>::removepbc(int bw, int ndof)
 {
     int i,e;
 
-//    T*   nnz_tmp     = new T[max(n_nonzeros,1)];//I DO NOT EVEN NEED THE TEMPORARY MATRICES
-//    int* index_j_tmp = new int[max(n_nonzeros,1)];
-
-//    c_tcopy(n_nonzeros,nnz,1,nnz_tmp,1);
-//    c_icopy(n_nonzeros,index_j,1,index_j_tmp,1);
-
     for (i=0;i<max(0,min(size,bw*ndof-first_row));i++) {
         for (e=edge_i[i]-findx;e<edge_i[i+1]-findx;e++) {
             if ( (index_j[e]-findx)/ndof - (i+first_row)/ndof > bw ) {
-//                index_j_tmp[e]=-1;
                 index_j[e]=-1;
             }
         }
@@ -2336,7 +2329,6 @@ void TCSR<T>::removepbc(int bw, int ndof)
     for (i=max(0,min(size,size_tot-bw*ndof-first_row));i<size;i++) {
         for (e=edge_i[i]-findx;e<edge_i[i+1]-findx;e++) {
             if ( (index_j[e]-findx)/ndof - (i+first_row)/ndof < -bw ) {
-//                index_j_tmp[e]=-1;
                 index_j[e]=-1;
             }
         }
@@ -2347,20 +2339,14 @@ void TCSR<T>::removepbc(int bw, int ndof)
 
     for (int i=0;i<size;i++) {
         for(int e=edge_i[i]-findx;e<edge_i[i+1]-findx;e++){
-//            if(index_j_tmp[e]>=0){
             if(index_j[e]>=0){
                 index_i[i]++;
-//                index_j[n_nonzeros]=index_j_tmp[e];
                 index_j[n_nonzeros]=index_j[e];
-//                nnz[n_nonzeros]=nnz_tmp[e];
                 nnz[n_nonzeros]=nnz[e];
                 n_nonzeros++;
             }
         }
     }
-
-//    delete nnz_tmp;
-//    delete index_j_tmp;
 
     get_row_edge();
     get_diag_pos();

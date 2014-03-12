@@ -22,8 +22,8 @@ int iam;MPI_Comm_rank(MPI_COMM_WORLD,&iam);
 if (!iam) cout << "N_ATOMS " << NAtom_work << endl;
 
     double Vs=0.0;
-    double Vg=1.5;
-    double Vd=0.5;
+    double Vg=0.6;
+    double Vd=0.0;
     double Temp=transport_params.extra_param3;
     double *Vbf = new double[Overlap->size_tot];
     double *rho_atom = new double[NAtom_work]();
@@ -39,15 +39,15 @@ if (!iam) cout << "N_ATOMS " << NAtom_work << endl;
     int *contactvec = new int[n_mu];
     contactvec[0]=1;
     contactvec[1]=2;
-    double *dopingvec = new double[n_mu];
+    double *dopingvec = new double[n_mu]();
 
     if (!do_semiself) {
-        dopingvec[0]=0.0;
-        dopingvec[1]=0.0;
         int addpotential=0;
         if (addpotential) {
-            int na=4;
-            int nb=na+4;
+            dopingvec[0]=0.125;
+            dopingvec[1]=0.125;
+            int na=6;
+            int nb=na+8;
             for (int ivvec=0;                                               ivvec<na*(Overlap->size_tot/transport_params.n_cells); ivvec++) Vbf[ivvec] = Vs;
             for (int ivvec=na*(Overlap->size_tot/transport_params.n_cells); ivvec<nb*(Overlap->size_tot/transport_params.n_cells); ivvec++) Vbf[ivvec] = Vg;
             for (int ivvec=nb*(Overlap->size_tot/transport_params.n_cells); ivvec<Overlap->size_tot; ivvec++)                               Vbf[ivvec] = Vd;
@@ -122,7 +122,7 @@ rhofile.close();
         int iam;
         MPI_Comm_rank(MPI_COMM_WORLD,&iam);
         MPI_Comm_split(MPI_COMM_WORLD,iam,iam,&newcomm);
-        OMEN_Poisson_Solver->solve(Vnew,Vold,rho_atom,drho_atom_dV,1,NULL,FEM,Wire,Temp,Vg,Vs,Vs,Vd,&residual,1.0E-4,10,1,1,newcomm,MPI_COMM_WORLD,1,MPI_COMM_WORLD,0);
+        OMEN_Poisson_Solver->solve(Vnew,Vold,rho_atom,drho_atom_dV,1,NULL,FEM,Wire,Temp,&Vg,Vs,Vs,Vd,&residual,1.0E-4,10,1,1,newcomm,MPI_COMM_WORLD,1,MPI_COMM_WORLD,0);
 
 if(!iam){
 ofstream potfile("potfile");

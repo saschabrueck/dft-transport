@@ -1,6 +1,14 @@
 #ifndef __MATERIAL
 #define __MATERIAL
 
+#include <iostream>
+#include <fstream>
+#include <algorithm>
+#include <stdlib.h>
+#include <stdio.h>
+#include <math.h>
+#include <string.h>
+
 #include "CSR.H"
 #include "Utilities.H"
 
@@ -16,7 +24,7 @@ public:
     double **phiR,**phiT,**phiZ;
     double **mid_gap_energy,**band_gap_table;
     
-    Material(const char*,double*,int,double);
+    Material(const char*,const char*,int,double*,int,double);
     ~Material();
     
     void initialize(int);
@@ -37,6 +45,7 @@ public:
 protected:
     
     char *mat_name;
+    char *table_file;
     double binary_x[3];
     double *Esa, *Epa, *Estara, *Eda12, *Eda15, *lambdaa, *Vsssa, *Vstarstarsa, *Vsstarsa;
     double *Epa1, *Epa2, *Epa3, *Eda1, *Eda2, *Eda3, *Eda4, *Eda5;
@@ -60,12 +69,15 @@ protected:
     double Temp;
     int N3D;
     int strain_model;
+    int read_hamiltonian;
     int sc_dist_dep;
     int init_gap_tables;    
     int mod_scaling_fcn;    
     int table_dim, no_material, mat_code;
     int sp3d5ss,sp3d5,sp3ss,sp3,sorb,pzorb,pzdxzdyz;
 
+    double si_temp_dep(double);
+    double graphene_scaling_function(double,double);
     void calc_matrix_element(double*,double,double,double,double,int,int);
     void prepare_strain_constants(double*,int,int);
     void read_material_from_file(FILE*);

@@ -37,14 +37,22 @@ variable  [a-zA-Z_/][a-zA-Z0-9_/]*
 "//".*\n	    /* C++ comments */
 
 transport_type                 { return TRANSTYPE; }
+injection_type                 { return INJTYPE; }
+electron_weight                { return EWEIGHT; }
+open_system                    { return OPENSYS; }
+periodic_system                { return PERIODICSYS; }
+read_hamiltonian               { return READHAM; }
 dsp3                           { return DSP3; }
 h_passivation                  { return HPASS; }
 tb                             { return TB; }
 n_of_modes                     { return NM; }
 Nk                             { return NK; }
 bs_solver                      { return BSSOLVER; }
+update_bs_target               { return UPDATEBST; }
+bs_target                      { return BSTARGET; }
 last_first                     { return LF; }
 mat_name                       { return NAME; }
+bg_data                        { return BGDATA; }
 mat_binary_x                   { return BINARYX; }
 eta_res                        { return ETAR; }
 eta                            { return ETA; }
@@ -142,6 +150,9 @@ form                           { return FORM; }
 rms                            { return RMS; }
 Lms                            { return LMS; }
 
+alloy                          { return ALDIS; }
+composition                    { return COMP; }
+
 update_fermi                   { return UPDATEFERM; }
 fermi_level                    { return FERMIL; }
 
@@ -163,8 +174,10 @@ sc_rh_crit                     { return SCRHCRIT; }
 sc_dist_dep                    { return SCDISTDEP; }
 sc_diag_def                    { return SCDIAGDEF; }
 sc_k_coupling                  { return SCKCOUP; }
+sc_e_ph_coupling               { return SCEPHCOUP; }
 sc_scale_fact                  { return SCSCALE; }
 sc_vbound                      { return SCVBOUND; }
+sc_memory_fact                 { return SCMEM; }
 incoherent_injection           { return INCINJ; }
 
 full_current                   { return FULLCURRENT; }

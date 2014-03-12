@@ -20,12 +20,12 @@ double Fermi::find_fermi(double Ndop,double sign_rho,double *Ek,double dk,int Nk
 			 double Temp,double A)
 {
     int IE;
-    double Ef;
     int NE      = 125;
     double Emin = get_edge(Ek,sign_rho,Nky*Nkz,Nk,n_of_modes)-sign_rho*1.0;
     double Emax = Emin+sign_rho*2.0;
+    double Ef   = Emax;
     double *rho = new double[NE];
-    
+  
     density(rho,sign_rho,Ek,dk,Nk,dky,Nky,dkz,Nkz,n_of_modes,Emin,Emax,NE,spin_factor,Temp,A);
     
     for(IE=0;IE<NE;IE++){rho[IE] = log(fabs(rho[IE]-Ndop));}
@@ -35,7 +35,7 @@ double Fermi::find_fermi(double Ndop,double sign_rho,double *Ek,double dk,int Nk
             Ef = Emin+IE*(Emax-Emin)/(NE-1);
         }
     }
-    
+ 
     Ef = Newton(Ef,Ndop,sign_rho,Ek,dk,Nk,dky,Nky,dkz,Nkz,n_of_modes,spin_factor,Temp,A);
     
     delete[] rho;

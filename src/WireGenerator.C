@@ -3,18 +3,7 @@ All the matrices used in BLAS and Lapack are stored in the fortran style:
                          if A(N,M), A[i][j] stored as A[i+j*N]
 *****************************************************************************************/
 
-#include <mpi.h>
-#include <stdio.h>
-#include <math.h>
-#include <iostream>
-#include <algorithm>
-#include <fstream>
-#include <cstring>
-#include <stdlib.h>
-
 #include "WireGenerator.H"
-#include "Blas.H"
-#include "AtomStrain.H"
 
 WireGenerator::WireGenerator(int plattice_type,int ptransport_type)
 {
@@ -57,7 +46,7 @@ WireGenerator::WireGenerator(int plattice_type,int ptransport_type)
 	SP            = 4;
         BZNP          = 6;
 	max_neighbors = 0;
-      break;
+        break;
     case 6: //cnt
         NA            = 2;
         NB            = 3;
@@ -78,7 +67,28 @@ WireGenerator::WireGenerator(int plattice_type,int ptransport_type)
 	SP            = 4;
         BZNP          = 4;
 	max_neighbors = 18;
-	break;    
+	break;
+    case 9: //rocksalt
+        NA            = 2;
+	NB            = 6;
+	SP            = 4;
+        BZNP          = 6;
+	max_neighbors = 0;
+	break;
+    case 10: //dichalcogenide
+        NA            = 3;
+	NB            = 6;
+	SP            = 4;
+        BZNP          = 4;
+	max_neighbors = 40;
+	break;
+    case 11: //multilayer dichalcogenide
+        NA            = 6;
+	NB            = 6;
+	SP            = 4;
+        BZNP          = 4;
+	max_neighbors = 40;
+	break;
     default:
         NA            = 2;
 	NB            = 4;
@@ -179,7 +189,7 @@ void WireGenerator::delete_variables()
 {
 
     int i;
-    
+
     delete[] Neigh_Matrix;
     delete[] Smin;
     delete[] Smax;
@@ -225,8 +235,8 @@ void WireGenerator::delete_variables()
 void WireGenerator::execute_task(WireStructure* nanowire,Material *material,int sample_id,\
 				 MPI_Comm int_comm)
 {
-    if(mpi_rank==0){
-        printf("Generating the nanowire structure\n");
+    if(!mpi_rank){
+        printf("Generating the atomic structure\n");
     }
 
     wg_comm = int_comm;
@@ -249,7 +259,6 @@ void WireGenerator::execute_task(WireStructure* nanowire,Material *material,int 
         make_bulk_layer_matrix(nanowire,material->no_orb);
             
     }else{
-            
         check_dimension(nanowire);
         calc_info(nanowire);
         make_wire(nanowire);
@@ -258,20 +267,22 @@ void WireGenerator::execute_task(WireStructure* nanowire,Material *material,int 
         generate_roughness(nanowire,sample_id);
         replicate_unit_cell(nanowire->replicate_unit_cell,nanowire);
         read_atom_position(nanowire->read_atom_pos,nanowire);
+	check_periodicity(nanowire);
         init_variables(nanowire);
-        cut_boundary_slab(nanowire);
+	cut_boundary_slab(nanowire);
         update_atom_pos(nanowire,material);
-        cut_layer();
+	generate_alloy_disorder(nanowire);
+        cut_layer(nanowire);
         separate_dimension(nanowire);
         convert_position(nanowire);
+	update_periodicity(nanowire);
         get_qm_region(nanowire);
         get_orbital_per_atom(material->no_orb);
         get_mid_gap_energy(material);
         add_strain(nanowire->strain,nanowire->no_strain_domain,\
                    nanowire->strain_domain,nanowire->update_at);
         adapt_parameters(material);
-    }
-
+    }    
 }
 
 /************************************************************************************************/
@@ -319,11 +330,12 @@ void WireGenerator::update_atom_pos(WireStructure* nanowire,Material *material)
 	}
     }else{
         if (nanowire->relax_atoms){
-
+	  /*
 	    MacoptStrain *strain = new MacoptStrain(this, material);
 
 	    strain->relax_atoms();
 	    delete strain;
+	  */
 	}
     }
 
@@ -331,7 +343,6 @@ void WireGenerator::update_atom_pos(WireStructure* nanowire,Material *material)
         get_cell_width();
         update_boundary_slab(nanowire);
     }
-
 }
 
 /************************************************************************************************/
@@ -434,7 +445,7 @@ void WireGenerator::make_wire(WireStructure* nanowire)
     hzmax = -INF;
     hzmax = -INF;
     find_3D_boundary(&hxmin,&hxmax,&hymin,&hymax,&hzmin,&hzmax,nanowire);
-  
+
     Nx           = hxmax-hxmin+1;
     Ny           = hymax-hymin+1;
     Nz           = hzmax-hzmin+1;
@@ -653,8 +664,9 @@ void WireGenerator::exchange_wire_info(int At_local,double *LM_local,double *XYZ
         delete[] xyz_index;
         delete[] Lmin_local;
         delete[] Lmax_local;
-        delete[] At_vec;
     }
+
+    delete[] At_vec;
 }
 
 /************************************************************************************************/
@@ -703,6 +715,248 @@ void WireGenerator::exchange_oxide_info(int Around_local,int Rough_local,double 
         
         delete[] Around_vec;
 
+    }
+}
+
+/************************************************************************************************/
+
+void WireGenerator::check_periodicity(WireStructure *nanowire)
+{
+  
+    if(nanowire->periodic_system){
+
+        int IA,IB,IS,IN;
+	int NA;
+	int index;
+	int atom_shift_pos;
+	double Lperiodic;
+	double *LM;
+     
+        init_variables(nanowire);
+
+	//determine size of the structure and number of added atoms
+
+	Lperiodic = 0.0;
+	for(IS=0;IS<NSlab-1;IS++){
+	    Lperiodic = Lperiodic+(Layer_Matrix[SLM*Smin[IS+1]]-Layer_Matrix[SLM*Smin[IS]]);
+	}
+
+	Lperiodic      = Lperiodic/(NSlab-1.0)*NSlab;
+	
+	NA             = Smax[NSlab-1]-Smin[0]+Smax[0]-Smin[0]+Smax[NSlab-1]-Smin[NSlab-1]+3;
+	
+	atom_shift_pos = Smax[NSlab-1]-Smin[NSlab-1]+1;
+ 
+	for(IA=0;IA<No_Atom;IA++){
+	    for(IB=0;IB<NB;IB++){
+	        if(abs(Layer_Matrix[SLM*IA+4+IB])>tollim){
+		    Layer_Matrix[SLM*IA+4+IB] = Layer_Matrix[SLM*IA+4+IB]+atom_shift_pos;
+		}
+	    }
+	}
+
+	//copy last unit cell to the beginning and first unit cell to the end
+
+        LM = new double[NA*SLM];
+
+	init_var(LM,NA*SLM);
+
+	c_dcopy(No_Atom*SLM,Layer_Matrix,1,&LM[SLM*(Smax[NSlab-1]-Smin[NSlab-1]+1)],1);
+
+	for(IA=Smin[0];IA<=Smax[0];IA++){
+	    index = Smax[NSlab-1]-Smin[NSlab-1]+1+Smax[NSlab-1]-Smin[0]+1+IA-Smin[0];
+	    c_dcopy(SLM-NB,&Layer_Matrix[SLM*(IA-Smin[0])],1,&LM[SLM*index],1);
+	    LM[SLM*index] = LM[SLM*index]+Lperiodic;
+	}
+
+	for(IA=Smin[NSlab-1];IA<=Smax[NSlab-1];IA++){
+	    index = IA-Smin[NSlab-1];
+	    c_dcopy(SLM-NB,&Layer_Matrix[SLM*(IA-Smin[0])],1,&LM[SLM*index],1);
+	    LM[SLM*index] = LM[SLM*index]-Lperiodic;
+	}
+
+	//make the missing connections in Layer_Matrix
+
+	No_Atom = NA;
+	
+	delete[] Layer_Matrix;
+	Layer_Matrix = new double[No_Atom*SLM];
+
+	c_dcopy(SLM*No_Atom,LM,1,Layer_Matrix,1);
+
+	int neighbor,no_neighbor;
+	int ind1               = Smax[NSlab-1]-Smin[NSlab-1]+1;
+	int ind2               = ind1+Smax[0]-Smin[0]+1;
+	int ind3               = ind1+Smin[NSlab-1];
+	int ind4               = ind3+Smax[NSlab-1]-Smin[NSlab-1]+1;
+	int at_boundary_min[2] = {ind1,ind3};
+	int at_boundary_max[2] = {ind2,ind4};
+	int se_boundary_min[2] = {0,ind4};
+	int se_boundary_max[2] = {ind1,No_Atom};
+	double deformation;
+	double at_pos[3],neigh_pos[3];
+
+	deformation  = nanowire->max_bond_deformation*\
+	  c_dnrm2(N3D,unit_cell->type_original[0]->bond[0]->vec,1);
+
+	for(IS=0;IS<2;IS++){
+	
+	    for(IA=at_boundary_min[IS];IA<at_boundary_max[IS];IA++){
+
+	        for(IB=0;IB<NB;IB++){
+
+		    if(abs(Layer_Matrix[IA*SLM+N3D+1+IB])<tollim){
+
+		        c_dcopy(N3D,&Layer_Matrix[IA*SLM],1,at_pos,1);
+			c_daxpy(N3D,1.0,unit_cell->type[Round(Layer_Matrix[SLM*IA+N3D]-1)%NA]-> \
+				bond[IB]->vec,1,at_pos,1);
+			no_neighbor = 0;
+                
+			for(IN=se_boundary_min[IS];IN<se_boundary_max[IS];IN++){
+
+			    c_dcopy(N3D,at_pos,1,neigh_pos,1);
+			    c_daxpy(N3D,-1.0,&Layer_Matrix[SLM*IN],1,neigh_pos,1);
+                        
+			    if(c_dnrm2(N3D,neigh_pos,1)<=deformation){
+			        no_neighbor = no_neighbor+1;
+				if(no_neighbor>1){
+				    printf("Please reduce max_bond_deformation\n");
+				    exit(0);
+				}else{
+				    neighbor = IN;
+				}    
+			    }
+			}
+                
+			if(no_neighbor==1){
+			    Layer_Matrix[SLM*IA+N3D+1+IB] = neighbor+1.0;
+			}
+		    }
+		}
+	    }
+	}
+
+	delete_variables();
+
+	//update the layer indices Lmin and Lmax
+
+	XYZPOS* LM_xyz  = new XYZPOS[No_Atom];
+        int *xyz_index  = new int[No_Atom];
+        int *Lmin_local = new int[No_Atom];
+        int *Lmax_local = new int[No_Atom];
+   
+        for(IA=0;IA<No_Atom;IA++){
+	    LM_xyz[IA].x     = Layer_Matrix[SLM*IA];
+            LM_xyz[IA].y     = Layer_Matrix[SLM*IA+1];
+            LM_xyz[IA].z     = Layer_Matrix[SLM*IA+2];
+            LM_xyz[IA].index = IA;
+        }
+        sort_xyz(LM_xyz,xyz_index,&NLayer,Lmin_local,Lmax_local);
+
+	delete[] Lmin;
+	delete[] Lmax;
+
+	Lmin = new int[NLayer];
+	Lmax = new int[NLayer];
+
+	c_icopy(NLayer,Lmin_local,1,Lmin,1);
+	c_icopy(NLayer,Lmax_local,1,Lmax,1);
+	
+	delete[] LM;
+	delete[] xyz_index;
+	delete[] Lmin_local;
+	delete[] Lmax_local;
+	delete LM_xyz;
+    }
+}
+
+/************************************************************************************************/
+
+void WireGenerator::update_periodicity(WireStructure *nanowire)
+{
+
+    if(nanowire->periodic_system){
+
+        int IA,IL,IS;
+	int NCH;
+	int atom_shift_pos;
+	double Lperiodic;
+	double *LM;
+
+	//determine size of the structure and number of added atoms
+
+	Lperiodic = 0.0;
+	for(IS=0;IS<NSlab-3;IS++){
+	    Lperiodic = Lperiodic+(Layer_Matrix[SLM*Smin[IS+1]]-Layer_Matrix[SLM*Smin[IS]]);
+	}
+
+	Lperiodic      = Lperiodic/(NSlab-3.0)*(NSlab-2.0);
+
+	atom_shift_pos = Smax[NSlab-1]-Smin[NSlab-1]+1;
+
+	//shift atom coordinates
+
+        LM = new double[No_Atom*SLM];
+
+	c_dcopy(No_Atom*SLM,Layer_Matrix,1,LM,1);
+
+	if(nanowire->update_at){
+
+	    for(IA=0;IA<(Smax[NSlab-2]-Smin[1]+1);IA++){
+	        c_dcopy(N3D+1,&LM[SLM*IA],1,&Layer_Matrix[SLM*(IA+atom_shift_pos)],1);
+	    }
+
+	    for(IA=Smin[0];IA<=Smax[0];IA++){
+	        c_dcopy(N3D+1,&LM[SLM*IA],1,&Layer_Matrix[SLM*(Smin[NSlab-1]+IA-Smin[0])],1);
+		Layer_Matrix[SLM*(Smin[NSlab-1]+IA-Smin[0])] = \
+		  Layer_Matrix[SLM*(Smin[NSlab-1]+IA-Smin[0])]+Lperiodic;
+	    }
+
+	    for(IA=Smin[NSlab-3];IA<=Smax[NSlab-3];IA++){
+	        c_dcopy(SLM-NB,&LM[SLM*IA],1,&Layer_Matrix[SLM*(IA-Smin[NSlab-3])],1);
+		Layer_Matrix[SLM*(IA-Smin[NSlab-3])] = Layer_Matrix[SLM*(IA-Smin[NSlab-3])]-Lperiodic;
+	    }
+	}
+
+	atom_shift_pos = (Smax[NSlab-2]-Smin[1]+1)-(Smax[0]-Smin[0]+1);
+	for(IA=Smin[0];IA<=Smax[0];IA++){
+	    index_channel[IA] = -1;
+	    ch_conv[IA]       = IA+atom_shift_pos;
+	}
+
+	NCH = 0;
+	for(IA=Smin[1];IA<=Smax[NSlab-2];IA++){
+	    ch_pos[NCH]    = IA;
+	    inv_ch_pos[IA] = NCH;
+	    ch_conv[IA]    = NCH;
+	    NCH++;
+	}
+
+	atom_shift_pos = (Smax[NSlab-2]-Smin[1]+1)+(Smax[0]-Smin[0]+1);
+	for(IA=Smin[NSlab-1];IA<=Smax[NSlab-1];IA++){
+	    index_channel[IA] = 1;
+	    ch_conv[IA]       = IA-atom_shift_pos;
+	}
+
+	Channel_tot    = No_Atom;
+        No_Atom        = NCH;
+
+	NSlab          = NSlab-2;
+	NLayer         = NLayer-2*layer_per_slab;
+
+	atom_shift_pos = Smax[0]-Smin[0]+1;
+
+	for(IS=0;IS<NSlab;IS++){
+	    Smin[IS] = Smin[IS+1]-atom_shift_pos;
+	    Smax[IS] = Smax[IS+1]-atom_shift_pos;
+	}
+
+	for(IL=0;IL<NLayer;IL++){
+	    Lmin[IL] = Lmin[IL+layer_per_slab]-atom_shift_pos;
+	    Lmax[IL] = Lmax[IL+layer_per_slab]-atom_shift_pos;
+	}
+
+	delete[] LM;
     }
 }
 
@@ -984,12 +1238,12 @@ void WireGenerator::make_bulk_layer_matrix(WireStructure *nanowire,int *no_orb)
     init_var(orb_per_at,NA+1);
 
     orb_per_at[0] = 0;
-    
+
     for(IA=0;IA<NA;IA++){
 
         c_dcopy(N3D,unit_cell->atom[IA]->coord,1,&Layer_Matrix[SLM*IA],1);
         
-        Layer_Matrix[SLM*IA+3] = IA+1;
+        Layer_Matrix[SLM*IA+3] = NA*(nanowire->bulk_mat_id-1)+IA+1;
         orb_per_at[IA+1]       = orb_per_at[IA]+no_orb[IA];
             
         for(IB=0;IB<NB;IB++){
@@ -1736,6 +1990,53 @@ void WireGenerator::eig(double *A,double *lambda,int N)
 
 /************************************************************************************************/
 
+void WireGenerator::generate_alloy_disorder(WireStructure *nanowire)
+{
+
+    if((nanowire->alloy->on)&&(!mpi_rank)){
+
+        int seed;
+	int IA;
+        double r_number;
+
+	if(nanowire->alloy->seed<0){
+	    seed = time(0);
+	}else{
+	    seed = nanowire->alloy->seed;
+	}
+
+	printf("The seed number for alloy disorder is %i\n",seed);
+
+	srand(seed);
+
+	for(IA=0;IA<No_Atom;IA++){
+
+	    r_number = (double)rand()/RAND_MAX;
+
+	    if(r_number>=nanowire->alloy->composition){
+	        Layer_Matrix[IA*SLM+3] = Layer_Matrix[IA*SLM+3]+2;
+	    }
+	}
+
+	for(IA=Smin[1];IA<=Smax[1];IA++){
+	    Layer_Matrix[IA*SLM+3] = Layer_Matrix[(IA-Smin[1]+Smin[0])*SLM+3];
+	}
+
+	for(IA=Smin[NSlab-2];IA<=Smax[NSlab-2];IA++){
+	    Layer_Matrix[IA*SLM+3] = Layer_Matrix[(IA-Smin[NSlab-2]+Smin[NSlab-1])*SLM+3];
+	}
+    }
+
+    if(nanowire->alloy->on){
+        MPI_Bcast(Layer_Matrix,SLM*No_Atom,MPI_DOUBLE,0,wg_comm);
+
+        get_cell_width();
+        update_boundary_slab(nanowire);
+    }
+}
+
+/************************************************************************************************/
+
 void WireGenerator::init_variables(WireStructure *nanowire)
 {
     int IL,IA,IB,IS,*p;
@@ -1746,31 +2047,37 @@ void WireGenerator::init_variables(WireStructure *nanowire)
     cell_width     = Layer_Matrix[SLM*NA_per_slice]-Layer_Matrix[0];
     p              = find(Lmax,Lmax+NLayer,NA_per_slice-1);
     layer_per_slab = (p-Lmax)+1;
-    
+    l_per_slab_ref = layer_per_slab;
+
     if(layer_per_slab == 2){
         NA_per_slice   = 2*NA_per_slice;
         cell_width     = 2.0*cell_width;
         layer_per_slab = 2*layer_per_slab;
+	l_per_slab_ref = 2*l_per_slab_ref;
     }
 
     //NA_per_slice   = nanowire->NxFold*NA_per_slice;
     //cell_width     = nanowire->NxFold*cell_width;
     //layer_per_slab = nanowire->NxFold*layer_per_slab;
 
-    NSlab    = (int)(NLayer/layer_per_slab);
-    NLayer   = NSlab*layer_per_slab;
+    if(nanowire->open_system||nanowire->periodic_system){
+        NSlab  = (int)(NLayer/layer_per_slab);
+	NLayer = NSlab*layer_per_slab;
+    }else{
+        NSlab  = (ceil)((double)NLayer/layer_per_slab);
+    }
     No_Atom  = Lmax[NLayer-1]+1;
-    
+
     Smin     = new int[NSlab];
     Smax     = new int[NSlab];
     Smin_tot = new int[NSlab];
     Smax_tot = new int[NSlab];
-    
+
     for(IS=0;IS<NSlab;IS++){
         Smin[IS] = Lmin[IS*layer_per_slab];
-	Smax[IS] = Lmax[(IS+1)*layer_per_slab-1];
+	Smax[IS] = Lmax[min((IS+1)*layer_per_slab,NLayer)-1];
     }
-    
+
     index_channel  = new int[No_Atom];
     ch_pos         = new int[No_Atom];
     ch_conv        = new int[No_Atom];
@@ -1780,7 +2087,7 @@ void WireGenerator::init_variables(WireStructure *nanowire)
     arch_conv      = new int[max(Around_Atom,1)];
     neighbor_layer = new int[NLayer];
     Enn            = new BOUNDARY_ENN*[NLayer];
-    
+
     for(IL=0;IL<NLayer;IL++){
 
         Enn[IL]           = new BOUNDARY_ENN();
@@ -1803,7 +2110,7 @@ void WireGenerator::init_variables(WireStructure *nanowire)
         }
     }
     get_boundary_size(nanowire);
-    
+ 
     int index[2]               = {0,NSlab-1};
     
     Boundary                   = new BOUNDARY_ENN*[2];
@@ -1828,8 +2135,9 @@ void WireGenerator::init_variables(WireStructure *nanowire)
 
         b_shift[IB]            = Smin[index[IB]];
     }
-
+ 
     get_cell_width();
+    
 }
 
 /************************************************************************************************/
@@ -2096,7 +2404,7 @@ void WireGenerator::calc_info(WireStructure* nanowire)
     volume_tot = 0.0;
     
     for(i=0;i<no_element;i++){
-      
+  
         if(!strcmp(nanowire->mat[i]->type,"square")){
 
             nanowire->mat[i]->face_area[0]=calc_quad_area(nanowire->mat[i]->p[0]->coord,\
@@ -2169,7 +2477,9 @@ void WireGenerator::calc_info(WireStructure* nanowire)
 		volume = volume+nanowire->mat[i]->volume;
 	    }
             
-        }else{
+        }
+
+	if(!strcmp(nanowire->mat[i]->type,"circle")){
 	
 	    nanowire->mat[i]->volume = PI*nanowire->surf[i]->radius[0]*nanowire->surf[i]->radius[1]*
 	      (nanowire->mat[i]->p[1]->coord[0]-nanowire->mat[i]->p[0]->coord[0]);
@@ -2187,7 +2497,23 @@ void WireGenerator::calc_info(WireStructure* nanowire)
 	      (nanowire->mat[i]->p[1]->coord[0]-nanowire->mat[i]->p[0]->coord[0]);
             
         }
-        
+
+	if(!strcmp(nanowire->mat[i]->type,"sphere")){
+	
+	    nanowire->mat[i]->volume = 4.0/3.0*PI*pow(nanowire->surf[i]->radius[0],3.0);
+
+            if((i<nanowire->no_ch_element)&&(!strcmp(nanowire->surf[i]->cross_section,"yes"))){
+                cell_area = cell_area+PI*nanowire->surf[i]->radius[0]*\
+		  nanowire->surf[i]->radius[1];
+            }
+
+            if((i<nanowire->no_ch_element)||(i>=(nanowire->no_ch_element+nanowire->no_ox_element))){
+		volume = volume+nanowire->mat[i]->volume;
+	    }
+
+	    volume_tot = volume_tot+4.0/3.0*PI*pow(nanowire->surf[i]->radius[0],3.0);
+        }
+ 
     }
 
 }
@@ -2412,12 +2738,12 @@ void WireGenerator::make_unit_cell(const char* first_atom,double a0,double c0,do
 {
 
     int IA,IB,IP,ID,JD;
-    int neigh[5][6];
-    double v[5][3];
-    double a[3][3],b[6][3],s[5];
+    int neigh[6][6];
+    double v[6][3];
+    double a[3][3],b[6][3],s[6];
     double delta_c;
     double a_factor[3]={a0,a0,c0};
-    double bshift[5][6];
+    double bshift[6][6];
     double bond_pass;
     double BZPoint[10][3];
    
@@ -2523,8 +2849,8 @@ void WireGenerator::make_unit_cell(const char* first_atom,double a0,double c0,do
 	neigh[0][0] = 2; neigh[0][1] = 2; neigh[0][2] = 2; neigh[0][3] = 2;
 	neigh[1][0] = 1; neigh[1][1] = 1; neigh[1][2] = 1; neigh[1][3] = 1;
 
-	bshift[0][0] = 0.0; bshift[0][1] = 0.0; bshift[0][2] = 0.0; bshift[0][3] = 0.0;
-	bshift[1][0] = 0.0; bshift[1][1] = 0.0; bshift[1][2] = 0.0; bshift[1][3] = 0.0;
+	bshift[0][0] = 0.0; bshift[0][1] = 0.0; bshift[0][2] = 0.0;
+	bshift[1][0] = 0.0; bshift[1][1] = 0.0; bshift[1][2] = 0.0;
 
         BZPoint[0][0] = PI/sqrt(3.0);           BZPoint[0][1] = PI/3.0; BZPoint[0][2] = 0.0;
         BZPoint[1][0] = 0.0;                    BZPoint[1][1] = 0.0;    BZPoint[1][2] = 0.0;
@@ -2608,8 +2934,8 @@ void WireGenerator::make_unit_cell(const char* first_atom,double a0,double c0,do
 	neigh[0][0] = 2; neigh[0][1] = 2; neigh[0][2] = 2; neigh[0][3] = 2;
 	neigh[1][0] = 1; neigh[1][1] = 1; neigh[1][2] = 1; neigh[1][3] = 1;
 
-	bshift[0][0] = 0.0; bshift[0][1] = 0.0; bshift[0][2] = 0.0; bshift[0][3] = 0.0;
-	bshift[1][0] = 0.0; bshift[1][1] = 0.0; bshift[1][2] = 0.0; bshift[1][3] = 0.0;
+	bshift[0][0] = 0.0; bshift[0][1] = 0.0; bshift[0][2] = 0.0;
+	bshift[1][0] = 0.0; bshift[1][1] = 0.0; bshift[1][2] = 0.0;
 
         BZPoint[0][0] = PI/sqrt(3.0);           BZPoint[0][1] = PI/3.0; BZPoint[0][2] = 0.0;
         BZPoint[1][0] = 0.0;                    BZPoint[1][1] = 0.0;    BZPoint[1][2] = 0.0;
@@ -2685,11 +3011,10 @@ void WireGenerator::make_unit_cell(const char* first_atom,double a0,double c0,do
 	neigh[2][0] = 4; neigh[2][1] = 4; neigh[2][2] = 4; neigh[2][3] = 0; neigh[2][4] = 0;
 	neigh[3][0] = 3; neigh[3][1] = 3; neigh[3][2] = 3; neigh[3][3] = 1; neigh[3][4] = 1;
 
-	bshift[0][0] = 0.0; bshift[0][1] = 0.0; bshift[0][2] = 0.0; bshift[0][3] = 0.0;
-	bshift[1][0] = 0.0; bshift[1][1] = 0.0; bshift[1][2] = 0.0; bshift[1][3] = 0.0;
-	bshift[2][0] = 0.0; bshift[2][1] = 0.0; bshift[2][2] = 0.0; bshift[2][3] = 0.0;
-	bshift[3][0] = 0.0; bshift[3][1] = 0.0; bshift[3][2] = 0.0; bshift[3][3] = 0.0;
-        bshift[4][0] = 0.0; bshift[4][1] = 0.0; bshift[4][2] = 0.0; bshift[4][3] = 0.0;
+	bshift[0][0] = 0.0; bshift[0][1] = 0.0; bshift[0][2] = 0.0; bshift[0][3] = 0.0; bshift[0][4] = 0.0;
+	bshift[1][0] = 0.0; bshift[1][1] = 0.0; bshift[1][2] = 0.0; bshift[1][3] = 0.0; bshift[1][4] = 0.0;
+	bshift[2][0] = 0.0; bshift[2][1] = 0.0; bshift[2][2] = 0.0; bshift[2][3] = 0.0; bshift[2][4] = 0.0;
+	bshift[3][0] = 0.0; bshift[3][1] = 0.0; bshift[3][2] = 0.0; bshift[3][3] = 0.0; bshift[3][4] = 0.0;
 
         BZPoint[0][0] = PI/sqrt(3.0);           BZPoint[0][1] = PI/3.0; BZPoint[0][2] = 0.0;
         BZPoint[1][0] = 0.0;                    BZPoint[1][1] = 0.0;    BZPoint[1][2] = 0.0;
@@ -2700,8 +3025,129 @@ void WireGenerator::make_unit_cell(const char* first_atom,double a0,double c0,do
 
 	Vol_atom = 9.0*sqrt(3.0)/8.0*a0*a0*c0*1e-27;
 
-	break;    
+	break;
 
+    case 9:
+
+	v[0][0] = 0.0;  v[0][1] = 0.0;  v[0][2] = 0.0;
+	v[1][0] = 0.5;  v[1][1] = 0.0;  v[1][2] = 0.0;
+
+	a[0][0] = 0.5; a[0][1] = 0.5; a[0][2] = 0.0;
+	a[1][0] = 0.5; a[1][1] = 0.0; a[1][2] = 0.5;
+	a[2][0] = 0.0; a[2][1] = 0.5; a[2][2] = 0.5;
+
+	b[0][0] = 0.5;  b[0][1] = 0.0;  b[0][2] = 0.0;
+	b[1][0] = 0.0;  b[1][1] = 0.5;  b[1][2] = 0.0;
+	b[2][0] = 0.0;  b[2][1] = 0.0;  b[2][2] = 0.5;
+	b[3][0] = -0.5; b[3][1] = 0.0;  b[3][2] = 0.0;
+	b[4][0] = 0.0;  b[4][1] = -0.5; b[4][2] = 0.0;
+	b[5][0] = 0.0;  b[5][1] = 0.0;  b[5][2] = -0.5;
+
+	s[0] = 1.0; s[1] = -1.0;
+
+	neigh[0][0] = 2; neigh[0][1] = 2; neigh[0][2] = 2; neigh[0][3] = 2; neigh[0][4] = 2; neigh[0][5] = 2;
+	neigh[1][0] = 1; neigh[1][1] = 1; neigh[1][2] = 1; neigh[1][3] = 1; neigh[1][4] = 1; neigh[1][5] = 1;
+
+	bshift[0][0] = 0.0; bshift[0][1] = 0.0; bshift[0][2] = 0.0; bshift[0][3] = 0.0; bshift[0][4] = 0.0; bshift[0][5] = 0.0;
+	bshift[1][0] = 0.0; bshift[1][1] = 0.0; bshift[1][2] = 0.0; bshift[1][3] = 0.0; bshift[1][4] = 0.0; bshift[1][5] = 0.0;
+
+        BZPoint[0][0] = 2.0*PI; BZPoint[0][1] = PI;     BZPoint[0][2] = 0.0;
+        BZPoint[1][0] = PI;     BZPoint[1][1] = PI;     BZPoint[1][2] = PI;
+        BZPoint[2][0] = 0.0;    BZPoint[2][1] = 0.0;    BZPoint[2][2] = 0.0;
+	BZPoint[3][0] = 2.0*PI; BZPoint[3][1] = 0.0;    BZPoint[3][2] = 0.0;
+        BZPoint[4][0] = 2.0*PI; BZPoint[4][1] = PI/2.0; BZPoint[4][2] = PI/2.0;
+        BZPoint[5][0] = 0.0;    BZPoint[5][1] = 0.0;    BZPoint[5][2] = 0.0;
+        
+	bond_pass = 0.0;
+
+	Vol_atom = a0*a0*a0/8.0*1e-27;
+
+	break;
+
+    case 10:
+
+        v[0][0] = 0.0; v[0][1] = 1.0/sqrt(3.0); v[0][2] = 0.0;
+	v[1][0] = 0.0; v[1][1] = 0.0; 		v[1][2] = 0.5;
+	v[2][0] = 0.0; v[2][1] = 1.0/sqrt(3.0); v[2][2] = 1.0;
+
+	a[0][0] = 1.0/2.0;  a[0][1] = sqrt(3.0)/2.0; a[0][2] = 0.0;
+	a[1][0] = -1.0/2.0; a[1][1] = sqrt(3.0)/2.0; a[1][2] = 0.0;
+	a[2][0] = 0.0;      a[2][1] = 0.0;           a[2][2] = 1.5;
+
+	b[0][0] = 0.0;  b[0][1] = 1.0/sqrt(3.0);      b[0][2] = 0.5;
+	b[1][0] = 0.5;  b[1][1] = -1.0/(2*sqrt(3.0)); b[1][2] = 0.5;
+	b[2][0] = -0.5; b[2][1] = -1.0/(2*sqrt(3.0)); b[2][2] = 0.5;
+	b[3][0] = 0.0;  b[3][1] = 1.0/sqrt(3.0);      b[3][2] = -0.5;
+	b[4][0] = 0.5;  b[4][1] = -1.0/(2*sqrt(3.0)); b[4][2] = -0.5;
+	b[5][0] = -0.5; b[5][1] = -1.0/(2*sqrt(3.0)); b[5][2] = -0.5;
+
+	s[0] = -1; s[1] = 1; s[2] = -1;
+
+	neigh[0][0] = 0; neigh[0][1] = 0; neigh[0][2] = 0; neigh[0][3] = 2; neigh[0][4] = 2; neigh[0][5] = 2;
+	neigh[1][0] = 3; neigh[1][1] = 3; neigh[1][2] = 3; neigh[1][3] = 1; neigh[1][4] = 1; neigh[1][5] = 1;
+	neigh[2][0] = 2; neigh[2][1] = 2; neigh[2][2] = 2; neigh[2][3] = 0; neigh[2][4] = 0; neigh[2][5] = 0;
+
+	bshift[0][0] = 0.0; bshift[0][1] = 0.0; bshift[0][2] = 0.0; bshift[0][3] = 0.0; bshift[0][4] = 0.0; bshift[0][5] = 0.0;
+	bshift[1][0] = 0.0; bshift[1][1] = 0.0; bshift[1][2] = 0.0; bshift[1][3] = 0.0; bshift[1][4] = 0.0; bshift[1][5] = 0.0;
+	bshift[2][0] = 0.0; bshift[2][1] = 0.0; bshift[2][2] = 0.0; bshift[2][3] = 0.0; bshift[2][4] = 0.0; bshift[2][5] = 0.0;
+
+        BZPoint[0][0] = 2*PI/3.0; BZPoint[0][1] = 2*PI/sqrt(3.0); BZPoint[0][2] = 0.0;
+        BZPoint[1][0] = 0.0;      BZPoint[1][1] = 0.0;    	  BZPoint[1][2] = 0.0;
+        BZPoint[2][0] = PI;	  BZPoint[2][1] = PI/(sqrt(3.0)); BZPoint[2][2] = 0.0;
+        BZPoint[3][0] = 2*PI/3.0; BZPoint[3][1] = 2*PI/sqrt(3.0); BZPoint[3][2] = 0.0;
+
+	bond_pass = 0.0;
+
+	Vol_atom = sqrt(3.0)/6*c0*a0*a0*1e-27;
+
+        break;
+
+    case 11:
+      
+        v[0][0] = 0.0; v[0][1] = 1.0/sqrt(3.0); v[0][2] = 0.0;
+	v[1][0] = 0.0; v[1][1] = 0.0; 		v[1][2] = 0.5;
+	v[2][0] = 0.0; v[2][1] = 1.0/sqrt(3.0); v[2][2] = 1.0;
+        v[3][0] = 0.0; v[3][1] = 0.0;		v[3][2] = u0/2.0;
+	v[4][0] = 0.0; v[4][1] = 1.0/sqrt(3.0);	v[4][2] = u0/2.0+0.5;
+	v[5][0] = 0.0; v[5][1] = 0.0;		v[5][2] = u0/2.0+1.0;
+
+	a[0][0] = 1.0/2.0;  a[0][1] = sqrt(3.0)/2.0; a[0][2] = 0.0;
+	a[1][0] = -1.0/2.0; a[1][1] = sqrt(3.0)/2.0; a[1][2] = 0.0;
+	a[2][0] = 0.0;      a[2][1] = 0.0;           a[2][2] = u0;
+
+	b[0][0] = 0.0;  b[0][1] = 1.0/sqrt(3.0);      b[0][2] = 0.5;
+	b[1][0] = 0.5;  b[1][1] = -1.0/(2*sqrt(3.0)); b[1][2] = 0.5;
+	b[2][0] = -0.5; b[2][1] = -1.0/(2*sqrt(3.0)); b[2][2] = 0.5;
+	b[3][0] = 0.0;  b[3][1] = 1.0/sqrt(3.0);      b[3][2] = -0.5;
+	b[4][0] = 0.5;  b[4][1] = -1.0/(2*sqrt(3.0)); b[4][2] = -0.5;
+	b[5][0] = -0.5; b[5][1] = -1.0/(2*sqrt(3.0)); b[5][2] = -0.5;
+
+	s[0] = -1; s[1] = 1; s[2] = -1; s[3] = 1; s[4] = -1; s[5] = 1;
+
+	neigh[0][0] = 0; neigh[0][1] = 0; neigh[0][2] = 0; neigh[0][3] = 2; neigh[0][4] = 2; neigh[0][5] = 2;
+	neigh[1][0] = 3; neigh[1][1] = 3; neigh[1][2] = 3; neigh[1][3] = 1; neigh[1][4] = 1; neigh[1][5] = 1;
+	neigh[2][0] = 2; neigh[2][1] = 2; neigh[2][2] = 2; neigh[2][3] = 0; neigh[2][4] = 0; neigh[2][5] = 0;
+	neigh[3][0] = 5; neigh[3][1] = 5; neigh[3][2] = 5; neigh[3][3] = 0; neigh[3][4] = 0; neigh[3][5] = 0;
+	neigh[4][0] = 4; neigh[4][1] = 4; neigh[4][2] = 4; neigh[4][3] = 6; neigh[4][4] = 6; neigh[4][5] = 6;
+	neigh[5][0] = 0; neigh[5][1] = 0; neigh[5][2] = 0; neigh[5][3] = 5; neigh[5][4] = 5; neigh[5][5] = 5;
+
+	bshift[0][0] = 0.0; bshift[0][1] = 0.0; bshift[0][2] = 0.0; bshift[0][3] = 0.0; bshift[0][4] = 0.0; bshift[0][5] = 0.0;
+	bshift[1][0] = 0.0; bshift[1][1] = 0.0; bshift[1][2] = 0.0; bshift[1][3] = 0.0; bshift[1][4] = 0.0; bshift[1][5] = 0.0;
+	bshift[2][0] = 0.0; bshift[2][1] = 0.0; bshift[2][2] = 0.0; bshift[2][3] = 0.0; bshift[2][4] = 0.0; bshift[2][5] = 0.0;
+	bshift[3][0] = 0.0; bshift[3][1] = 0.0; bshift[3][2] = 0.0; bshift[3][3] = 0.0; bshift[3][4] = 0.0; bshift[3][5] = 0.0;
+	bshift[4][0] = 0.0; bshift[4][1] = 0.0; bshift[4][2] = 0.0; bshift[4][3] = 0.0; bshift[4][4] = 0.0; bshift[4][5] = 0.0;
+	bshift[5][0] = 0.0; bshift[5][1] = 0.0; bshift[5][2] = 0.0; bshift[5][3] = 0.0; bshift[5][4] = 0.0; bshift[5][5] = 0.0;
+
+        BZPoint[0][0] = 2*PI/3.0; BZPoint[0][1] = 2*PI/sqrt(3.0); BZPoint[0][2] = 0.0;
+        BZPoint[1][0] = 0.0;      BZPoint[1][1] = 0.0;    	  BZPoint[1][2] = 0.0;
+        BZPoint[2][0] = PI;	  BZPoint[2][1] = PI/(sqrt(3.0)); BZPoint[2][2] = 0.0;
+        BZPoint[3][0] = 2*PI/3.0; BZPoint[3][1] = 2*PI/sqrt(3.0); BZPoint[3][2] = 0.0;
+
+	bond_pass = 0.0;
+
+	Vol_atom = sqrt(3.0)/12*c0*a0*a0*1e-27;
+
+        break;
     }
         
     if (strcmp(first_atom,"cation")==0){
@@ -3284,7 +3730,11 @@ void WireGenerator::cut_boundary_slab(WireStructure* nanowire)
                         Boundary[i]->NC = Boundary[i]->NC+1;
                         Boundary[i]->UNN[SLM*(IA-Sshift)+4+IB] = -1;
                         if(IA>=Smin[NSlab-1]){
-                            Layer_Matrix[SLM*IA+4+IB] = -1;
+			    if(nanowire->open_system){
+			        Layer_Matrix[SLM*IA+4+IB] = -1;
+			    }else{
+			        Layer_Matrix[SLM*IA+4+IB] = 0;
+			    }
                         }
 
 			for(ib=0;ib<NB;ib++){
@@ -3304,7 +3754,11 @@ void WireGenerator::cut_boundary_slab(WireStructure* nanowire)
                         Boundary[i]->NC = Boundary[i]->NC+1;
                         Boundary[i]->UNN[SLM*neighbor+4+neigh_ib] = -1;
                         if(IA<=Smax[0]){
-                            Layer_Matrix[SLM*(neighbor+Sshift)+4+neigh_ib] = -1;
+			    if(nanowire->open_system){
+			        Layer_Matrix[SLM*(neighbor+Sshift)+4+neigh_ib] = -1;
+			    }else{
+			        Layer_Matrix[SLM*(neighbor+Sshift)+4+neigh_ib] = 0;
+			    }
                         }
                     }
                 }
@@ -3368,7 +3822,7 @@ void WireGenerator::update_boundary_slab(WireStructure* nanowire)
 
 /************************************************************************************************/
 
-void WireGenerator::cut_layer()
+void WireGenerator::cut_layer(WireStructure* nanowire)
 {
     int IL,IA,IB,Lshift;
 
@@ -3434,9 +3888,11 @@ void WireGenerator::cut_layer()
                                                          UNNm[SLM*(IA-Smin[0])+4+IB]-1)+3]);
                         Enn[IL]->NC = Enn[IL]->NC+1;
 
-                        Neigh_Matrix[(NB+1)*IA+1+IB] = \
-                            Round(Boundary[0]->UNN[SLM*Round(Boundary[0]->\
-                                                           UNNm[SLM*(IA-Smin[0])+4+IB]-1)+3]);
+			if(nanowire->open_system){
+			    Neigh_Matrix[(NB+1)*IA+1+IB] =\
+			      Round(Boundary[0]->UNN[SLM*Round(Boundary[0]-> \
+							       UNNm[SLM*(IA-Smin[0])+4+IB]-1)+3]);
+			}
                     }
                 }
                 if(IA>=Smin[NSlab-1]){
@@ -3448,10 +3904,12 @@ void WireGenerator::cut_layer()
                                                              4+IB]-1)+3]);
                         Enn[IL]->NC = Enn[IL]->NC+1;
 
-                        Neigh_Matrix[(NB+1)*IA+1+IB] = \
-                            Round(Boundary[1]->UNN[SLM*Round(Boundary[1]->\
-                                                           UNNp[SLM*(IA-Smin[NSlab-1])+\
-                                                               4+IB]-1)+3]);
+			if(nanowire->open_system){
+			    Neigh_Matrix[(NB+1)*IA+1+IB] =\
+			      Round(Boundary[1]->UNN[SLM*Round(Boundary[1]-> \
+							       UNNp[SLM*(IA-Smin[NSlab-1])+ \
+								    4+IB]-1)+3]);
+			}
                     }
                 }
             }

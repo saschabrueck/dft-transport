@@ -1,25 +1,23 @@
 #include "Material.H"
-#include <iostream>
-#include <fstream>
-#include <cstring>
-#include <algorithm>
-#include <stdlib.h>
-#include <stdio.h>
-#include <math.h>
 
-Material::Material(const char* pmat_name,double *pmat_binary_x,int pstrain_model,double pTemp)
+Material::Material(const char* pmat_name,const char* ptable_file,int pread_hamiltonian,\
+		   double *pmat_binary_x,int pstrain_model,double pTemp)
 {
 
-    amu          = 1.0/(6.022e26*scale_norm);
-    N3D          = 3;
+    amu              = 1.0/(6.022e26*scale_norm);
+    N3D              = 3;
 
-    strain_model = pstrain_model;
+    read_hamiltonian = pread_hamiltonian;
 
-    Temp         = pTemp;
+    strain_model     = pstrain_model;
 
-    mat_name     = new char[255];
+    Temp             = pTemp;
+
+    mat_name         = new char[255];
+    table_file       = new char[255];
 
     strcpy(mat_name,pmat_name);
+    strcpy(table_file,ptable_file);
 
     c_dcopy(3,pmat_binary_x,1,binary_x,1);
     
@@ -79,6 +77,9 @@ Material::Material(const char* pmat_name,double *pmat_binary_x,int pstrain_model
     if(strcmp(mat_name,"GaSb")==0){
         mat_code = 17;
     }
+    if((strcmp(mat_name,"GaAsSb")==0)||(strcmp(mat_name,"GaAsSb_InP")==0)){
+        mat_code = 18;
+    }
     if(strcmp(mat_name,"AlN")==0){
         mat_code = 20;
     }
@@ -87,6 +88,9 @@ Material::Material(const char* pmat_name,double *pmat_binary_x,int pstrain_model
     }
     if(strcmp(mat_name,"InN")==0){
         mat_code = 22;
+    }
+    if(strcmp(mat_name,"InGaN_GaN_sp3")==0){
+        mat_code = 23;
     }
     if((strcmp(mat_name,"graphene_pz")==0)||(strcmp(mat_name,"carbon_pz")==0)){
         mat_code = 50;
@@ -131,6 +135,39 @@ Material::Material(const char* pmat_name,double *pmat_binary_x,int pstrain_model
     if(strcmp(mat_name,"Si_new")==0){
         mat_code = 200;
     }
+    if(strcmp(mat_name,"Si_InAs")==0){
+        mat_code = 201;
+    }
+    if(strcmp(mat_name,"Ge_InAs")==0){
+        mat_code = 202;
+    }
+    if(strcmp(mat_name,"GeSn")==0){
+        mat_code = 203;
+    }
+    if(strcmp(mat_name,"CdS_CdSe")==0){
+        mat_code = 300;
+    }
+    if(strcmp(mat_name,"ZnS_CdSe")==0){
+        mat_code = 301;
+    }
+    if((strcmp(mat_name,"PbSe")==0)||(strcmp(mat_name,"PbSe_lent")==0)){
+        mat_code = 302;
+    }
+    if(strcmp(mat_name,"PbSe_allan")==0){
+        mat_code = 303;
+    }  
+    if(strcmp(mat_name,"ZnSe_CdSe")==0){
+        mat_code = 304;
+    } 
+    if(strcmp(mat_name,"ZnS_CdS")==0){
+        mat_code = 305;
+    }
+    if((strcmp(mat_name,"PbS")==0)||(strcmp(mat_name,"PbS_lent")==0)){
+        mat_code = 306;
+    }
+    if((strcmp(mat_name,"PbTe")==0)||(strcmp(mat_name,"PbTe_lent")==0)){
+        mat_code = 307;
+    }
         
     TB       = 10;
     sp3d5ss  = 10;
@@ -158,17 +195,21 @@ Material::Material(const char* pmat_name,double *pmat_binary_x,int pstrain_model
 
 Material::~Material()
 {
+
     for(int i=0;i<table_dim;i++){
         delete[] neighbor_table[i];
 	delete[] mid_gap_energy[i];
 	delete[] band_gap_table[i];
     }
+
     for(int i=0;i<2*max(no_anion,no_cation);i++){
         delete[] phiR[i];
 	delete[] phiT[i];
 	delete[] phiZ[i];
     }
+
     delete [] mat_name;
+    delete [] table_file;
     delete [] neighbor_table;
     delete [] mid_gap_energy;
     delete [] band_gap_table;
@@ -369,6 +410,10 @@ void Material::initialize(int psc_dist_dep)
         no_anion  = 1;
 	no_cation = 1;
 	break;
+    case 18:
+        no_anion  = 2;
+	no_cation = 2;
+	break;	
     case 20: 
         no_anion  = 2;
         no_cation = 2;
@@ -380,6 +425,10 @@ void Material::initialize(int psc_dist_dep)
     case 22: 
         no_anion  = 2;
         no_cation = 2;
+        break;
+    case 23: 
+        no_anion  = 2;
+        no_cation = 4;
         break;
     case 50: 
         no_anion  = 1;
@@ -425,6 +474,50 @@ void Material::initialize(int psc_dist_dep)
         no_anion  = 1;
         no_cation = 1;
         break;
+    case 201: 
+        no_anion  = 2;
+        no_cation = 2;
+        break;
+    case 202: 
+        no_anion  = 2;
+        no_cation = 2;
+        break;
+    case 203: 
+        no_anion  = 1;
+        no_cation = 1;
+        break;	
+    case 300:
+        no_anion  = 2;
+        no_cation = 2;
+        break;	
+    case 301:
+        no_anion  = 2;
+        no_cation = 2;
+        break;
+    case 302:
+        no_anion  = 1;
+        no_cation = 1;
+        break;
+    case 303:
+        no_anion  = 1;
+        no_cation = 1;
+        break;
+    case 304:
+        no_anion  = 2;
+        no_cation = 2;
+        break;
+    case 305:
+        no_anion  = 2;
+        no_cation = 2;
+        break;
+    case 306:
+        no_anion  = 1;
+        no_cation = 1;
+        break;
+    case 307:
+        no_anion  = 1;
+        no_cation = 1;
+        break;	
     default:
         F = fopen(mat_name,"r");
 	if(F!=0){
@@ -435,7 +528,7 @@ void Material::initialize(int psc_dist_dep)
 	    exit(0);
 	}
     }	
- 
+
     no_material    = no_anion*no_cation;
     table_dim      = Round(max(2*no_cation,2*(no_anion-1)+1));
     
@@ -579,18 +672,18 @@ void Material::initialize(int psc_dist_dep)
     init_var(r3_pd,no_material);
     init_var(Zeff,no_material);
 
-    init_var(alpha_ph,2*max(no_anion,no_cation));
-    init_var(beta_ph,2*max(no_anion,no_cation));
-    init_var(kappa_ph,2*max(no_anion,no_cation));
-    init_var(tau_ph,2*max(no_anion,no_cation));
-    init_var(gamma_ph,2*max(no_anion,no_cation));
+    init_var(alpha_ph,2*max(no_anion,no_cation));    //unit: eV/m2
+    init_var(beta_ph,2*max(no_anion,no_cation));     //unit: eV/m2
+    init_var(kappa_ph,2*max(no_anion,no_cation));    //unit: eV/m2
+    init_var(tau_ph,2*max(no_anion,no_cation));      //unit: eV/m2
+    init_var(gamma_ph,2*max(no_anion,no_cation));    //unit: eV/m2
 
-    init_var(alphap_ph,2*max(no_anion,no_cation));
-    init_var(betap_ph,2*max(no_anion,no_cation));
-    init_var(taup_ph,2*max(no_anion,no_cation));
-    init_var(delta1p_ph,2*max(no_anion,no_cation));
-    init_var(delta3p_ph,2*max(no_anion,no_cation));
-    init_var(delta4p_ph,2*max(no_anion,no_cation));
+    init_var(alphap_ph,2*max(no_anion,no_cation));   //unit: eV/m3 
+    init_var(betap_ph,2*max(no_anion,no_cation));    //unit: eV/m3 
+    init_var(taup_ph,2*max(no_anion,no_cation));     //unit: eV/m3 
+    init_var(delta1p_ph,2*max(no_anion,no_cation));  //unit: eV/m3 
+    init_var(delta3p_ph,2*max(no_anion,no_cation));  //unit: eV/m3 
+    init_var(delta4p_ph,2*max(no_anion,no_cation));  //unit: eV/m3 
 
     //Sui and Herman, Phys. Rev. B 48, 17938 (1993)
 
@@ -829,29 +922,29 @@ void Material::initialize(int psc_dist_dep)
 	tau_ph[3]            = 5.2;
 	gamma_ph[3]          = 0.0;
 
-	alphap_ph[0]         = -2.3241e12/64.0/1.5*pow(Temp/300.0,0.9);
-	betap_ph[0]          = -1.0388e12/64.0/1.5*pow(Temp/300.0,0.9);
-	taup_ph[0]           = -2.2447e11/64.0/1.5*pow(Temp/300.0,0.9);
-	delta1p_ph[0]        = -2.2300e11/64.0/1.5*pow(Temp/300.0,0.9);
-	delta3p_ph[0]        = 6.3894e11/64.0/1.5*pow(Temp/300.0,0.9);
+	alphap_ph[0]         = -2.3241e12/64.0/1.5*si_temp_dep(Temp);
+	betap_ph[0]          = -1.0388e12/64.0/1.5*si_temp_dep(Temp);
+	taup_ph[0]           = -2.2447e11/64.0/1.5*si_temp_dep(Temp);
+	delta1p_ph[0]        = -2.2300e11/64.0/1.5*si_temp_dep(Temp);
+	delta3p_ph[0]        = 6.3894e11/64.0/1.5*si_temp_dep(Temp);
 
-	alphap_ph[1]         = -2.3241e12/64.0/1.5*pow(Temp/300.0,0.9);
-	betap_ph[1]          = -1.0388e12/64.0/1.5*pow(Temp/300.0,0.9);
-	taup_ph[1]           = -2.2447e11/64.0/1.5*pow(Temp/300.0,0.9);
-	delta1p_ph[1]        = -2.2300e11/64.0/1.5*pow(Temp/300.0,0.9);
-	delta3p_ph[1]        = 6.3894e11/64.0/1.5*pow(Temp/300.0,0.9);
+	alphap_ph[1]         = -2.3241e12/64.0/1.5*si_temp_dep(Temp);
+	betap_ph[1]          = -1.0388e12/64.0/1.5*si_temp_dep(Temp);
+	taup_ph[1]           = -2.2447e11/64.0/1.5*si_temp_dep(Temp);
+	delta1p_ph[1]        = -2.2300e11/64.0/1.5*si_temp_dep(Temp);
+	delta3p_ph[1]        = 6.3894e11/64.0/1.5*si_temp_dep(Temp);
 	
-	alphap_ph[2]         = -2.3241e12/64.0/1.5*pow(Temp/300.0,0.9);
-	betap_ph[2]          = -1.0388e12/64.0/1.5*pow(Temp/300.0,0.9);
-	taup_ph[2]           = -2.2447e11/64.0/1.5*pow(Temp/300.0,0.9);
-	delta1p_ph[2]        = -2.2300e11/64.0/1.5*pow(Temp/300.0,0.9);
-	delta3p_ph[2]        = 6.3894e11/64.0/1.5*pow(Temp/300.0,0.9);
+	alphap_ph[2]         = -2.3241e12/64.0/1.5*si_temp_dep(Temp);
+	betap_ph[2]          = -1.0388e12/64.0/1.5*si_temp_dep(Temp);
+	taup_ph[2]           = -2.2447e11/64.0/1.5*si_temp_dep(Temp);
+	delta1p_ph[2]        = -2.2300e11/64.0/1.5*si_temp_dep(Temp);
+	delta3p_ph[2]        = 6.3894e11/64.0/1.5*si_temp_dep(Temp);
 
-	alphap_ph[3]         = -2.3241e12/64.0/1.5*pow(Temp/300.0,0.9);
-	betap_ph[3]          = -1.0388e12/64.0/1.5*pow(Temp/300.0,0.9);
-	taup_ph[3]           = -2.2447e11/64.0/1.5*pow(Temp/300.0,0.9);
-	delta1p_ph[3]        = -2.2300e11/64.0/1.5*pow(Temp/300.0,0.9);
-	delta3p_ph[3]        = 6.3894e11/64.0/1.5*pow(Temp/300.0,0.9);
+	alphap_ph[3]         = -2.3241e12/64.0/1.5*si_temp_dep(Temp);
+	betap_ph[3]          = -1.0388e12/64.0/1.5*si_temp_dep(Temp);
+	taup_ph[3]           = -2.2447e11/64.0/1.5*si_temp_dep(Temp);
+	delta1p_ph[3]        = -2.2300e11/64.0/1.5*si_temp_dep(Temp);
+	delta3p_ph[3]        = 6.3894e11/64.0/1.5*si_temp_dep(Temp);
 
         break;
 
@@ -1076,8 +1169,8 @@ void Material::initialize(int psc_dist_dep)
         Vpdsa[1]             = -2.47345*binary_x[1]-1.87428*(1-binary_x[1]);
         Vpdpa[1]             = 2.52741*binary_x[1]+2.52926*(1-binary_x[1]);
         Vddsa[1]             = -1.97058*binary_x[1]-1.26996*(1-binary_x[1]);
-        Vddpa[1]             = 1.67733 *binary_x[1]+2.50536*(1-binary_x[1]);
-        Vddda[1]             = -1.58868 *binary_x[1]-0.85174*(1-binary_x[1]);
+        Vddpa[1]             = 1.67733*binary_x[1]+2.50536*(1-binary_x[1]);
+        Vddda[1]             = -1.58868*binary_x[1]-0.85174*(1-binary_x[1]);
 //Strain
 	Csasc[1]             = 0.586960;
         Cstarastarc[1]       = 0.486090;
@@ -1310,17 +1403,17 @@ void Material::initialize(int psc_dist_dep)
 	tau_ph[1]            = 4.95;
 	gamma_ph[1]          = 0.0;
 
-	alphap_ph[0]         = -2.0283e12/64.0;
-	betap_ph[0]          = -5.1097e11/64.0;
-	taup_ph[0]           = -2.6841e11/64.0;
-	delta1p_ph[0]        = -1.6651e10/64.0;
-	delta3p_ph[0]        = 1.1758e11/64.0;
+	alphap_ph[0]         = -2.0283e12/64.0/1.5;
+	betap_ph[0]          = -5.1097e11/64.0/1.5;
+	taup_ph[0]           = -2.6841e11/64.0/1.5;
+	delta1p_ph[0]        = -1.6651e10/64.0/1.5;
+	delta3p_ph[0]        = 1.1758e11/64.0/1.5;
 
-	alphap_ph[1]         = -2.0283e12/64.0;
-	betap_ph[1]          = -5.1097e11/64.0;
-	taup_ph[1]           = -2.6841e11/64.0;
-	delta1p_ph[1]        = -1.6651e10/64.0;
-	delta3p_ph[1]        = 1.1758e11/64.0;
+	alphap_ph[1]         = -2.0283e12/64.0/1.5;
+	betap_ph[1]          = -5.1097e11/64.0/1.5;
+	taup_ph[1]           = -2.6841e11/64.0/1.5;
+	delta1p_ph[1]        = -1.6651e10/64.0/1.5;
+	delta3p_ph[1]        = 1.1758e11/64.0/1.5;
 
         break;
 
@@ -1718,29 +1811,29 @@ void Material::initialize(int psc_dist_dep)
 	tau_ph[3]            = 4.95;
 	gamma_ph[3]          = 0.0;
 	
-	alphap_ph[0]         = -2.3241e12/64.0;
-	betap_ph[0]          = -1.0388e12/64.0;
-	taup_ph[0]           = -2.2447e11/64.0;
-	delta1p_ph[0]        = -2.2300e11/64.0;
-	delta3p_ph[0]        = 6.3894e11/64.0;
+	alphap_ph[0]         = -2.3241e12/64.0/1.5;
+	betap_ph[0]          = -1.0388e12/64.0/1.5;
+	taup_ph[0]           = -2.2447e11/64.0/1.5;
+	delta1p_ph[0]        = -2.2300e11/64.0/1.5;
+	delta3p_ph[0]        = 6.3894e11/64.0/1.5;
 
-	alphap_ph[1]         = -2.3241e12/64.0;
-	betap_ph[1]          = -1.0388e12/64.0;
-	taup_ph[1]           = -2.2447e11/64.0;
-	delta1p_ph[1]        = -2.2300e11/64.0;
-	delta3p_ph[1]        = 6.3894e11/64.0;
+	alphap_ph[1]         = -2.3241e12/64.0/1.5;
+	betap_ph[1]          = -1.0388e12/64.0/1.5;
+	taup_ph[1]           = -2.2447e11/64.0/1.5;
+	delta1p_ph[1]        = -2.2300e11/64.0/1.5;
+	delta3p_ph[1]        = 6.3894e11/64.0/1.5;
 
-	alphap_ph[2]         = -2.0283e12/64.0;
-	betap_ph[2]          = -5.1097e11/64.0;
-	taup_ph[2]           = -2.6841e11/64.0;
-	delta1p_ph[2]        = -1.6651e10/64.0;
-	delta3p_ph[2]        = 1.1758e11/64.0;
+	alphap_ph[2]         = -2.0283e12/64.0/1.5;
+	betap_ph[2]          = -5.1097e11/64.0/1.5;
+	taup_ph[2]           = -2.6841e11/64.0/1.5;
+	delta1p_ph[2]        = -1.6651e10/64.0/1.5;
+	delta3p_ph[2]        = 1.1758e11/64.0/1.5;
 
-	alphap_ph[3]         = -2.0283e12/64.0;
-	betap_ph[3]          = -5.1097e11/64.0;
-	taup_ph[3]           = -2.6841e11/64.0;
-	delta1p_ph[3]        = -1.6651e10/64.0;
-	delta3p_ph[3]        = 1.1758e11/64.0;
+	alphap_ph[3]         = -2.0283e12/64.0/1.5;
+	betap_ph[3]          = -5.1097e11/64.0/1.5;
+	taup_ph[3]           = -2.6841e11/64.0/1.5;
+	delta1p_ph[3]        = -1.6651e10/64.0/1.5;
+	delta3p_ph[3]        = 1.1758e11/64.0/1.5;
 
         break;
 
@@ -4175,6 +4268,445 @@ void Material::initialize(int psc_dist_dep)
         
         break;
 
+    case 18:  // GaAs1-xSbx_InP
+
+        Eg                   = 1.1;       //average value
+        ECmin                = 1.4;
+        EVmax                = 0.35;
+
+	// Strain constants
+        alpha                = 0.0;
+        beta                 = 0.0;
+        ideal_a0             = 0.609593*binary_x[0]+0.565325*(1.0-binary_x[0]);
+		
+//Anion 1 (As1-xSbx) and from anion 1 to cation 1 (Ga)
+        Esa[0]               = -5.98375*binary_x[0]-(1.0-binary_x[0])*5.5004-binary_x[0]*(1.0-binary_x[0])*0.3742;
+        Epa[0]               = 4.676303*binary_x[0]+(1.0-binary_x[0])*4.1511+binary_x[0]*(1.0-binary_x[0])*1.0358;
+        Estara[0]            = 15.604254*binary_x[0]+(1.0-binary_x[0])*19.7106-binary_x[0]*(1.0-binary_x[0])*1.9880;
+        Eda12[0]             = 13.690765*binary_x[0]+(1.0-binary_x[0])*13.0317-binary_x[0]*(1.0-binary_x[0])*0.7146;
+	Eda15[0]             = 13.690765*binary_x[0]+(1.0-binary_x[0])*13.0317-binary_x[0]*(1.0-binary_x[0])*0.7146;
+        lambdaa[0]           = 0.419280*binary_x[0]+(1.0-binary_x[0])*0.1723-binary_x[0]*(1.0-binary_x[0])*0.1385;     //(Delta/3)
+        Vsssa[0]             = -1.292943*binary_x[0]-(1.0-binary_x[0])*1.6451+binary_x[0]*(1.0-binary_x[0])*0.5674;
+        Vstarstarsa[0]       = -5.190687*binary_x[0]-(1.0-binary_x[0])*3.6772-binary_x[0]*(1.0-binary_x[0])*0.7256;
+        Vsstarsa[0]          = -2.646522*binary_x[0]-(1.0-binary_x[0])*1.3149-binary_x[0]*(1.0-binary_x[0])*2.5271;
+        Vspsa[0]             = 3.001255*binary_x[0]+(1.0-binary_x[0])*2.6649+binary_x[0]*(1.0-binary_x[0])*0.3263;
+        Vstarpsa[0]          = 3.814514*binary_x[0]+(1.0-binary_x[0])*1.9765+binary_x[0]*(1.0-binary_x[0])*1.7584;
+        Vsdsa[0]             = -1.604796*binary_x[0]-(1.0-binary_x[0])*2.5836+binary_x[0]*(1.0-binary_x[0])*1.8166;
+        Vstardsa[0]          = -1.992665*binary_x[0]-(1.0-binary_x[0])*0.6282+binary_x[0]*(1.0-binary_x[0])*2.0532;
+        Vppsa[0]             = 4.595779*binary_x[0]+(1.0-binary_x[0])*4.1508-binary_x[0]*(1.0-binary_x[0])*0.4680;
+        Vpppa[0]             = -1.424393*binary_x[0]-(1.0-binary_x[0])*1.4274+binary_x[0]*(1.0-binary_x[0])*0.0029;
+        Vpdsa[0]             = -1.312547*binary_x[0]-(1.0-binary_x[0])*1.8743+binary_x[0]*(1.0-binary_x[0])*0.0677;
+        Vpdpa[0]             = 1.653695*binary_x[0]+(1.0-binary_x[0])*2.5293-binary_x[0]*(1.0-binary_x[0])*0.6754;
+        Vddsa[0]             = -0.444050*binary_x[0]-(1.0-binary_x[0])*1.2700-binary_x[0]*(1.0-binary_x[0])*1.6485;
+        Vddpa[0]             = 2.170088*binary_x[0]+(1.0-binary_x[0])*2.5054+binary_x[0]*(1.0-binary_x[0])*0.2600;
+        Vddda[0]             = -1.235843*binary_x[0]-(1.0-binary_x[0])*0.8517-binary_x[0]*(1.0-binary_x[0])*0.3297;
+//Strain
+        Csasc[0]             = 0.0;
+        Cstarastarc[0]       = 0.0;
+        Csastarc[0]          = 0.0;
+        Csapc[0]             = 0.0;
+        Cstarapc[0]          = 0.0;
+        Csadc[0]             = 0.0;
+        Cstaradc[0]          = 0.0;
+        Cpapc[0]             = 0.0;
+        Cpadc[0]             = 0.0;
+        Cdadc[0]             = 0.0;
+
+//Cation 1 (Ga) and from cation 1 to anion 1 (As1-xSbx)
+        Esc[0]               = -0.499224*binary_x[0]-(1.0-binary_x[0])*0.2412+binary_x[0]*(1.0-binary_x[0])*0.5151;
+        Epc[0]               = 7.147250*binary_x[0]+(1.0-binary_x[0])*6.7078+binary_x[0]*(1.0-binary_x[0])*0.6607;
+        Estarc[0]            = 20.849355*binary_x[0]+(1.0-binary_x[0])*22.6635-binary_x[0]*(1.0-binary_x[0])*1.5480;
+        Edc12[0]             = 9.297686*binary_x[0]+(1.0-binary_x[0])*12.7485-binary_x[0]*(1.0-binary_x[0])*0.0503;
+	Edc15[0]             = 9.297686*binary_x[0]+(1.0-binary_x[0])*12.7485-binary_x[0]*(1.0-binary_x[0])*0.0503;
+        lambdac[0]           = 0.170873*binary_x[0]+(1.0-binary_x[0])*0.0218+binary_x[0]*(1.0-binary_x[0])*0.0200;     //(Delta/3)
+        Vsssc[0]             = -1.292943*binary_x[0]-(1.0-binary_x[0])*1.6451+binary_x[0]*(1.0-binary_x[0])*0.5674;
+        Vstarstarsc[0]       = -5.190687*binary_x[0]-(1.0-binary_x[0])*3.6772-binary_x[0]*(1.0-binary_x[0])*0.7256;
+        Vsstarsc[0]          = -1.056315*binary_x[0]-(1.0-binary_x[0])*2.2078+binary_x[0]*(1.0-binary_x[0])*0.6517;
+        Vspsc[0]             = 2.517191*binary_x[0]+(1.0-binary_x[0])*2.9603-binary_x[0]*(1.0-binary_x[0])*0.8777;
+        Vstarpsc[0]          = 2.326126*binary_x[0]+(1.0-binary_x[0])*1.0275+binary_x[0]*(1.0-binary_x[0])*2.5967;
+        Vsdsc[0]             = -2.778422*binary_x[0]-(1.0-binary_x[0])*2.3206+binary_x[0]*(1.0-binary_x[0])*0.8726;
+        Vstardsc[0]          = -1.075569*binary_x[0]-(1.0-binary_x[0])*0.1332+binary_x[0]*(1.0-binary_x[0])*0.0035;
+        Vppsc[0]             = 4.595779*binary_x[0]+(1.0-binary_x[0])*4.1508-binary_x[0]*(1.0-binary_x[0])*0.4680;
+        Vpppc[0]             = -1.424393*binary_x[0]-(1.0-binary_x[0])*1.4274+binary_x[0]*(1.0-binary_x[0])*0.0029;
+        Vpdsc[0]             = -2.244886*binary_x[0]-(1.0-binary_x[0])*1.8896-binary_x[0]*(1.0-binary_x[0])*0.5319;
+        Vpdpc[0]             = 2.411281*binary_x[0]+(1.0-binary_x[0])*2.5491-binary_x[0]*(1.0-binary_x[0])*0.2721;
+        Vddsc[0]             = -0.444050*binary_x[0]-(1.0-binary_x[0])*1.2700-binary_x[0]*(1.0-binary_x[0])*1.6485;
+        Vddpc[0]             = 2.170088*binary_x[0]+(1.0-binary_x[0])*2.5054+binary_x[0]*(1.0-binary_x[0])*0.2600;
+        Vdddc[0]             = -1.235843*binary_x[0]-(1.0-binary_x[0])*0.8517-binary_x[0]*(1.0-binary_x[0])*0.3297;
+//Strain
+        Cscsa[0]             = 0.0;
+        Cstarcstara[0]       = 0.0;
+        Cscstara[0]          = 0.0;
+        Cscpa[0]             = 0.0;
+        Cstarcpa[0]          = 0.0;
+        Cscda[0]             = 0.0;
+        Cstarcda[0]          = 0.0;
+        Cpcpa[0]             = 0.0;
+        Cpcda[0]             = 0.0;
+        Cdcda[0]             = 0.0;
+	
+	/*
+//Anion 1 (As1-xSbx) and from anion 1 to cation 1 (Ga)
+        Esa[0]               = -5.9347*binary_x[0]-(1.0-binary_x[0])*5.5004+binary_x[0]*(1.0-binary_x[0])*0.1432-0.05;
+        Epa[0]               = 4.5631*binary_x[0]+(1.0-binary_x[0])*4.1511+binary_x[0]*(1.0-binary_x[0])*0.8237-0.05;
+        Estara[0]            = 15.6504*binary_x[0]+(1.0-binary_x[0])*19.7106-binary_x[0]*(1.0-binary_x[0])*1.1573-0.05;
+        Eda12[0]             = 13.7494*binary_x[0]+(1.0-binary_x[0])*13.0317-binary_x[0]*(1.0-binary_x[0])*1.3500-0.05;
+	Eda15[0]             = 13.7494*binary_x[0]+(1.0-binary_x[0])*13.0317-binary_x[0]*(1.0-binary_x[0])*1.3500-0.05;
+        lambdaa[0]           = 0.5058*binary_x[0]+(1.0-binary_x[0])*0.1723-binary_x[0]*(1.0-binary_x[0])*0.1551;     //(Delta/3)
+        Vsssa[0]             = -1.3785*binary_x[0]-(1.0-binary_x[0])*1.6451+binary_x[0]*(1.0-binary_x[0])*0.0445;
+        Vstarstarsa[0]       = -4.7498*binary_x[0]-(1.0-binary_x[0])*3.6772+binary_x[0]*(1.0-binary_x[0])*0.9098;
+        Vsstarsa[0]          = -2.9007*binary_x[0]-(1.0-binary_x[0])*1.3149-binary_x[0]*(1.0-binary_x[0])*0.6073;
+        Vspsa[0]             = 3.0211*binary_x[0]+(1.0-binary_x[0])*2.6649-binary_x[0]*(1.0-binary_x[0])*0.7011;
+        Vstarpsa[0]          = 4.2515*binary_x[0]+(1.0-binary_x[0])*1.9765+binary_x[0]*(1.0-binary_x[0])*1.5947;
+        Vsdsa[0]             = -1.5993*binary_x[0]-(1.0-binary_x[0])*2.5836+binary_x[0]*(1.0-binary_x[0])*1.9047;
+        Vstardsa[0]          = -1.9473*binary_x[0]-(1.0-binary_x[0])*0.6282+binary_x[0]*(1.0-binary_x[0])*2.3217;
+        Vppsa[0]             = 4.6383*binary_x[0]+(1.0-binary_x[0])*4.1508-binary_x[0]*(1.0-binary_x[0])*0.9746;
+        Vpppa[0]             = -1.6233*binary_x[0]-(1.0-binary_x[0])*1.4274+binary_x[0]*(1.0-binary_x[0])*0.3018;
+        Vpdsa[0]             = -1.3786*binary_x[0]-(1.0-binary_x[0])*1.8743+binary_x[0]*(1.0-binary_x[0])*0.1315;
+        Vpdpa[0]             = 1.6725*binary_x[0]+(1.0-binary_x[0])*2.5293-binary_x[0]*(1.0-binary_x[0])*0.7371;
+        Vddsa[0]             = -0.6827*binary_x[0]-(1.0-binary_x[0])*1.2700-binary_x[0]*(1.0-binary_x[0])*1.1746;
+        Vddpa[0]             = 1.7817*binary_x[0]+(1.0-binary_x[0])*2.5054+binary_x[0]*(1.0-binary_x[0])*0.3039;
+        Vddda[0]             = -1.7339*binary_x[0]-(1.0-binary_x[0])*0.8517+binary_x[0]*(1.0-binary_x[0])*0.5032;
+//Strain
+        Csasc[0]             = 0.0;
+        Cstarastarc[0]       = 0.0;
+        Csastarc[0]          = 0.0;
+        Csapc[0]             = 0.0;
+        Cstarapc[0]          = 0.0;
+        Csadc[0]             = 0.0;
+        Cstaradc[0]          = 0.0;
+        Cpapc[0]             = 0.0;
+        Cpadc[0]             = 0.0;
+        Cdadc[0]             = 0.0;
+
+//Cation 1 (Ga) and from cation 1 to anion 1 (As1-xSbx)
+        Esc[0]               = -0.3817*binary_x[0]-(1.0-binary_x[0])*0.2412+binary_x[0]*(1.0-binary_x[0])*0.0761-0.05;
+        Epc[0]               = 7.3256*binary_x[0]+(1.0-binary_x[0])*6.7078+binary_x[0]*(1.0-binary_x[0])*0.1994-0.05;
+        Estarc[0]            = 20.9326*binary_x[0]+(1.0-binary_x[0])*22.6635-binary_x[0]*(1.0-binary_x[0])*0.9210-0.05;
+        Edc12[0]             = 9.3054*binary_x[0]+(1.0-binary_x[0])*12.7485-binary_x[0]*(1.0-binary_x[0])*1.0257-0.05;
+	Edc15[0]             = 9.3054*binary_x[0]+(1.0-binary_x[0])*12.7485-binary_x[0]*(1.0-binary_x[0])*1.0257-0.05;
+        lambdac[0]           = 0.0100*binary_x[0]+(1.0-binary_x[0])*0.0218+binary_x[0]*(1.0-binary_x[0])*0.0006;     //(Delta/3)
+        Vsssc[0]             = -1.3785*binary_x[0]-(1.0-binary_x[0])*1.6451+binary_x[0]*(1.0-binary_x[0])*0.0445;
+        Vstarstarsc[0]       = -4.7498*binary_x[0]-(1.0-binary_x[0])*3.6772+binary_x[0]*(1.0-binary_x[0])*0.9098;
+        Vsstarsc[0]          = -1.3612*binary_x[0]-(1.0-binary_x[0])*2.2078-binary_x[0]*(1.0-binary_x[0])*0.0861;
+        Vspsc[0]             = 2.9025*binary_x[0]+(1.0-binary_x[0])*2.9603-binary_x[0]*(1.0-binary_x[0])*0.1142;
+        Vstarpsc[0]          = 2.7645*binary_x[0]+(1.0-binary_x[0])*1.0275+binary_x[0]*(1.0-binary_x[0])*3.4719;
+        Vsdsc[0]             = -2.8089*binary_x[0]-(1.0-binary_x[0])*2.3206+binary_x[0]*(1.0-binary_x[0])*0.2994;
+        Vstardsc[0]          = -0.8694*binary_x[0]-(1.0-binary_x[0])*0.1332-binary_x[0]*(1.0-binary_x[0])*0.6483;
+        Vppsc[0]             = 4.6383*binary_x[0]+(1.0-binary_x[0])*4.1508-binary_x[0]*(1.0-binary_x[0])*0.9746;
+        Vpppc[0]             = -1.6233*binary_x[0]-(1.0-binary_x[0])*1.4274+binary_x[0]*(1.0-binary_x[0])*0.3018;
+        Vpdsc[0]             = -2.3910*binary_x[0]-(1.0-binary_x[0])*1.8896-binary_x[0]*(1.0-binary_x[0])*0.8707;
+        Vpdpc[0]             = 2.0636*binary_x[0]+(1.0-binary_x[0])*2.5491-binary_x[0]*(1.0-binary_x[0])*0.4172;
+        Vddsc[0]             = -0.6827*binary_x[0]-(1.0-binary_x[0])*1.2700-binary_x[0]*(1.0-binary_x[0])*1.1746;
+        Vddpc[0]             = 1.7817*binary_x[0]+(1.0-binary_x[0])*2.5054+binary_x[0]*(1.0-binary_x[0])*0.3039;
+        Vdddc[0]             = -1.7339*binary_x[0]-(1.0-binary_x[0])*0.8517+binary_x[0]*(1.0-binary_x[0])*0.5032;
+//Strain
+        Cscsa[0]             = 0.0;
+        Cstarcstara[0]       = 0.0;
+        Cscstara[0]          = 0.0;
+        Cscpa[0]             = 0.0;
+        Cstarcpa[0]          = 0.0;
+        Cscda[0]             = 0.0;
+        Cstarcda[0]          = 0.0;
+        Cpcpa[0]             = 0.0;
+        Cpcda[0]             = 0.0;
+        Cdcda[0]             = 0.0;
+	*/
+        eta_sss[0]           = 0.0;
+        eta_sstars[0]        = 0.0;
+        eta_starstars[0]     = 0.0;
+        eta_sps[0]           = 0.0;
+        eta_starps[0]        = 0.0;
+        eta_sds[0]           = 0.0;
+        eta_stards[0]        = 0.0;
+        eta_pps[0]           = 0.0;
+        eta_ppp[0]           = 0.0;
+        eta_pds[0]           = 0.0;
+        eta_pdp[0]           = 0.0;
+        eta_dds[0]           = 0.0;
+        eta_ddp[0]           = 0.0;
+        eta_ddd[0]           = 0.0;
+
+        Eshift[0]            = 27;
+
+        bond_length[0]       = (0.609593*binary_x[0]+(1.0-binary_x[0])*0.565325)*sqrt(3.0)/4.0;
+	
+//Anion 2 (P) and from anion 2 to cation 2 (In)
+        Esa[1]               = -5.2547-0.07;
+        Epa[1]               = 3.3746-0.07;
+        Estara[1]            = 18.3565-0.07;
+        Eda12[1]             = 12.2705-0.07;
+	Eda15[1]             = 12.2705-0.07;
+        lambdaa[1]           = 0.0101;     //(Delta/3)
+        Vsssa[1]             = -1.4323;
+        Vstarstarsa[1]       = -3.8585;
+        Vsstarsa[1]          = -1.3044;
+        Vspsa[1]             = 2.1263;
+        Vstarpsa[1]          = 2.7297;
+        Vsdsa[1]             = -2.3166;
+        Vstardsa[1]          = -0.7714;
+        Vppsa[1]             = 4.0442;
+        Vpppa[1]             = -1.1832;
+        Vpdsa[1]             = -1.8787;
+        Vpdpa[1]             = 1.5386;
+        Vddsa[1]             = -1.2634;
+        Vddpa[1]             = 2.4337;
+        Vddda[1]             = -1.4623;
+//Strain
+        Csasc[1]             = 0.0;
+        Cstarastarc[1]       = 0.0;
+        Csastarc[1]          = 0.0;
+        Csapc[1]             = 0.0;
+        Cstarapc[1]          = 0.0;
+        Csadc[1]             = 0.0;
+        Cstaradc[1]          = 0.0;
+        Cpapc[1]             = 0.0;
+        Cpadc[1]             = 0.0;
+        Cdadc[1]             = 0.0;
+
+//Cation 2 (In) and from cation 2 to anion 1 (P)
+        Esc[1]               = 0.4163-0.07;
+        Epc[1]               = 6.7454-0.07;
+        Estarc[1]            = 16.7557-0.07;
+        Edc12[1]             = 12.6515-0.07;
+	Edc15[1]             = 12.6515-0.07;
+        lambdac[1]           = 0.1412;     //(Delta/3)
+        Vsssc[1]             = -1.4323;
+        Vstarstarsc[1]       = -3.8585;
+        Vsstarsc[1]          = -1.8401;
+        Vspsc[1]             = 2.5563;
+        Vstarpsc[1]          = 2.1886;
+        Vsdsc[1]             = -2.1503;
+        Vstardsc[1]          = -0.5848;
+        Vppsc[1]             = 4.0442;
+        Vpppc[1]             = -1.1832;
+        Vpdsc[1]             = -1.8641;
+        Vpdpc[1]             = 1.7515;
+        Vddsc[1]             = -1.2634;
+        Vddpc[1]             = 2.4337;
+        Vdddc[1]             = -1.4623;
+//Strain
+        Cscsa[1]             = 0.0;
+        Cstarcstara[1]       = 0.0;
+        Cscstara[1]          = 0.0;
+        Cscpa[1]             = 0.0;
+        Cstarcpa[1]          = 0.0;
+        Cscda[1]             = 0.0;
+        Cstarcda[1]          = 0.0;
+        Cpcpa[1]             = 0.0;
+        Cpcda[1]             = 0.0;
+        Cdcda[1]             = 0.0;
+
+        eta_sss[1]           = 0.0;
+        eta_sstars[1]        = 0.0;
+        eta_starstars[1]     = 0.0;
+        eta_sps[1]           = 0.0;
+        eta_starps[1]        = 0.0;
+        eta_sds[1]           = 0.0;
+        eta_stards[1]        = 0.0;
+        eta_pps[1]           = 0.0;
+        eta_ppp[1]           = 0.0;
+        eta_pds[1]           = 0.0;
+        eta_pdp[1]           = 0.0;
+        eta_dds[1]           = 0.0;
+        eta_ddp[1]           = 0.0;
+        eta_ddd[1]           = 0.0;
+
+        Eshift[1]            = 27.0;
+
+        bond_length[1]       = 0.58687*sqrt(3.0)/4.0;
+
+//Anion 1 (AsSb) and from anion 1 to cation 2 (In)
+        Esa[2]               = Esa[0];
+        Epa[2]               = Epa[0];
+        Estara[2]            = Estara[0];
+        Eda12[2]             = Eda12[0];
+	Eda15[2]             = Eda15[0];
+        lambdaa[2]           = lambdaa[0];     //(Delta/3)
+        Vsssa[2]             = (Vsssa[0]+Vsssa[1])/2.0;
+        Vstarstarsa[2]       = (Vstarstarsa[0]+Vstarstarsa[1])/2.0;
+        Vsstarsa[2]          = (Vsstarsa[0]+Vsstarsa[1])/2.0;
+        Vspsa[2]             = (Vspsa[0]+Vspsa[1])/2.0;
+        Vstarpsa[2]          = (Vstarpsa[0]+Vstarpsa[1])/2.0;
+        Vsdsa[2]             = (Vsdsa[0]+Vsdsa[1])/2.0;
+        Vstardsa[2]          = (Vstardsa[0]+Vstardsa[1])/2.0;
+        Vppsa[2]             = (Vppsa[0]+Vppsa[1])/2.0;
+        Vpppa[2]             = (Vpppa[0]+Vpppa[1])/2.0;
+        Vpdsa[2]             = (Vpdsa[0]+Vpdsa[1])/2.0;
+        Vpdpa[2]             = (Vpdpa[0]+Vpdpa[1])/2.0;
+        Vddsa[2]             = (Vddsa[0]+Vddsa[1])/2.0;
+        Vddpa[2]             = (Vddpa[0]+Vddpa[1])/2.0;
+        Vddda[2]             = (Vddda[0]+Vddda[1])/2.0;
+//Strain
+        Csasc[2]             = 0.0;
+        Cstarastarc[2]       = 0.0;
+        Csastarc[2]          = 0.0;
+        Csapc[2]             = 0.0;
+        Cstarapc[2]          = 0.0;
+        Csadc[2]             = 0.0;
+        Cstaradc[2]          = 0.0;
+        Cpapc[2]             = 0.0;
+        Cpadc[2]             = 0.0;
+        Cdadc[2]             = 0.0;
+
+//Cation 2 (In) and from cation 2 to anion 1 (AsSb)
+        Esc[2]               = Esc[1];
+        Epc[2]               = Epc[1];
+        Estarc[2]            = Estarc[1];
+        Edc12[2]             = Edc12[1];
+	Edc15[2]             = Edc15[1];
+        lambdac[2]           = lambdac[1];     //(Delta/3)
+        Vsssc[2]             = (Vsssc[0]+Vsssc[1])/2.0;
+        Vstarstarsc[2]       = (Vstarstarsc[0]+Vstarstarsc[1])/2.0;
+        Vsstarsc[2]          = (Vsstarsc[0]+Vsstarsc[1])/2.0;
+        Vspsc[2]             = (Vspsc[0]+Vspsc[1])/2.0;
+        Vstarpsc[2]          = (Vstarpsc[0]+Vstarpsc[1])/2.0;
+        Vsdsc[2]             = (Vsdsc[0]+Vsdsc[1])/2.0;
+        Vstardsc[2]          = (Vstardsc[0]+Vstardsc[1])/2.0;
+        Vppsc[2]             = (Vppsc[0]+Vppsc[1])/2.0;
+        Vpppc[2]             = (Vpppc[0]+Vpppc[1])/2.0;
+        Vpdsc[2]             = (Vpdsc[0]+Vpdsc[1])/2.0;
+        Vpdpc[2]             = (Vpdpc[0]+Vpdpc[1])/2.0;
+        Vddsc[2]             = (Vddsc[0]+Vddsc[1])/2.0;
+        Vddpc[2]             = (Vddpc[0]+Vddpc[1])/2.0;
+        Vdddc[2]             = (Vdddc[0]+Vdddc[1])/2.0;
+//Strain
+        Cscsa[2]             = 0.0;
+        Cstarcstara[2]       = 0.0;
+        Cscstara[2]          = 0.0;
+        Cscpa[2]             = 0.0;
+        Cstarcpa[2]          = 0.0;
+        Cscda[2]             = 0.0;
+        Cstarcda[2]          = 0.0;
+        Cpcpa[2]             = 0.0;
+        Cpcda[2]             = 0.0;
+        Cdcda[2]             = 0.0;
+
+        eta_sss[2]           = 0.0;
+        eta_sstars[2]        = 0.0;
+        eta_starstars[2]     = 0.0;
+        eta_sps[2]           = 0.0;
+        eta_starps[2]        = 0.0;
+        eta_sds[2]           = 0.0;
+        eta_stards[2]        = 0.0;
+        eta_pps[2]           = 0.0;
+        eta_ppp[2]           = 0.0;
+        eta_pds[2]           = 0.0;
+        eta_pdp[2]           = 0.0;
+        eta_dds[2]           = 0.0;
+        eta_ddp[2]           = 0.0;
+        eta_ddd[2]           = 0.0;
+
+        Eshift[2]            = 27.0;
+
+        bond_length[2]       = 0.58687*sqrt(3.0)/4.0;
+
+//Anion 2 (P) and from anion 2 to cation 1 (Ga)
+        Esa[3]               = Esa[1];
+        Epa[3]               = Epa[1];
+        Estara[3]            = Estara[1];
+        Eda12[3]             = Eda12[1];
+	Eda15[3]             = Eda15[1];
+        lambdaa[3]           = lambdaa[1];     //(Delta/3)
+        Vsssa[3]             = (Vsssa[0]+Vsssa[1])/2.0;
+        Vstarstarsa[3]       = (Vstarstarsa[0]+Vstarstarsa[1])/2.0;
+        Vsstarsa[3]          = (Vsstarsa[0]+Vsstarsa[1])/2.0;
+        Vspsa[3]             = (Vspsa[0]+Vspsa[1])/2.0;
+        Vstarpsa[3]          = (Vstarpsa[0]+Vstarpsa[1])/2.0;
+        Vsdsa[3]             = (Vsdsa[0]+Vsdsa[1])/2.0;
+        Vstardsa[3]          = (Vstardsa[0]+Vstardsa[1])/2.0;
+        Vppsa[3]             = (Vppsa[0]+Vppsa[1])/2.0;
+        Vpppa[3]             = (Vpppa[0]+Vpppa[1])/2.0;
+        Vpdsa[3]             = (Vpdsa[0]+Vpdsa[1])/2.0;
+        Vpdpa[3]             = (Vpdpa[0]+Vpdpa[1])/2.0;
+        Vddsa[3]             = (Vddsa[0]+Vddsa[1])/2.0;
+        Vddpa[3]             = (Vddpa[0]+Vddpa[1])/2.0;
+        Vddda[3]             = (Vddda[0]+Vddda[1])/2.0;
+//Strain
+        Csasc[3]             = 0.0;
+        Cstarastarc[3]       = 0.0;
+        Csastarc[3]          = 0.0;
+        Csapc[3]             = 0.0;
+        Cstarapc[3]          = 0.0;
+        Csadc[3]             = 0.0;
+        Cstaradc[3]          = 0.0;
+        Cpapc[3]             = 0.0;
+        Cpadc[3]             = 0.0;
+        Cdadc[3]             = 0.0;
+
+//Cation 1 (Ga) and from cation 1 to anion 2 (P)
+        Esc[3]               = Esc[0];
+        Epc[3]               = Epc[0];
+        Estarc[3]            = Estarc[0];
+        Edc12[3]             = Edc12[0];
+	Edc15[3]             = Edc15[0];
+        lambdac[3]           = lambdac[0];     //(Delta/3)
+        Vsssc[3]             = (Vsssc[0]+Vsssc[1])/2.0;
+        Vstarstarsc[3]       = (Vstarstarsc[0]+Vstarstarsc[1])/2.0;
+        Vsstarsc[3]          = (Vsstarsc[0]+Vsstarsc[1])/2.0;
+        Vspsc[3]             = (Vspsc[0]+Vspsc[1])/2.0;
+        Vstarpsc[3]          = (Vstarpsc[0]+Vstarpsc[1])/2.0;
+        Vsdsc[3]             = (Vsdsc[0]+Vsdsc[1])/2.0;
+        Vstardsc[3]          = (Vstardsc[0]+Vstardsc[1])/2.0;
+        Vppsc[3]             = (Vppsc[0]+Vppsc[1])/2.0;
+        Vpppc[3]             = (Vpppc[0]+Vpppc[1])/2.0;
+        Vpdsc[3]             = (Vpdsc[0]+Vpdsc[1])/2.0;
+        Vpdpc[3]             = (Vpdpc[0]+Vpdpc[1])/2.0;
+        Vddsc[3]             = (Vddsc[0]+Vddsc[1])/2.0;
+        Vddpc[3]             = (Vddpc[0]+Vddpc[1])/2.0;
+        Vdddc[3]             = (Vdddc[0]+Vdddc[1])/2.0;
+//Strain
+        Cscsa[3]             = 0.0;
+        Cstarcstara[3]       = 0.0;
+        Cscstara[3]          = 0.0;
+        Cscpa[3]             = 0.0;
+        Cstarcpa[3]          = 0.0;
+        Cscda[3]             = 0.0;
+        Cstarcda[3]          = 0.0;
+        Cpcpa[3]             = 0.0;
+        Cpcda[3]             = 0.0;
+        Cdcda[3]             = 0.0;
+
+        eta_sss[3]           = 0.0;
+        eta_sstars[3]        = 0.0;
+        eta_starstars[3]     = 0.0;
+        eta_sps[3]           = 0.0;
+        eta_starps[3]        = 0.0;
+        eta_sds[3]           = 0.0;
+        eta_stards[3]        = 0.0;
+        eta_pps[3]           = 0.0;
+        eta_ppp[3]           = 0.0;
+        eta_pds[3]           = 0.0;
+        eta_pdp[3]           = 0.0;
+        eta_dds[3]           = 0.0;
+        eta_ddp[3]           = 0.0;
+        eta_ddd[3]           = 0.0;
+
+        Eshift[3]            = 27.0;
+
+        bond_length[3]       = 0.58687*sqrt(3.0)/4.0;
+
+	neighbor_table[0][1] = 11;
+        neighbor_table[1][0] = 12;
+        neighbor_table[2][3] = 21;
+        neighbor_table[3][2] = 22;
+	neighbor_table[0][3] = 31;
+        neighbor_table[3][0] = 32;
+        neighbor_table[2][1] = 41;
+        neighbor_table[1][2] = 42;
+
+	no_orb[0]            = sp3d5ss;   //As1-xSbx anion
+	no_orb[1]            = sp3d5ss;   //Ga cation
+	no_orb[2]            = sp3d5ss;   //P anion
+	no_orb[3]            = sp3d5ss;   //In cation
+	
+	atomic_mass[0]       = (121.760*binary_x[0]+(1.0-binary_x[0])*74.9216)*amu;  //As1-xSbx
+	atomic_mass[1]       = 69.7230*amu;  //Ga
+	atomic_mass[2]       = 30.9737*amu;  //P
+	atomic_mass[3]       = 114.818*amu;  //In
+       
+        break;	
+
     case 21:  // GaN_AlGaN
 
         Eg                   = 3.53;
@@ -4272,11 +4804,11 @@ void Material::initialize(int psc_dist_dep)
         bond_length[0]       = 0.1954;
 
  //Anion N and from anion N to cation AlxGa1-x
-        Esa[1]               = (-8.9717-0.1512+0.7)*binary_x[1]-(8.9379+0.0554)*(1-binary_x[1]);
-        Epa[1]               = (2.1679-0.1512+0.7)*binary_x[1]+(2.0626-0.0554)*(1-binary_x[1]);
-        Estara[1]            = (28.8253-0.1512+0.7)*binary_x[1]+(28.1824-0.0554)*(1-binary_x[1]);
-        Eda12[1]             = (30.4332-0.1512+0.7)*binary_x[1]+(29.4098-0.0554)*(1-binary_x[1]);
-	Eda15[1]             = (29.5599-0.1512+0.7)*binary_x[1]+(27.9433-0.0554)*(1-binary_x[1]);
+        Esa[1]               = (-8.9717-0.1512-1.0)*binary_x[1]-(8.9379+0.0554)*(1-binary_x[1]);
+        Epa[1]               = (2.1679-0.1512-1.0)*binary_x[1]+(2.0626-0.0554)*(1-binary_x[1]);
+        Estara[1]            = (28.8253-0.1512-1.0)*binary_x[1]+(28.1824-0.0554)*(1-binary_x[1]);
+        Eda12[1]             = (30.4332-0.1512-1.0)*binary_x[1]+(29.4098-0.0554)*(1-binary_x[1]);
+	Eda15[1]             = (29.5599-0.1512-1.0)*binary_x[1]+(27.9433-0.0554)*(1-binary_x[1]);
         lambdaa[1]           = 0.0035*binary_x[1]+0.0035*(1-binary_x[1]);     //(Delta/3)
         Vsssa[1]             = -2.6261*binary_x[1]-2.5495*(1-binary_x[1]);
         Vstarstarsa[1]       = -4.4940*binary_x[1]-3.9997*(1-binary_x[1]);
@@ -4305,11 +4837,11 @@ void Material::initialize(int psc_dist_dep)
         Cdadc[1]             = 0.0;
 
 //Cation AlxGa1-x and from cation Ga to anion N
-        Esc[1]               = (6.0728-0.1512+0.7)*binary_x[1]+(4.7501-0.0554)*(1-binary_x[1]);
-        Epc[1]               = (11.5368-0.1512+0.7)*binary_x[1]+(11.4501-0.0554)*(1-binary_x[1]);
-        Estarc[1]            = (35.0041-0.1512+0.7)*binary_x[1]+(35.0507-0.0554)*(1-binary_x[1]);
-        Edc12[1]             = (28.6862-0.1512+0.7)*binary_x[1]+(26.9898-0.0554)*(1-binary_x[1]);
-	Edc15[1]             = (29.9039-0.1512+0.7)*binary_x[1]+(28.4088-0.0554)*(1-binary_x[1]);
+        Esc[1]               = (6.0728-0.1512-1.0)*binary_x[1]+(4.7501-0.0554)*(1-binary_x[1]);
+        Epc[1]               = (11.5368-0.1512-1.0)*binary_x[1]+(11.4501-0.0554)*(1-binary_x[1]);
+        Estarc[1]            = (35.0041-0.1512-1.0)*binary_x[1]+(35.0507-0.0554)*(1-binary_x[1]);
+        Edc12[1]             = (28.6862-0.1512-1.0)*binary_x[1]+(26.9898-0.0554)*(1-binary_x[1]);
+	Edc15[1]             = (29.9039-0.1512-1.0)*binary_x[1]+(28.4088-0.0554)*(1-binary_x[1]);
         lambdac[1]           = 0.0070*binary_x[1]+0.0410*(1-binary_x[1]);     //(Delta/3)
         Vsssc[1]             = -2.6261*binary_x[1]-2.5495*(1-binary_x[1]);
         Vstarstarsc[1]       = -4.4940*binary_x[1] -3.9997*(1-binary_x[1]);
@@ -4372,14 +4904,22 @@ void Material::initialize(int psc_dist_dep)
         neighbor_table[7][4] = 22;
 	neighbor_table[6][5] = 21;
         neighbor_table[5][6] = 22;
-	neighbor_table[0][5] = 11;
-        neighbor_table[5][0] = 12;
-	neighbor_table[2][7] = 11;
-        neighbor_table[7][2] = 12;
-	neighbor_table[0][7] = 11;
-        neighbor_table[7][0] = 12;
-	neighbor_table[2][5] = 11;
-        neighbor_table[5][2] = 12;
+	neighbor_table[0][5] = 21;
+        neighbor_table[5][0] = 22;
+	neighbor_table[0][7] = 21;
+        neighbor_table[7][0] = 22;
+	neighbor_table[1][4] = 12;
+        neighbor_table[4][1] = 11;
+	neighbor_table[1][6] = 12;
+        neighbor_table[6][1] = 11;
+	neighbor_table[2][5] = 21;
+        neighbor_table[5][2] = 22;
+	neighbor_table[2][7] = 21;
+        neighbor_table[7][2] = 22;
+	neighbor_table[3][4] = 12;
+        neighbor_table[4][3] = 11;
+	neighbor_table[3][6] = 12;
+        neighbor_table[6][3] = 11;	
 
 	no_orb[0]            = sp3d5ss; //N
 	no_orb[1]            = sp3d5ss; //Ga
@@ -4395,9 +4935,268 @@ void Material::initialize(int psc_dist_dep)
 	atomic_mass[2]       = 14.0067*amu;  //N
 	atomic_mass[3]       = 69.7230*amu;  //Ga
 	atomic_mass[4]       = 14.0067*amu;  //N
-	atomic_mass[5]       = (26.981539*binary_x[0]+69.7230*(1-binary_x[0]))*amu;  //AlxGa1-x
+	atomic_mass[5]       = (26.981539*binary_x[1]+69.7230*(1-binary_x[1]))*amu;  //AlxGa1-x
 	atomic_mass[6]       = 14.0067*amu;  //N
-	atomic_mass[7]       = (26.981539*binary_x[0]+69.7230*(1-binary_x[0]))*amu;  //AlxGa1-x
+	atomic_mass[7]       = (26.981539*binary_x[1]+69.7230*(1-binary_x[1]))*amu;  //AlxGa1-x
+
+        break;
+
+    case 23:  // InGaN_GaN
+
+        Eg                   = 0.7;
+        ECmin                = Eg+0.62;
+        EVmax                = 0.62;
+
+	// Strain constants
+        alpha                = 0.0;
+        beta                 = 0.0;
+        ideal_a0             = 0.0;
+
+	//Vsss               = Vss/4.0;
+	//Vsps               = sqrt(3.0)/4.0*Vsp;
+	//Vpps               = (Vxx+2.0*Vxy)/4.0;
+	//Vppp               = (Vxx-Vxy)/4.0;
+
+ //Anion N and from anion N to cation InxGa1-x
+        Esa[0]               = (-11.92+0.62)*binary_x[0]+(-10.62)*(1-binary_x[0]);
+        Epa1[0]              = (0.49+0.62)*binary_x[0]+(0.82)*(1-binary_x[0]);
+	Epa2[0]              = (0.49+0.62)*binary_x[0]+(0.82)*(1-binary_x[0]);
+	Epa3[0]              = (0.46+0.62)*binary_x[0]+(0.79)*(1-binary_x[0]);
+        Estara[0]            = 0.0;
+        Eda1[0]              = 0.0;
+	Eda2[0]              = 0.0;
+	Eda3[0]              = 0.0;
+	Eda4[0]              = 0.0;
+	Eda5[0]              = 0.0;
+        lambdaa[0]           = 0.0;     //(Delta/3)
+        Vsssa[0]             = ((-1.61)*binary_x[0]+(-5.97)*(1-binary_x[0]))/4.0;
+        Vstarstarsa[0]       = 0.0;
+        Vsstarsa[0]          = 0.0;
+        Vspsa[0]             = sqrt(3.0)*((1.89)*binary_x[0]+(4.09)*(1-binary_x[0]))/4.0;
+        Vstarpsa[0]          = 0.0;
+        Vsdsa[0]             = 0.0;
+        Vstardsa[0]          = 0.0;
+        Vppsa[0]             = ((1.79+2.0*4.83)*binary_x[0]+(2.34+2.0*5.47)*(1-binary_x[0]))/4.0;
+        Vpppa[0]             = ((1.79-4.83)*binary_x[0]+(2.34-5.47)*(1-binary_x[0]))/4.0;
+        Vpdsa[0]             = 0.0;
+        Vpdpa[0]             = 0.0;
+        Vddsa[0]             = 0.0;
+        Vddpa[0]             = 0.0;
+        Vddda[0]             = 0.0;
+//Strain
+        Csasc[0]             = 0.0;
+        Cstarastarc[0]       = 0.0;
+        Csastarc[0]          = 0.0;
+        Csapc[0]             = 0.0;
+        Cstarapc[0]          = 0.0;
+        Csadc[0]             = 0.0;
+        Cstaradc[0]          = 0.0;
+        Cpapc[0]             = 0.0;
+        Cpadc[0]             = 0.0;
+        Cdadc[0]             = 0.0;
+
+//Cation InxGa1-x and from cation InxGa1-x to anion N
+        Esc[0]               = (0.48+0.62)*binary_x[0]+(0.91)*(1-binary_x[0]);
+        Epc1[0]              = (6.53+0.62)*binary_x[0]+(6.68)*(1-binary_x[0]);
+	Epc2[0]              = (6.53+0.62)*binary_x[0]+(6.68)*(1-binary_x[0]);
+	Epc3[0]              = (6.53+0.62)*binary_x[0]+(6.68)*(1-binary_x[0]);
+        Estarc[0]            = 0.0;
+        Edc1[0]              = 0.0;
+	Edc2[0]              = 0.0;
+	Edc3[0]              = 0.0;
+	Edc4[0]              = 0.0;
+	Edc5[0]              = 0.0;
+        lambdac[0]           = 0.0;
+        Vsssc[0]             = ((-1.61)*binary_x[0]+(-5.97)*(1-binary_x[0]))/4.0;
+        Vstarstarsc[0]       = 0.0;
+        Vsstarsc[0]          = 0.0;
+        Vspsc[0]             = sqrt(3.0)*((6.14)*binary_x[0]+(8.67)*(1-binary_x[0]))/4.0;
+        Vstarpsc[0]          = 0.0;
+        Vsdsc[0]             = 0.0;
+        Vstardsc[0]          = 0.0;
+        Vppsc[0]             = ((1.79+2.0*4.83)*binary_x[0]+(2.34+2.0*5.47)*(1-binary_x[0]))/4.0; 
+        Vpppc[0]             = ((1.79-4.83)*binary_x[0]+(2.34-5.47)*(1-binary_x[0]))/4.0;
+        Vpdsc[0]             = 0.0;
+        Vpdpc[0]             = 0.0;
+        Vddsc[0]             = 0.0;
+        Vddpc[0]             = 0.0;
+        Vdddc[0]             = 0.0;
+//Strain
+        Cscsa[0]             = 0.0;
+        Cstarcstara[0]       = 0.0;
+        Cscstara[0]          = 0.0;
+        Cscpa[0]             = 0.0;
+        Cstarcpa[0]          = 0.0;
+        Cscda[0]             = 0.0;
+        Cstarcda[0]          = 0.0;
+        Cpcpa[0]             = 0.0;
+        Cpcda[0]             = 0.0;
+        Cdcda[0]             = 0.0;
+
+        eta_sss[0]           = 0.0;
+        eta_sstars[0]        = 0.0;
+        eta_starstars[0]     = 0.0;
+        eta_sps[0]           = 0.0;
+        eta_starps[0]        = 0.0;
+        eta_sds[0]           = 0.0;
+        eta_stards[0]        = 0.0;
+        eta_pps[0]           = 0.0;
+        eta_ppp[0]           = 0.0;
+        eta_pds[0]           = 0.0;
+        eta_pdp[0]           = 0.0;
+        eta_dds[0]           = 0.0;
+        eta_ddp[0]           = 0.0;
+        eta_ddd[0]           = 0.0;
+
+        Eshift[0]            = 27;
+
+        bond_length[0]       = 2.168*binary_x[0]+0.1954*(1-binary_x[0]);
+
+//Anion N and from anion N to cation Ga
+        Esa[1]               = -10.62;
+        Epa1[1]              = 0.82;
+	Epa2[1]              = 0.82;
+	Epa3[1]              = 0.79;
+        Estara[1]            = 0.0;
+        Eda1[1]              = 0.0;
+	Eda2[1]              = 0.0;
+	Eda3[1]              = 0.0;
+	Eda4[1]              = 0.0;
+	Eda5[1]              = 0.0;
+        lambdaa[1]           = 0.0;     //(Delta/3)
+        Vsssa[1]             = -5.97/4.0;
+        Vstarstarsa[1]       = 0.0;
+        Vsstarsa[1]          = 0.0;
+        Vspsa[1]             = sqrt(3.0)*4.09/4.0;
+        Vstarpsa[1]          = 0.0;
+        Vsdsa[1]             = 0.0;
+        Vstardsa[1]          = 0.0;
+        Vppsa[1]             = (2.34+2.0*5.47)/4.0;
+        Vpppa[1]             = (2.34-5.47)/4.0;
+        Vpdsa[1]             = 0.0;
+        Vpdpa[1]             = 0.0;
+        Vddsa[1]             = 0.0;
+        Vddpa[1]             = 0.0;
+        Vddda[1]             = 0.0;
+//Strain
+        Csasc[1]             = 0.0;
+        Cstarastarc[1]       = 0.0;
+        Csastarc[1]          = 0.0;
+        Csapc[1]             = 0.0;
+        Cstarapc[1]          = 0.0;
+        Csadc[1]             = 0.0;
+        Cstaradc[1]          = 0.0;
+        Cpapc[1]             = 0.0;
+        Cpadc[1]             = 0.0;
+        Cdadc[1]             = 0.0;
+
+//Cation Ga and from cation Ga to anion N
+        Esc[1]               = 0.91;
+        Epc1[1]              = 6.68;
+	Epc2[1]              = 6.68;
+	Epc3[1]              = 6.68;
+        Estarc[1]            = 0.0;
+        Edc1[1]              = 0.0;
+	Edc2[1]              = 0.0;
+	Edc3[1]              = 0.0;
+	Edc4[1]              = 0.0;
+	Edc5[1]              = 0.0;
+        lambdac[1]           = 0.0;     //(Delta/3)
+        Vsssc[1]             = -5.97/4.0;
+        Vstarstarsc[1]       = 0.0;
+        Vsstarsc[1]          = 0.0;
+        Vspsc[1]             = sqrt(3.0)*8.67/4.0;
+        Vstarpsc[1]          = 0.0;
+        Vsdsc[1]             = 0.0;
+        Vstardsc[1]          = 0.0;
+        Vppsc[1]             = (2.34+2.0*5.47)/4.0;
+        Vpppc[1]             = (2.34-5.47)/4.0;
+        Vpdsc[1]             = 0.0;
+        Vpdpc[1]             = 0.0;
+        Vddsc[1]             = 0.0;
+        Vddpc[1]             = 0.0;
+        Vdddc[1]             = 0.0;
+//Strain
+        Cscsa[1]             = 0.0;
+        Cstarcstara[1]       = 0.0;
+        Cscstara[1]          = 0.0;
+        Cscpa[1]             = 0.0;
+        Cstarcpa[1]          = 0.0;
+        Cscda[1]             = 0.0;
+        Cstarcda[1]          = 0.0;
+        Cpcpa[1]             = 0.0;
+        Cpcda[1]             = 0.0;
+        Cdcda[1]             = 0.0;
+
+        eta_sss[1]           = 0.0;
+        eta_sstars[1]        = 0.0;
+        eta_starstars[1]     = 0.0;
+        eta_sps[1]           = 0.0;
+        eta_starps[1]        = 0.0;
+        eta_sds[1]           = 0.0;
+        eta_stards[1]        = 0.0;
+        eta_pps[1]           = 0.0;
+        eta_ppp[1]           = 0.0;
+        eta_pds[1]           = 0.0;
+        eta_pdp[1]           = 0.0;
+        eta_dds[1]           = 0.0;
+        eta_ddp[1]           = 0.0;
+        eta_ddd[1]           = 0.0;
+
+        Eshift[1]            = 27;
+
+        bond_length[1]       = 0.1954;
+
+        neighbor_table[0][1] = 11;
+        neighbor_table[1][0] = 12;
+	neighbor_table[2][3] = 11;
+        neighbor_table[3][2] = 12;
+	neighbor_table[0][3] = 11;
+        neighbor_table[3][0] = 12;
+	neighbor_table[2][1] = 11;
+        neighbor_table[1][2] = 12;
+	neighbor_table[4][5] = 21;
+        neighbor_table[5][4] = 22;
+	neighbor_table[6][7] = 21;
+        neighbor_table[7][6] = 22;
+	neighbor_table[4][7] = 21;
+        neighbor_table[7][4] = 22;
+	neighbor_table[6][5] = 21;
+        neighbor_table[5][6] = 22;
+	neighbor_table[0][5] = 21;
+        neighbor_table[5][0] = 22;
+	neighbor_table[0][7] = 21;
+        neighbor_table[7][0] = 22;
+	neighbor_table[1][4] = 12;
+        neighbor_table[4][1] = 11;
+	neighbor_table[1][6] = 12;
+        neighbor_table[6][1] = 11;
+	neighbor_table[2][5] = 21;
+        neighbor_table[5][2] = 22;
+	neighbor_table[2][7] = 21;
+        neighbor_table[7][2] = 22;
+	neighbor_table[3][4] = 12;
+        neighbor_table[4][3] = 11;
+	neighbor_table[3][6] = 12;
+        neighbor_table[6][3] = 11;	
+
+	no_orb[0]            = sp3; //N
+	no_orb[1]            = sp3; //InGa
+	no_orb[2]            = sp3; //N
+	no_orb[3]            = sp3; //InGa
+	no_orb[4]            = sp3; //N
+	no_orb[5]            = sp3; //Ga
+	no_orb[6]            = sp3; //N
+	no_orb[7]            = sp3; //Ga
+
+	atomic_mass[0]       = 14.0067*amu;  //N
+	atomic_mass[1]       = (114.82*binary_x[0]+69.7230*(1-binary_x[0]))*amu;  //InxGa1-x
+	atomic_mass[2]       = 14.0067*amu;  //N
+	atomic_mass[3]       = (114.82*binary_x[0]+69.7230*(1-binary_x[0]))*amu;  //InxGa1-x
+	atomic_mass[4]       = 14.0067*amu;  //N
+	atomic_mass[5]       = 69.7230*amu;  //Ga
+	atomic_mass[6]       = 14.0067*amu;  //N
+	atomic_mass[7]       = 69.7230*amu;  //Ga
 
         break;
 
@@ -5787,7 +6586,7 @@ void Material::initialize(int psc_dist_dep)
         bond_length[0]       = 0.142;
 
         mod_scaling_fcn      = 1;
-        mu_scal              = 4.6;
+        mu_scal              = 4.33;
 
  	neighbor_table[0][1] = 11;
         neighbor_table[0][3] = 11;
@@ -6490,19 +7289,2396 @@ void Material::initialize(int psc_dist_dep)
 
         break;
 
+    case 201:  // Si-InAs
+
+        Eg                   = 1.13;
+        ECmin                = Eg;
+        EVmax                = 0;
+
+	// Strain constants
+        alpha                = 48.5;
+        beta                 = 13.8;
+        ideal_a0             = 0.543095;
+
+//Anion 1 (Si) and from anion 1 to cation 1 (Si)
+        Esa[0]               = -2.15168;
+        Epa[0]               = 4.22925;
+        Estara[0]            = 19.11650;
+        Eda12[0]             = 13.78950;
+	Eda15[0]             = 13.78950;
+        lambdaa[0]           = 0.01989;     //(Delta/3)
+        Vsssa[0]             = -1.95933;
+        Vstarstarsa[0]       = -4.24135;
+        Vsstarsa[0]          = -1.52230;
+        Vspsa[0]             = 3.02562;
+        Vstarpsa[0]          = 3.15565;
+        Vsdsa[0]             = -2.28485;
+        Vstardsa[0]          = -0.80993;
+        Vppsa[0]             = 4.10364;
+        Vpppa[0]             = -1.51801;
+        Vpdsa[0]             = -1.35554;
+        Vpdpa[0]             = 2.38479;
+        Vddsa[0]             = -1.68136;
+        Vddpa[0]             = 2.58880;
+        Vddda[0]             = -1.81400;
+//Strain
+        Csasc[0]             = 1.6788;
+        Cstarastarc[0]       = 0.7777;
+        Csastarc[0]          = 1.7843;
+        Csapc[0]             = 0.4801;
+        Cstarapc[0]          = 3.5888;
+        Csadc[0]             = 0;
+        Cstaradc[0]          = 0.3421;
+        Cpapc[0]             = 4.0664;
+        Cpadc[0]             = 0;
+        Cdadc[0]             = 5.2973;
+
+//Cation 1 (Si) and from cation 1 to anion 1 (Si)
+        Esc[0]               = -2.15168;
+        Epc[0]               = 4.22925;
+        Estarc[0]            = 19.11650;
+        Edc12[0]             = 13.78950;
+	Edc15[0]             = 13.78950;
+        lambdac[0]           = 0.01989;     //(Delta/3)
+        Vsssc[0]             = -1.95933;
+        Vstarstarsc[0]       = -4.24135;
+        Vsstarsc[0]          = -1.52230;
+        Vspsc[0]             = 3.02562;
+        Vstarpsc[0]          = 3.15565;
+        Vsdsc[0]             = -2.28485;
+        Vstardsc[0]          = -0.80993;
+        Vppsc[0]             = 4.10364;
+        Vpppc[0]             = -1.51801;
+        Vpdsc[0]             = -1.35554;
+        Vpdpc[0]             = 2.38479;
+        Vddsc[0]             = -1.68136;
+        Vddpc[0]             = 2.58880;
+        Vdddc[0]             = -1.81400;
+//Strain
+        Cscsa[0]             = 1.6788;
+        Cstarcstara[0]       = 0.7777;
+        Cscstara[0]          = 1.7843;
+        Cscpa[0]             = 0.4801;
+        Cstarcpa[0]          = 3.5888;
+        Cscda[0]             = 0;
+        Cstarcda[0]          = 0.3421;
+        Cpcpa[0]             = 4.0664;
+        Cpcda[0]             = 0;
+        Cdcda[0]             = 5.2973;
+
+        eta_sss[0]           = 0.562469;
+        eta_sstars[0]        = 0.132030;
+        eta_starstars[0]     = 0.192369;
+        eta_sps[0]           = 2.365484;
+        eta_starps[0]        = 0.344918;
+        eta_sds[0]           = 2.567199;
+        eta_stards[0]        = 1.086006;
+        eta_pps[0]           = 0.494354;
+        eta_ppp[0]           = 1.843851;
+        eta_pds[0]           = 2.236358;
+        eta_pdp[0]           = 4.512500;
+        eta_dds[0]           = 4.668357;
+        eta_ddp[0]           = 2.302375;
+        eta_ddd[0]           = 0.923911;
+
+        Eshift[0]            = 27;
+
+        bond_length[0]       = 0.543*sqrt(3.0)/4.0;
+
+//Anion 2 (As) and from anion 2 to cation 2 (In)
+        Esa[1]               = -5.50042-0.3443+0.04;
+        Epa[1]               = 4.15107-0.3443+0.04;
+        Estara[1]            = 19.71059-0.3443+0.04;
+        Eda12[1]             = 13.03169-0.3443+0.04;
+	Eda15[1]             = 13.03169-0.3443+0.04;
+        lambdaa[1]           = 0.17234;     //(Delta/3)
+        Vsssa[1]             = -1.69435;
+        Vstarstarsa[1]       = -4.210450;
+        Vsstarsa[1]          = -1.15987;
+        Vspsa[1]             = 2.598230;
+        Vstarpsa[1]          = 2.067660;
+        Vsdsa[1]             = -2.268370;
+        Vstardsa[1]          = -0.899370;
+        Vppsa[1]             = 4.31064;
+        Vpppa[1]             = -1.288950;
+        Vpdsa[1]             = -1.73141;
+        Vpdpa[1]             = 2.188860;
+        Vddsa[1]             = -1.584610;
+        Vddpa[1]             = 2.717930;
+        Vddda[1]             = -0.505090;
+//Strain
+        Csasc[1]             = 1.258286;
+        Cstarastarc[1]       = 2.481447;
+        Csastarc[1]          = 4.557774;
+        Csapc[1]             = 4.367575;
+        Cstarapc[1]          = 3.298598;
+        Csadc[1]             = 0.0;
+        Cstaradc[1]          = 1.195042;
+        Cpapc[1]             = 4.624438;
+        Cpadc[1]             = 0.0;
+        Cdadc[1]             = 0.246999;
+
+//Cation 2 (In) and from cation 2 to anion 2 (As)
+        Esc[1]               = -0.581930-0.3443+0.04;
+        Epc[1]               = 6.971630-0.3443+0.04;
+        Estarc[1]            = 19.941380-0.3443+0.04;
+        Edc12[1]             = 13.307090-0.3443+0.04;
+	Edc15[1]             = 13.307090-0.3443+0.04;
+        lambdac[1]           = 0.131200;     //(Delta/3)
+        Vsssc[1]             = -1.694350;
+        Vstarstarsc[1]       = -4.210450;
+        Vsstarsc[1]          = -2.426740;
+        Vspsc[1]             = 2.809360;
+        Vstarpsc[1]          = 0.937340;
+        Vsdsc[1]             = -2.293090;
+        Vstardsc[1]          = -0.488990;
+        Vppsc[1]             = 4.310640;
+        Vpppc[1]             = -1.288950;
+        Vpdsc[1]             = -1.978420;
+        Vpdpc[1]             = 2.456020;
+        Vddsc[1]             = -1.584610;
+        Vddpc[1]             = 2.717930;
+        Vdddc[1]             = -0.505090;
+//Strain
+        Cscsa[1]             = 1.258286;
+        Cstarcstara[1]       = 2.481447;
+        Cscstara[1]          = 1.086223;
+        Cscpa[1]             = 7.029660;
+        Cstarcpa[1]          = 7.029496;
+        Cscda[1]             = 0.187036;
+        Cstarcda[1]          = 1.769483;
+        Cpcpa[1]             = 4.624438;
+        Cpcda[1]             = 0.0;
+        Cdcda[1]             = 0.246999;
+
+        eta_sss[1]           = 1.924940;
+        eta_sstars[1]        = 0.060800;
+        eta_starstars[1]     = 0.000810;
+        eta_sps[1]           = 1.570030;
+        eta_starps[1]        = 1.949370;
+        eta_sds[1]           = 1.765660;
+        eta_stards[1]        = 2.023870;
+        eta_pps[1]           = 2.061510;
+        eta_ppp[1]           = 1.602470;
+        eta_pds[1]           = 2.383820;
+        eta_pdp[1]           = 2.455600;
+        eta_dds[1]           = 2.322910;
+        eta_ddp[1]           = 1.615890;
+        eta_ddd[1]           = 2.329600;
+
+        Eshift[1]            = 27;
+
+        bond_length[1]       = 0.543*sqrt(3.0)/4.0;//0.60583*sqrt(3.0)/4.0;
+
+//Anion 1 (Si) and from anion 1 to cation 2 (In)
+        Esa[2]               = Esa[0];
+        Epa[2]               = Epa[0];
+        Estara[2]            = Estara[0];
+        Eda12[2]             = Eda12[0];
+	Eda15[2]             = Eda15[0];
+        lambdaa[2]           = lambdaa[0];     //(Delta/3)
+        Vsssa[2]             = (Vsssa[0]+Vsssa[1])/2.0;
+        Vstarstarsa[2]       = (Vstarstarsa[0]+Vstarstarsa[1])/2.0;
+        Vsstarsa[2]          = (Vsstarsa[0]+Vsstarsa[1])/2.0;
+        Vspsa[2]             = (Vspsa[0]+Vspsa[1])/2.0;
+        Vstarpsa[2]          = (Vstarpsa[0]+Vstarpsa[1])/2.0;
+        Vsdsa[2]             = (Vsdsa[0]+Vsdsa[1])/2.0;
+        Vstardsa[2]          = (Vstardsa[0]+Vstardsa[1])/2.0;
+        Vppsa[2]             = (Vppsa[0]+Vppsa[1])/2.0;
+        Vpppa[2]             = (Vpppa[0]+Vpppa[1])/2.0;
+        Vpdsa[2]             = (Vpdsa[0]+Vpdsa[1])/2.0;
+        Vpdpa[2]             = (Vpdpa[0]+Vpdpa[1])/2.0;
+        Vddsa[2]             = (Vddsa[0]+Vddsa[1])/2.0;
+        Vddpa[2]             = (Vddpa[0]+Vddpa[1])/2.0;
+        Vddda[2]             = (Vddda[0]+Vddda[1])/2.0;
+//Strain
+        Csasc[2]             = (Csasc[0]+Csasc[1])/2.0;
+        Cstarastarc[2]       = (Cstarastarc[0]+Cstarastarc[1])/2.0;
+        Csastarc[2]          = (Csastarc[0]+Csastarc[1])/2.0;
+        Csapc[2]             = (Csapc[0]+Csapc[1])/2.0;
+        Cstarapc[2]          = (Cstarapc[0]+Cstarapc[1])/2.0;
+        Csadc[2]             = (Csadc[0]+Csadc[1])/2.0;
+        Cstaradc[2]          = (Cstaradc[0]+Cstaradc[1])/2.0;
+        Cpapc[2]             = (Cpapc[0]+Cpapc[1])/2.0;
+        Cpadc[2]             = (Cpadc[0]+Cpadc[1])/2.0;
+        Cdadc[2]             = (Cdadc[0]+Cdadc[1])/2.0;
+
+//Cation 2 (In) and from cation 2 to anion 1 (Si)
+        Esc[2]               = Esc[1];
+        Epc[2]               = Epc[1];
+        Estarc[2]            = Estarc[1];
+        Edc12[2]             = Edc12[1];
+	Edc15[2]             = Edc15[1];
+        lambdac[2]           = lambdac[1];     //(Delta/3)
+        Vsssc[2]             = (Vsssc[0]+Vsssc[1])/2.0;
+        Vstarstarsc[2]       = (Vstarstarsc[0]+Vstarstarsc[1])/2.0;
+        Vsstarsc[2]          = (Vsstarsc[0]+Vsstarsc[1])/2.0;
+        Vspsc[2]             = (Vspsc[0]+Vspsc[1])/2.0;
+        Vstarpsc[2]          = (Vstarpsc[0]+Vstarpsc[1])/2.0;
+        Vsdsc[2]             = (Vsdsc[0]+Vsdsc[1])/2.0;
+        Vstardsc[2]          = (Vstardsc[0]+Vstardsc[1])/2.0;
+        Vppsc[2]             = (Vppsc[0]+Vppsc[1])/2.0;
+        Vpppc[2]             = (Vpppc[0]+Vpppc[1])/2.0;
+        Vpdsc[2]             = (Vpdsc[0]+Vpdsc[1])/2.0;
+        Vpdpc[2]             = (Vpdpc[0]+Vpdpc[1])/2.0;
+        Vddsc[2]             = (Vddsc[0]+Vddsc[1])/2.0;
+        Vddpc[2]             = (Vddpc[0]+Vddpc[1])/2.0;
+        Vdddc[2]             = (Vdddc[0]+Vdddc[1])/2.0;
+//Strain
+        Cscsa[2]             = (Cscsa[0]+Cscsa[1])/2.0;
+        Cstarcstara[2]       = (Cstarcstara[0]+Cstarcstara[1])/2.0;
+        Cscstara[2]          = (Cscstara[0]+Cscstara[1])/2.0;
+        Cscpa[2]             = (Cscpa[0]+Cscpa[1])/2.0;
+        Cstarcpa[2]          = (Cstarcpa[0]+Cstarcpa[1])/2.0;
+        Cscda[2]             = (Cscda[0]+Cscda[1])/2.0;
+        Cstarcda[2]          = (Cstarcda[0]+Cstarcda[1])/2.0;
+        Cpcpa[2]             = (Cpcpa[0]+Cpcpa[1])/2.0;
+        Cpcda[2]             = (Cpcda[0]+Cpcda[1])/2.0;
+        Cdcda[2]             = (Cdcda[0]+Cdcda[1])/2.0;
+
+        eta_sss[2]           = (eta_sss[0]+eta_sss[1])/2.0;
+        eta_sstars[2]        = (eta_sstars[0]+eta_sstars[1])/2.0;
+        eta_starstars[2]     = (eta_starstars[0]+eta_starstars[1])/2.0;
+        eta_sps[2]           = (eta_sps[0]+eta_sps[1])/2.0;
+        eta_starps[2]        = (eta_starps[0]+eta_starps[1])/2.0;
+        eta_sds[2]           = (eta_sds[0]+eta_sds[1])/2.0;
+        eta_stards[2]        = (eta_stards[0]+eta_stards[1])/2.0;
+        eta_pps[2]           = (eta_pps[0]+eta_pps[1])/2.0;
+        eta_ppp[2]           = (eta_ppp[0]+eta_ppp[1])/2.0;
+        eta_pds[2]           = (eta_pds[0]+eta_pds[1])/2.0;
+        eta_pdp[2]           = (eta_pdp[0]+eta_pdp[1])/2.0;
+        eta_dds[2]           = (eta_dds[0]+eta_dds[1])/2.0;
+        eta_ddp[2]           = (eta_ddp[0]+eta_ddp[1])/2.0;
+        eta_ddd[2]           = (eta_ddd[0]+eta_ddd[1])/2.0;
+
+        Eshift[2]            = 27.0;
+
+        bond_length[2]       = (bond_length[0]+bond_length[1])/2.0;
+
+//Anion 2 (As) and from anion 2 to cation 1 (Si)
+        Esa[3]               = Esa[1];
+        Epa[3]               = Epa[1];
+        Estara[3]            = Estara[1];
+        Eda12[3]             = Eda12[1];
+	Eda15[3]             = Eda15[1];
+        lambdaa[3]           = lambdaa[1];     //(Delta/3)
+        Vsssa[3]             = (Vsssa[0]+Vsssa[1])/2.0;
+        Vstarstarsa[3]       = (Vstarstarsa[0]+Vstarstarsa[1])/2.0;
+        Vsstarsa[3]          = (Vsstarsa[0]+Vsstarsa[1])/2.0;
+        Vspsa[3]             = (Vspsa[0]+Vspsa[1])/2.0;
+        Vstarpsa[3]          = (Vstarpsa[0]+Vstarpsa[1])/2.0;
+        Vsdsa[3]             = (Vsdsa[0]+Vsdsa[1])/2.0;
+        Vstardsa[3]          = (Vstardsa[0]+Vstardsa[1])/2.0;
+        Vppsa[3]             = (Vppsa[0]+Vppsa[1])/2.0;
+        Vpppa[3]             = (Vpppa[0]+Vpppa[1])/2.0;
+        Vpdsa[3]             = (Vpdsa[0]+Vpdsa[1])/2.0;
+        Vpdpa[3]             = (Vpdpa[0]+Vpdpa[1])/2.0;
+        Vddsa[3]             = (Vddsa[0]+Vddsa[1])/2.0;
+        Vddpa[3]             = (Vddpa[0]+Vddpa[1])/2.0;
+        Vddda[3]             = (Vddda[0]+Vddda[1])/2.0;
+//Strain
+	Csasc[3]             = (Csasc[0]+Csasc[1])/2.0;
+        Cstarastarc[3]       = (Cstarastarc[0]+Cstarastarc[1])/2.0;
+        Csastarc[3]          = (Csastarc[0]+Csastarc[1])/2.0;
+        Csapc[3]             = (Csapc[0]+Csapc[1])/2.0;
+        Cstarapc[3]          = (Cstarapc[0]+Cstarapc[1])/2.0;
+        Csadc[3]             = (Csadc[0]+Csadc[1])/2.0;
+        Cstaradc[3]          = (Cstaradc[0]+Cstaradc[1])/2.0;
+        Cpapc[3]             = (Cpapc[0]+Cpapc[1])/2.0;
+        Cpadc[3]             = (Cpadc[0]+Cpadc[1])/2.0;
+        Cdadc[3]             = (Cdadc[0]+Cdadc[1])/2.0;
+
+//Cation 1 (Si) and from cation 1 to anion 2 (As)
+        Esc[3]               = Esc[0];
+        Epc[3]               = Epc[0];
+        Estarc[3]            = Estarc[0];
+        Edc12[3]             = Edc12[0];
+	Edc15[3]             = Edc15[0];
+        lambdac[3]           = lambdac[0];     //(Delta/3)
+        Vsssc[3]             = (Vsssc[0]+Vsssc[1])/2.0;
+        Vstarstarsc[3]       = (Vstarstarsc[0]+Vstarstarsc[1])/2.0;
+        Vsstarsc[3]          = (Vsstarsc[0]+Vsstarsc[1])/2.0;
+        Vspsc[3]             = (Vspsc[0]+Vspsc[1])/2.0;
+        Vstarpsc[3]          = (Vstarpsc[0]+Vstarpsc[1])/2.0;
+        Vsdsc[3]             = (Vsdsc[0]+Vsdsc[1])/2.0;
+        Vstardsc[3]          = (Vstardsc[0]+Vstardsc[1])/2.0;
+        Vppsc[3]             = (Vppsc[0]+Vppsc[1])/2.0;
+        Vpppc[3]             = (Vpppc[0]+Vpppc[1])/2.0;
+        Vpdsc[3]             = (Vpdsc[0]+Vpdsc[1])/2.0;
+        Vpdpc[3]             = (Vpdpc[0]+Vpdpc[1])/2.0;
+        Vddsc[3]             = (Vddsc[0]+Vddsc[1])/2.0;
+        Vddpc[3]             = (Vddpc[0]+Vddpc[1])/2.0;
+        Vdddc[3]             = (Vdddc[0]+Vdddc[1])/2.0;
+//Strain
+	Cscsa[3]             = (Cscsa[0]+Cscsa[1])/2.0;
+        Cstarcstara[3]       = (Cstarcstara[0]+Cstarcstara[1])/2.0;
+        Cscstara[3]          = (Cscstara[0]+Cscstara[1])/2.0;
+        Cscpa[3]             = (Cscpa[0]+Cscpa[1])/2.0;
+        Cstarcpa[3]          = (Cstarcpa[0]+Cstarcpa[1])/2.0;
+        Cscda[3]             = (Cscda[0]+Cscda[1])/2.0;
+        Cstarcda[3]          = (Cstarcda[0]+Cstarcda[1])/2.0;
+        Cpcpa[3]             = (Cpcpa[0]+Cpcpa[1])/2.0;
+        Cpcda[3]             = (Cpcda[0]+Cpcda[1])/2.0;
+        Cdcda[3]             = (Cdcda[0]+Cdcda[1])/2.0;
+
+        eta_sss[3]           = (eta_sss[0]+eta_sss[1])/2.0;
+        eta_sstars[3]        = (eta_sstars[0]+eta_sstars[1])/2.0;
+        eta_starstars[3]     = (eta_starstars[0]+eta_starstars[1])/2.0;
+        eta_sps[3]           = (eta_sps[0]+eta_sps[1])/2.0;
+        eta_starps[3]        = (eta_starps[0]+eta_starps[1])/2.0;
+        eta_sds[3]           = (eta_sds[0]+eta_sds[1])/2.0;
+        eta_stards[3]        = (eta_stards[0]+eta_stards[1])/2.0;
+        eta_pps[3]           = (eta_pps[0]+eta_pps[1])/2.0;
+        eta_ppp[3]           = (eta_ppp[0]+eta_ppp[1])/2.0;
+        eta_pds[3]           = (eta_pds[0]+eta_pds[1])/2.0;
+        eta_pdp[3]           = (eta_pdp[0]+eta_pdp[1])/2.0;
+        eta_dds[3]           = (eta_dds[0]+eta_dds[1])/2.0;
+        eta_ddp[3]           = (eta_ddp[0]+eta_ddp[1])/2.0;
+        eta_ddd[3]           = (eta_ddd[0]+eta_ddd[1])/2.0;
+
+        Eshift[3]            = 27.0;
+
+        bond_length[3]       = (bond_length[0]+bond_length[1])/2.0;
+
+	neighbor_table[0][1] = 11;
+        neighbor_table[1][0] = 12;
+        neighbor_table[2][3] = 21;
+        neighbor_table[3][2] = 22;
+	neighbor_table[0][3] = 31;
+        neighbor_table[3][0] = 32;
+        neighbor_table[2][1] = 41;
+        neighbor_table[1][2] = 42;
+
+	mid_gap_energy[0][1] = 0.5650;
+        mid_gap_energy[0][3] = 0.3150;
+        mid_gap_energy[1][0] = 0.5650;
+        mid_gap_energy[1][2] = 0.3150;
+        mid_gap_energy[2][1] = 0.3150;
+        mid_gap_energy[2][3] = 0.0650+0.04;
+        mid_gap_energy[3][0] = 0.3150;
+        mid_gap_energy[3][2] = 0.0650+0.04;
+
+	band_gap_table[0][1] = 1.13;
+        band_gap_table[0][3] = 0.75;
+        band_gap_table[1][0] = 1.13;
+        band_gap_table[1][2] = 0.75;
+        band_gap_table[2][1] = 0.75;
+        band_gap_table[2][3] = 0.37;
+        band_gap_table[3][0] = 0.75;
+        band_gap_table[3][2] = 0.37;
+
+	no_orb[0]            = sp3d5ss;   //Si anion
+	no_orb[1]            = sp3d5ss;   //Si cation
+	no_orb[2]            = sp3d5ss;   //As anion
+	no_orb[3]            = sp3d5ss;   //In cation
+	
+	atomic_mass[0]       = 28.0855*amu;  //Si
+	atomic_mass[1]       = 28.0855*amu;  //Si
+	atomic_mass[2]       = 74.9216*amu;  //As
+	atomic_mass[3]       = 114.818*amu;  //In
+
+	init_gap_tables      = 0;
+       
+        break;
+
+    case 202:  //Ge-InAs
+
+	Eg                   = 0.664;
+        ECmin                = 1.448;
+        EVmax                = 0.77;  
+
+	// Strain constants
+	alpha                = 39.0;
+        beta                 = 12.0;
+        ideal_a0             = 0.5657906;
+
+//Anion 1 (Ge) and from anion 1 to cation 1 (Ge)
+        Esa[0]               = -1.95617;
+        Epa[0]               = 5.30970;
+        Estara[0]            = 19.29600;
+        Eda12[0]             = 13.58060;
+	Eda15[0]             = 13.58060;
+        lambdaa[0]           = 0.10132;     //(Delta/3)
+        Vsssa[0]             = -1.39456;
+        Vstarstarsa[0]       = -3.56680;
+        Vsstarsa[0]          = -2.01830;
+        Vspsa[0]             = 2.73135;
+        Vstarpsa[0]          = 2.68638;
+        Vsdsa[0]             = -2.64779;
+        Vstardsa[0]          = -1.12312;
+        Vppsa[0]             = 4.28921;
+        Vpppa[0]             = -1.73707;
+        Vpdsa[0]             = -2.00115;
+        Vpdpa[0]             = 2.10953;
+        Vddsa[0]             = -1.32941;
+        Vddpa[0]             = 2.56261;
+        Vddda[0]             = -1.95120;
+//Strain
+        Csasc[0]             = 0;
+        Cstarastarc[0]       = 6.28624;
+        Csastarc[0]          = 1.86887;
+        Csapc[0]             = 2.03278;
+        Cstarapc[0]          = 6.28624;
+        Csadc[0]             = 0.16396;
+        Cstaradc[0]          = 1.98112;
+        Cpapc[0]             = 0.42830;
+        Cpadc[0]             = 0.12084;
+        Cdadc[0]             = 3.85908;
+
+//Cation 1 (Ge) and from cation 1 to anion 1 (Ge)
+        Esc[0]               = -1.95617;
+        Epc[0]               = 5.30970;
+        Estarc[0]            = 19.29600;
+        Edc12[0]             = 13.58060;
+	Edc15[0]             = 13.58060;
+        lambdac[0]           = 0.10132;     //(Delta/3)
+        Vsssc[0]             = -1.39456;
+        Vstarstarsc[0]       = -3.56680;
+        Vsstarsc[0]          = -2.01830;
+        Vspsc[0]             = 2.73135;
+        Vstarpsc[0]          = 2.68638;
+        Vsdsc[0]             = -2.64779;
+        Vstardsc[0]          = -1.12312;
+        Vppsc[0]             = 4.28921;
+        Vpppc[0]             = -1.73707;
+        Vpdsc[0]             = -2.00115;
+        Vpdpc[0]             = 2.10953;
+        Vddsc[0]             = -1.32941;
+        Vddpc[0]             = 2.56261;
+        Vdddc[0]             = -1.95120;
+//Strain
+        Cscsa[0]             = 0;
+        Cstarcstara[0]       = 6.28624;
+        Cscstara[0]          = 1.86887;
+        Cscpa[0]             = 2.03278;
+        Cstarcpa[0]          = 6.28624;
+        Cscda[0]             = 0.16396;
+        Cstarcda[0]          = 1.98112;
+        Cpcpa[0]             = 0.42830;
+        Cpcda[0]             = 0.12084;
+        Cdcda[0]             = 3.85908;
+
+        eta_sss[0]           = 1.995511;
+        eta_sstars[0]        = 0;
+        eta_starstars[0]     = 2.388227;
+        eta_sps[0]           = 1.293029;
+        eta_starps[0]        = 5;
+        eta_sds[0]           = 2.792438;
+        eta_stards[0]        = 0.751342;
+        eta_pps[0]           = 1.136409;
+        eta_ppp[0]           = 1.748033;
+        eta_pds[0]           = 2.687841;
+        eta_pdp[0]           = 4.369211;
+        eta_dds[0]           = 5;
+        eta_ddp[0]           = 0.697690;
+        eta_ddd[0]           = 3.062529;
+
+        Eshift[0]            = 27.77;
+
+        bond_length[0]       = 0.56579*sqrt(3.0)/4.0;
+
+//Anion 2 (As) and from anion 2 to cation 2 (In)
+        Esa[1]               = -5.50042-0.3443;
+        Epa[1]               = 4.15107-0.3443;
+        Estara[1]            = 19.71059-0.3443;
+        Eda12[1]             = 13.03169-0.3443;
+	Eda15[1]             = 13.03169-0.3443;
+        lambdaa[1]           = 0.17234;     //(Delta/3)
+        Vsssa[1]             = -1.69435;
+        Vstarstarsa[1]       = -4.210450;
+        Vsstarsa[1]          = -1.15987;
+        Vspsa[1]             = 2.598230;
+        Vstarpsa[1]          = 2.067660;
+        Vsdsa[1]             = -2.268370;
+        Vstardsa[1]          = -0.899370;
+        Vppsa[1]             = 4.31064;
+        Vpppa[1]             = -1.288950;
+        Vpdsa[1]             = -1.73141;
+        Vpdpa[1]             = 2.188860;
+        Vddsa[1]             = -1.584610;
+        Vddpa[1]             = 2.717930;
+        Vddda[1]             = -0.505090;
+//Strain
+        Csasc[1]             = 1.258286;
+        Cstarastarc[1]       = 2.481447;
+        Csastarc[1]          = 4.557774;
+        Csapc[1]             = 4.367575;
+        Cstarapc[1]          = 3.298598;
+        Csadc[1]             = 0.0;
+        Cstaradc[1]          = 1.195042;
+        Cpapc[1]             = 4.624438;
+        Cpadc[1]             = 0.0;
+        Cdadc[1]             = 0.246999;
+
+//Cation 2 (In) and from cation 2 to anion 2 (As)
+        Esc[1]               = -0.581930-0.3443;
+        Epc[1]               = 6.971630-0.3443;
+        Estarc[1]            = 19.941380-0.3443;
+        Edc12[1]             = 13.307090-0.3443;
+	Edc15[1]             = 13.307090-0.3443;
+        lambdac[1]           = 0.131200;     //(Delta/3)
+        Vsssc[1]             = -1.694350;
+        Vstarstarsc[1]       = -4.210450;
+        Vsstarsc[1]          = -2.426740;
+        Vspsc[1]             = 2.809360;
+        Vstarpsc[1]          = 0.937340;
+        Vsdsc[1]             = -2.293090;
+        Vstardsc[1]          = -0.488990;
+        Vppsc[1]             = 4.310640;
+        Vpppc[1]             = -1.288950;
+        Vpdsc[1]             = -1.978420;
+        Vpdpc[1]             = 2.456020;
+        Vddsc[1]             = -1.584610;
+        Vddpc[1]             = 2.717930;
+        Vdddc[1]             = -0.505090;
+//Strain
+        Cscsa[1]             = 1.258286;
+        Cstarcstara[1]       = 2.481447;
+        Cscstara[1]          = 1.086223;
+        Cscpa[1]             = 7.029660;
+        Cstarcpa[1]          = 7.029496;
+        Cscda[1]             = 0.187036;
+        Cstarcda[1]          = 1.769483;
+        Cpcpa[1]             = 4.624438;
+        Cpcda[1]             = 0.0;
+        Cdcda[1]             = 0.246999;
+
+        eta_sss[1]           = 1.924940;
+        eta_sstars[1]        = 0.060800;
+        eta_starstars[1]     = 0.000810;
+        eta_sps[1]           = 1.570030;
+        eta_starps[1]        = 1.949370;
+        eta_sds[1]           = 1.765660;
+        eta_stards[1]        = 2.023870;
+        eta_pps[1]           = 2.061510;
+        eta_ppp[1]           = 1.602470;
+        eta_pds[1]           = 2.383820;
+        eta_pdp[1]           = 2.455600;
+        eta_dds[1]           = 2.322910;
+        eta_ddp[1]           = 1.615890;
+        eta_ddd[1]           = 2.329600;
+
+        Eshift[1]            = 27;
+
+        bond_length[1]       = 0.56579*sqrt(3.0)/4.0;//0.60583*sqrt(3.0)/4.0;
+
+//Anion 1 (Ge) and from anion 1 to cation 2 (In)
+        Esa[2]               = Esa[0];
+        Epa[2]               = Epa[0];
+        Estara[2]            = Estara[0];
+        Eda12[2]             = Eda12[0];
+	Eda15[2]             = Eda15[0];
+        lambdaa[2]           = lambdaa[0];     //(Delta/3)
+        Vsssa[2]             = (Vsssa[0]+Vsssa[1])/2.0;
+        Vstarstarsa[2]       = (Vstarstarsa[0]+Vstarstarsa[1])/2.0;
+        Vsstarsa[2]          = (Vsstarsa[0]+Vsstarsa[1])/2.0;
+        Vspsa[2]             = (Vspsa[0]+Vspsa[1])/2.0;
+        Vstarpsa[2]          = (Vstarpsa[0]+Vstarpsa[1])/2.0;
+        Vsdsa[2]             = (Vsdsa[0]+Vsdsa[1])/2.0;
+        Vstardsa[2]          = (Vstardsa[0]+Vstardsa[1])/2.0;
+        Vppsa[2]             = (Vppsa[0]+Vppsa[1])/2.0;
+        Vpppa[2]             = (Vpppa[0]+Vpppa[1])/2.0;
+        Vpdsa[2]             = (Vpdsa[0]+Vpdsa[1])/2.0;
+        Vpdpa[2]             = (Vpdpa[0]+Vpdpa[1])/2.0;
+        Vddsa[2]             = (Vddsa[0]+Vddsa[1])/2.0;
+        Vddpa[2]             = (Vddpa[0]+Vddpa[1])/2.0;
+        Vddda[2]             = (Vddda[0]+Vddda[1])/2.0;
+//Strain
+        Csasc[2]             = (Csasc[0]+Csasc[1])/2.0;
+        Cstarastarc[2]       = (Cstarastarc[0]+Cstarastarc[1])/2.0;
+        Csastarc[2]          = (Csastarc[0]+Csastarc[1])/2.0;
+        Csapc[2]             = (Csapc[0]+Csapc[1])/2.0;
+        Cstarapc[2]          = (Cstarapc[0]+Cstarapc[1])/2.0;
+        Csadc[2]             = (Csadc[0]+Csadc[1])/2.0;
+        Cstaradc[2]          = (Cstaradc[0]+Cstaradc[1])/2.0;
+        Cpapc[2]             = (Cpapc[0]+Cpapc[1])/2.0;
+        Cpadc[2]             = (Cpadc[0]+Cpadc[1])/2.0;
+        Cdadc[2]             = (Cdadc[0]+Cdadc[1])/2.0;
+
+//Cation 2 (In) and from cation 2 to anion 1 (Ge)
+        Esc[2]               = Esc[1];
+        Epc[2]               = Epc[1];
+        Estarc[2]            = Estarc[1];
+        Edc12[2]             = Edc12[1];
+	Edc15[2]             = Edc15[1];
+        lambdac[2]           = lambdac[1];     //(Delta/3)
+        Vsssc[2]             = (Vsssc[0]+Vsssc[1])/2.0;
+        Vstarstarsc[2]       = (Vstarstarsc[0]+Vstarstarsc[1])/2.0;
+        Vsstarsc[2]          = (Vsstarsc[0]+Vsstarsc[1])/2.0;
+        Vspsc[2]             = (Vspsc[0]+Vspsc[1])/2.0;
+        Vstarpsc[2]          = (Vstarpsc[0]+Vstarpsc[1])/2.0;
+        Vsdsc[2]             = (Vsdsc[0]+Vsdsc[1])/2.0;
+        Vstardsc[2]          = (Vstardsc[0]+Vstardsc[1])/2.0;
+        Vppsc[2]             = (Vppsc[0]+Vppsc[1])/2.0;
+        Vpppc[2]             = (Vpppc[0]+Vpppc[1])/2.0;
+        Vpdsc[2]             = (Vpdsc[0]+Vpdsc[1])/2.0;
+        Vpdpc[2]             = (Vpdpc[0]+Vpdpc[1])/2.0;
+        Vddsc[2]             = (Vddsc[0]+Vddsc[1])/2.0;
+        Vddpc[2]             = (Vddpc[0]+Vddpc[1])/2.0;
+        Vdddc[2]             = (Vdddc[0]+Vdddc[1])/2.0;
+//Strain
+        Cscsa[2]             = (Cscsa[0]+Cscsa[1])/2.0;
+        Cstarcstara[2]       = (Cstarcstara[0]+Cstarcstara[1])/2.0;
+        Cscstara[2]          = (Cscstara[0]+Cscstara[1])/2.0;
+        Cscpa[2]             = (Cscpa[0]+Cscpa[1])/2.0;
+        Cstarcpa[2]          = (Cstarcpa[0]+Cstarcpa[1])/2.0;
+        Cscda[2]             = (Cscda[0]+Cscda[1])/2.0;
+        Cstarcda[2]          = (Cstarcda[0]+Cstarcda[1])/2.0;
+        Cpcpa[2]             = (Cpcpa[0]+Cpcpa[1])/2.0;
+        Cpcda[2]             = (Cpcda[0]+Cpcda[1])/2.0;
+        Cdcda[2]             = (Cdcda[0]+Cdcda[1])/2.0;
+
+        eta_sss[2]           = (eta_sss[0]+eta_sss[1])/2.0;
+        eta_sstars[2]        = (eta_sstars[0]+eta_sstars[1])/2.0;
+        eta_starstars[2]     = (eta_starstars[0]+eta_starstars[1])/2.0;
+        eta_sps[2]           = (eta_sps[0]+eta_sps[1])/2.0;
+        eta_starps[2]        = (eta_starps[0]+eta_starps[1])/2.0;
+        eta_sds[2]           = (eta_sds[0]+eta_sds[1])/2.0;
+        eta_stards[2]        = (eta_stards[0]+eta_stards[1])/2.0;
+        eta_pps[2]           = (eta_pps[0]+eta_pps[1])/2.0;
+        eta_ppp[2]           = (eta_ppp[0]+eta_ppp[1])/2.0;
+        eta_pds[2]           = (eta_pds[0]+eta_pds[1])/2.0;
+        eta_pdp[2]           = (eta_pdp[0]+eta_pdp[1])/2.0;
+        eta_dds[2]           = (eta_dds[0]+eta_dds[1])/2.0;
+        eta_ddp[2]           = (eta_ddp[0]+eta_ddp[1])/2.0;
+        eta_ddd[2]           = (eta_ddd[0]+eta_ddd[1])/2.0;
+
+        Eshift[2]            = 27.0;
+
+        bond_length[2]       = (bond_length[0]+bond_length[1])/2.0;
+
+//Anion 2 (As) and from anion 2 to cation 1 (Ge)
+        Esa[3]               = Esa[1];
+        Epa[3]               = Epa[1];
+        Estara[3]            = Estara[1];
+        Eda12[3]             = Eda12[1];
+	Eda15[3]             = Eda15[1];
+        lambdaa[3]           = lambdaa[1];     //(Delta/3)
+        Vsssa[3]             = (Vsssa[0]+Vsssa[1])/2.0;
+        Vstarstarsa[3]       = (Vstarstarsa[0]+Vstarstarsa[1])/2.0;
+        Vsstarsa[3]          = (Vsstarsa[0]+Vsstarsa[1])/2.0;
+        Vspsa[3]             = (Vspsa[0]+Vspsa[1])/2.0;
+        Vstarpsa[3]          = (Vstarpsa[0]+Vstarpsa[1])/2.0;
+        Vsdsa[3]             = (Vsdsa[0]+Vsdsa[1])/2.0;
+        Vstardsa[3]          = (Vstardsa[0]+Vstardsa[1])/2.0;
+        Vppsa[3]             = (Vppsa[0]+Vppsa[1])/2.0;
+        Vpppa[3]             = (Vpppa[0]+Vpppa[1])/2.0;
+        Vpdsa[3]             = (Vpdsa[0]+Vpdsa[1])/2.0;
+        Vpdpa[3]             = (Vpdpa[0]+Vpdpa[1])/2.0;
+        Vddsa[3]             = (Vddsa[0]+Vddsa[1])/2.0;
+        Vddpa[3]             = (Vddpa[0]+Vddpa[1])/2.0;
+        Vddda[3]             = (Vddda[0]+Vddda[1])/2.0;
+//Strain
+	Csasc[3]             = (Csasc[0]+Csasc[1])/2.0;
+        Cstarastarc[3]       = (Cstarastarc[0]+Cstarastarc[1])/2.0;
+        Csastarc[3]          = (Csastarc[0]+Csastarc[1])/2.0;
+        Csapc[3]             = (Csapc[0]+Csapc[1])/2.0;
+        Cstarapc[3]          = (Cstarapc[0]+Cstarapc[1])/2.0;
+        Csadc[3]             = (Csadc[0]+Csadc[1])/2.0;
+        Cstaradc[3]          = (Cstaradc[0]+Cstaradc[1])/2.0;
+        Cpapc[3]             = (Cpapc[0]+Cpapc[1])/2.0;
+        Cpadc[3]             = (Cpadc[0]+Cpadc[1])/2.0;
+        Cdadc[3]             = (Cdadc[0]+Cdadc[1])/2.0;
+
+//Cation 1 (Ge) and from cation 1 to anion 2 (As)
+        Esc[3]               = Esc[0];
+        Epc[3]               = Epc[0];
+        Estarc[3]            = Estarc[0];
+        Edc12[3]             = Edc12[0];
+	Edc15[3]             = Edc15[0];
+        lambdac[3]           = lambdac[0];     //(Delta/3)
+        Vsssc[3]             = (Vsssc[0]+Vsssc[1])/2.0;
+        Vstarstarsc[3]       = (Vstarstarsc[0]+Vstarstarsc[1])/2.0;
+        Vsstarsc[3]          = (Vsstarsc[0]+Vsstarsc[1])/2.0;
+        Vspsc[3]             = (Vspsc[0]+Vspsc[1])/2.0;
+        Vstarpsc[3]          = (Vstarpsc[0]+Vstarpsc[1])/2.0;
+        Vsdsc[3]             = (Vsdsc[0]+Vsdsc[1])/2.0;
+        Vstardsc[3]          = (Vstardsc[0]+Vstardsc[1])/2.0;
+        Vppsc[3]             = (Vppsc[0]+Vppsc[1])/2.0;
+        Vpppc[3]             = (Vpppc[0]+Vpppc[1])/2.0;
+        Vpdsc[3]             = (Vpdsc[0]+Vpdsc[1])/2.0;
+        Vpdpc[3]             = (Vpdpc[0]+Vpdpc[1])/2.0;
+        Vddsc[3]             = (Vddsc[0]+Vddsc[1])/2.0;
+        Vddpc[3]             = (Vddpc[0]+Vddpc[1])/2.0;
+        Vdddc[3]             = (Vdddc[0]+Vdddc[1])/2.0;
+//Strain
+	Cscsa[3]             = (Cscsa[0]+Cscsa[1])/2.0;
+        Cstarcstara[3]       = (Cstarcstara[0]+Cstarcstara[1])/2.0;
+        Cscstara[3]          = (Cscstara[0]+Cscstara[1])/2.0;
+        Cscpa[3]             = (Cscpa[0]+Cscpa[1])/2.0;
+        Cstarcpa[3]          = (Cstarcpa[0]+Cstarcpa[1])/2.0;
+        Cscda[3]             = (Cscda[0]+Cscda[1])/2.0;
+        Cstarcda[3]          = (Cstarcda[0]+Cstarcda[1])/2.0;
+        Cpcpa[3]             = (Cpcpa[0]+Cpcpa[1])/2.0;
+        Cpcda[3]             = (Cpcda[0]+Cpcda[1])/2.0;
+        Cdcda[3]             = (Cdcda[0]+Cdcda[1])/2.0;
+
+        eta_sss[3]           = (eta_sss[0]+eta_sss[1])/2.0;
+        eta_sstars[3]        = (eta_sstars[0]+eta_sstars[1])/2.0;
+        eta_starstars[3]     = (eta_starstars[0]+eta_starstars[1])/2.0;
+        eta_sps[3]           = (eta_sps[0]+eta_sps[1])/2.0;
+        eta_starps[3]        = (eta_starps[0]+eta_starps[1])/2.0;
+        eta_sds[3]           = (eta_sds[0]+eta_sds[1])/2.0;
+        eta_stards[3]        = (eta_stards[0]+eta_stards[1])/2.0;
+        eta_pps[3]           = (eta_pps[0]+eta_pps[1])/2.0;
+        eta_ppp[3]           = (eta_ppp[0]+eta_ppp[1])/2.0;
+        eta_pds[3]           = (eta_pds[0]+eta_pds[1])/2.0;
+        eta_pdp[3]           = (eta_pdp[0]+eta_pdp[1])/2.0;
+        eta_dds[3]           = (eta_dds[0]+eta_dds[1])/2.0;
+        eta_ddp[3]           = (eta_ddp[0]+eta_ddp[1])/2.0;
+        eta_ddd[3]           = (eta_ddd[0]+eta_ddd[1])/2.0;
+
+        Eshift[3]            = 27.0;
+
+        bond_length[3]       = (bond_length[0]+bond_length[1])/2.0;
+
+	neighbor_table[0][1] = 11;
+        neighbor_table[1][0] = 12;
+        neighbor_table[2][3] = 21;
+        neighbor_table[3][2] = 22;
+	neighbor_table[0][3] = 31;
+        neighbor_table[3][0] = 32;
+        neighbor_table[2][1] = 41;
+        neighbor_table[1][2] = 42;
+
+	mid_gap_energy[0][1] = 0.5650;
+        mid_gap_energy[0][3] = 0.3150;
+        mid_gap_energy[1][0] = 0.5650;
+        mid_gap_energy[1][2] = 0.3150;
+        mid_gap_energy[2][1] = 0.3150;
+        mid_gap_energy[2][3] = 0.0650;
+        mid_gap_energy[3][0] = 0.3150;
+        mid_gap_energy[3][2] = 0.0650;
+
+	band_gap_table[0][1] = 0.664;
+        band_gap_table[0][3] = 0.52;
+        band_gap_table[1][0] = 0.664;
+        band_gap_table[1][2] = 0.52;
+        band_gap_table[2][1] = 0.52;
+        band_gap_table[2][3] = 0.37;
+        band_gap_table[3][0] = 0.52;
+        band_gap_table[3][2] = 0.37;
+
+	no_orb[0]            = sp3d5ss;   //Ge anion
+	no_orb[1]            = sp3d5ss;   //Ge cation
+	no_orb[2]            = sp3d5ss;   //As anion
+	no_orb[3]            = sp3d5ss;   //In cation
+	
+	atomic_mass[0]       = 72.6100*amu;  //Ge
+	atomic_mass[1]       = 72.6100*amu;  //Ge
+	atomic_mass[2]       = 74.9216*amu;  //As
+	atomic_mass[3]       = 114.818*amu;  //In
+
+	init_gap_tables      = 0;
+       
+        break;	
+
+    case 203:  // Ge0.925Sn0.075
+
+        Eg                   = 0.5786;
+        ECmin                = 1.4130;
+        EVmax                = 0.8344;
+
+	// Strain constants
+        alpha                = 39.0;
+        beta                 = 12.0;
+        ideal_a0             = 0.5657906;
+
+//Anion and from anion to cation
+        Esa[0]               = -2.20111;
+        Epa[0]               = 5.73248;
+        Estara[0]            = 18.66306;
+        Eda12[0]             = 14.83001;
+	Eda15[0]             = 14.83001;
+        lambdaa[0]           = 0.15962;     //(Delta/3)
+        Vsssa[0]             = -1.31557;
+        Vstarstarsa[0]       = -3.98980;
+        Vsstarsa[0]          = -1.84958;
+        Vspsa[0]             = 2.73044;
+        Vstarpsa[0]          = 2.97619;
+        Vsdsa[0]             = -2.66812;
+        Vstardsa[0]          = -1.15554;
+        Vppsa[0]             = 4.47281;
+        Vpppa[0]             = -1.63451;
+        Vpdsa[0]             = -2.18185;
+        Vpdpa[0]             = 2.35077;
+        Vddsa[0]             = -0.57430;
+        Vddpa[0]             = 2.55879;
+        Vddda[0]             = -1.77777;
+//Strain
+        Csasc[0]             = 0.0;
+        Cstarastarc[0]       = 0.0;
+        Csastarc[0]          = 0.0;
+        Csapc[0]             = 0.0;
+        Cstarapc[0]          = 0.0;
+        Csadc[0]             = 0.0;
+        Cstaradc[0]          = 0.0;
+        Cpapc[0]             = 0.0;
+        Cpadc[0]             = 0.0;
+        Cdadc[0]             = 0.0;
+
+//Cation and from cation to anion
+        Esc[0]               = -2.20111;
+        Epc[0]               = 5.73248;
+        Estarc[0]            = 18.66306;
+        Edc12[0]             = 14.83001;
+	Edc15[0]             = 14.83001;
+        lambdac[0]           = 0.15962;     //(Delta/3)
+        Vsssc[0]             = -1.31557;
+        Vstarstarsc[0]       = -3.98980;
+        Vsstarsc[0]          = -1.84958;
+        Vspsc[0]             = 2.73044;
+        Vstarpsc[0]          = 2.97619;
+        Vsdsc[0]             = -2.66812;
+        Vstardsc[0]          = -1.15554;
+        Vppsc[0]             = 4.47281;
+        Vpppc[0]             = -1.63451;
+        Vpdsc[0]             = -2.18185;
+        Vpdpc[0]             = 2.35077;
+        Vddsc[0]             = -0.57430;
+        Vddpc[0]             = 2.55879;
+        Vdddc[0]             = -1.77777;
+//Strain
+        Cscsa[0]             = 0.0;
+        Cstarcstara[0]       = 0.0;
+        Cscstara[0]          = 0.0;
+        Cscpa[0]             = 0.0;
+        Cstarcpa[0]          = 0.0;
+        Cscda[0]             = 0.0;
+        Cstarcda[0]          = 0.0;
+        Cpcpa[0]             = 0.0;
+        Cpcda[0]             = 0.0;
+        Cdcda[0]             = 0.0;
+
+        eta_sss[0]           = 0.0;
+        eta_sstars[0]        = 0.0;
+        eta_starstars[0]     = 0.0;
+        eta_sps[0]           = 0.0;
+        eta_starps[0]        = 0.0;
+        eta_sds[0]           = 0.0;
+        eta_stards[0]        = 0.0;
+        eta_pps[0]           = 0.0;
+        eta_ppp[0]           = 0.0;
+        eta_pds[0]           = 0.0;
+        eta_pdp[0]           = 0.0;
+        eta_dds[0]           = 0.0;
+        eta_ddp[0]           = 0.0;
+        eta_ddd[0]           = 0.0;
+
+        Eshift[0]            = 27.77;
+
+        bond_length[0]       = 0.56579*sqrt(3.0)/4.0;  //Ge
+
+	neighbor_table[0][1] = 11;
+        neighbor_table[1][0] = 12;
+
+	no_orb[0]            = sp3d5ss; //GeSn anion
+	no_orb[1]            = sp3d5ss; //GeSn cation
+
+	atomic_mass[0]       = 72.6100*amu;  //Ge
+	atomic_mass[1]       = 72.6100*amu;  //Ge
+
+	//Ge parameters for phonons
+	alpha_ph[0]          = 44.32;
+	beta_ph[0]           = 3.68;
+	kappa_ph[0]          = 6.13;
+	tau_ph[0]            = 4.95;
+	gamma_ph[0]          = 0.0;
+
+	alpha_ph[1]          = 44.32;
+	beta_ph[1]           = 3.68;
+	kappa_ph[1]          = 6.13;
+	tau_ph[1]            = 4.95;
+	gamma_ph[1]          = 0.0;
+
+	alphap_ph[0]         = -2.0283e12/64.0/1.5;
+	betap_ph[0]          = -5.1097e11/64.0/1.5;
+	taup_ph[0]           = -2.6841e11/64.0/1.5;
+	delta1p_ph[0]        = -1.6651e10/64.0/1.5;
+	delta3p_ph[0]        = 1.1758e11/64.0/1.5;
+
+	alphap_ph[1]         = -2.0283e12/64.0/1.5;
+	betap_ph[1]          = -5.1097e11/64.0/1.5;
+	taup_ph[1]           = -2.6841e11/64.0/1.5;
+	delta1p_ph[1]        = -1.6651e10/64.0/1.5;
+	delta3p_ph[1]        = 1.1758e11/64.0/1.5;
+
+        break;	
+
+    case 300:  // CdS-CdSe
+
+        Eg                   = 1.9;
+        ECmin                = Eg;
+        EVmax                = 0;
+
+	// Strain constants
+        alpha                = 0.0;
+        beta                 = 0.0;
+        ideal_a0             = 0.582;
+
+//Anion 1 (S) and from anion 1 to cation 1 (Cd) Parameters from Phys. Rev. B 39, 10935 (1989)
+        Esa[0]               = -11.53-0.4;
+        Epa[0]               = 0.53-0.4;
+	Estara[0]            = 7.13-0.4;
+	Eda12[0]             = 0.0;
+	Eda15[0]             = 0.0;
+        lambdaa[0]           = 0.0;     //(Delta/3)
+        Vsssa[0]             = -3.07/4.0;
+        Vstarstarsa[0]       = 0.0;
+        Vsstarsa[0]          = 0.0;
+        Vspsa[0]             = 2.17*sqrt(3.0)/4.0;
+        Vstarpsa[0]          = 1.99*sqrt(3.0)/4.0;
+        Vsdsa[0]             = 0.0;
+        Vstardsa[0]          = 0.0;
+        Vppsa[0]             = (1.76+2*4.23)/4.0;
+        Vpppa[0]             = (1.76-4.23)/4.0;
+        Vpdsa[0]             = 0.0;
+        Vpdpa[0]             = 0.0;
+        Vddsa[0]             = 0.0;
+        Vddpa[0]             = 0.0;
+        Vddda[0]             = 0.0;
+//Strain
+        Csasc[0]             = 0.0;
+        Cstarastarc[0]       = 0.0;
+        Csastarc[0]          = 0.0;
+        Csapc[0]             = 0.0;
+        Cstarapc[0]          = 0.0;
+        Csadc[0]             = 0.0;
+        Cstaradc[0]          = 0.0;
+        Cpapc[0]             = 0.0;
+        Cpadc[0]             = 0.0;
+        Cdadc[0]             = 0.0;
+
+//Cation 1 (Cd) and from cation 1 to anion 1 (S)
+        Esc[0]               = 1.83-0.4;
+        Epc[0]               = 5.87-0.4;
+        Estarc[0]            = 6.87-0.4;
+        Edc12[0]             = 0.0;
+	Edc15[0]             = 0.0;
+        lambdac[0]           = 0.0;     //(Delta/3)
+        Vsssc[0]             = -3.07/4.0;
+        Vstarstarsc[0]       = 0.0;
+        Vsstarsc[0]          = 0.0;
+        Vspsc[0]             = 5.48*sqrt(3.0)/4.0;
+        Vstarpsc[0]          = 3.06*sqrt(3.0)/4.0;
+        Vsdsc[0]             = 0.0;
+        Vstardsc[0]          = 0.0;
+        Vppsc[0]             = (1.76+2*4.23)/4.0;
+        Vpppc[0]             = (1.76-4.23)/4.0;
+        Vpdsc[0]             = 0.0;
+        Vpdpc[0]             = 0.0;
+        Vddsc[0]             = 0.0;
+        Vddpc[0]             = 0.0;
+        Vdddc[0]             = 0.0;
+//Strain
+        Cscsa[0]             = 0.0;
+        Cstarcstara[0]       = 0.0;
+        Cscstara[0]          = 0.0;
+        Cscpa[0]             = 0.0;
+        Cstarcpa[0]          = 0.0;
+        Cscda[0]             = 0.0;
+        Cstarcda[0]          = 0.0;
+        Cpcpa[0]             = 0.0;
+        Cpcda[0]             = 0.0;
+        Cdcda[0]             = 0.0;
+
+        eta_sss[0]           = 0.0;
+        eta_sstars[0]        = 0.0;
+        eta_starstars[0]     = 0.0;
+        eta_sps[0]           = 0.0;
+        eta_starps[0]        = 0.0;
+        eta_sds[0]           = 0.0;
+        eta_stards[0]        = 0.0;
+        eta_pps[0]           = 0.0;
+        eta_ppp[0]           = 0.0;
+        eta_pds[0]           = 0.0;
+        eta_pdp[0]           = 0.0;
+        eta_dds[0]           = 0.0;
+        eta_ddp[0]           = 0.0;
+        eta_ddd[0]           = 0.0;
+
+        Eshift[0]            = 27;
+
+        bond_length[0]       = 0.582*sqrt(3.0)/4.0;
+
+//Anion 2 (Se) and from anion 2 to cation 1 (Cd) Parameters from Phys. Rev. B 41, 6079 (1990)
+        Esa[1]               = -9.63;
+        Epa[1]               = 1.47;
+        Estara[1]            = 7.53;
+        Eda12[1]             = 0.0;
+	Eda15[1]             = 0.0;
+        lambdaa[1]           = 0.0;     //(Delta/3)
+        Vsssa[1]             = -4.64/4.0;
+        Vstarstarsa[1]       = 0.0;
+        Vsstarsa[1]          = 0.0;
+        Vspsa[1]             = 4.57*sqrt(3.0)/4.0;
+        Vstarpsa[1]          = 3.05*sqrt(3.0)/4.0;
+        Vsdsa[1]             = 0.0;
+        Vstardsa[1]          = 0.0;
+        Vppsa[1]             = (2.64+2*5.36)/4.0;
+        Vpppa[1]             = (2.64-5.36)/4.0;
+        Vpdsa[1]             = 0.0;
+        Vpdpa[1]             = 0.0;
+        Vddsa[1]             = 0.0;
+        Vddpa[1]             = 0.0;
+        Vddda[1]             = 0.0;
+//Strain
+	Csasc[1]             = 0.0;
+        Cstarastarc[1]       = 0.0;
+        Csastarc[1]          = 0.0;
+        Csapc[1]             = 0.0;
+        Cstarapc[1]          = 0.0;
+        Csadc[1]             = 0.0;
+        Cstaradc[1]          = 0.0;
+        Cpapc[1]             = 0.0;
+        Cpadc[1]             = 0.0;
+        Cdadc[1]             = 0.0;
+
+//Cation 1 (Cd) and from cation 1 to anion 2 (Se)
+        Esc[1]               = 0.03;
+        Epc[1]               = 4.73;
+        Estarc[1]            = 5.72;
+        Edc12[1]             = 0.0;
+	Edc15[1]             = 0.0;
+        lambdac[1]           = 0.0;     //(Delta/3)
+        Vsssc[1]             = -4.64/4.0;
+        Vstarstarsc[1]       = 0.0;
+        Vsstarsc[1]          = 0.0;
+        Vspsc[1]             = 5.54*sqrt(3.0)/4.0;
+        Vstarpsc[1]          = 2.49*sqrt(3.0)/4.0;
+        Vsdsc[1]             = 0.0;
+        Vstardsc[1]          = 0.0;
+        Vppsc[1]             = (2.64+2*5.36)/4.0;
+        Vpppc[1]             = (2.64-5.36)/4.0;
+        Vpdsc[1]             = 0.0;
+        Vpdpc[1]             = 0.0;
+        Vddsc[1]             = 0.0;
+        Vddpc[1]             = 0.0;
+        Vdddc[1]             = 0.0;
+//Strain
+	Cscsa[1]             = 0.0;
+        Cstarcstara[1]       = 0.0;
+        Cscstara[1]          = 0.0;
+        Cscpa[1]             = 0.0;
+        Cstarcpa[1]          = 0.0;
+        Cscda[1]             = 0.0;
+        Cstarcda[1]          = 0.0;
+        Cpcpa[1]             = 0.0;
+        Cpcda[1]             = 0.0;
+        Cdcda[1]             = 0.0;
+
+        eta_sss[1]           = 0.0;
+        eta_sstars[1]        = 0.0;
+        eta_starstars[1]     = 0.0;
+        eta_sps[1]           = 0.0;
+        eta_starps[1]        = 0.0;
+        eta_sds[1]           = 0.0;
+        eta_stards[1]        = 0.0;
+        eta_pps[1]           = 0.0;
+        eta_ppp[1]           = 0.0;
+        eta_pds[1]           = 0.0;
+        eta_pdp[1]           = 0.0;
+        eta_dds[1]           = 0.0;
+        eta_ddp[1]           = 0.0;
+        eta_ddd[1]           = 0.0;
+
+        Eshift[1]            = 27;
+
+        bond_length[1]       = 0.582*sqrt(3.0)/4.0;
+
+	neighbor_table[0][1] = 11;
+	neighbor_table[0][3] = 11;
+        neighbor_table[1][0] = 12;
+	neighbor_table[1][2] = 22;
+	neighbor_table[2][1] = 21;
+        neighbor_table[2][3] = 21;
+        neighbor_table[3][0] = 12;
+        neighbor_table[3][2] = 22;
+
+	no_orb[0]            = sp3ss; //S
+	no_orb[1]            = sp3ss; //Cd
+	no_orb[2]            = sp3ss; //Se
+	no_orb[3]            = sp3ss; //Cd
+
+	atomic_mass[0]       = 32.06*amu;
+	atomic_mass[1]       = 112.41*amu;
+	atomic_mass[2]       = 78.96*amu;
+	atomic_mass[3]       = 112.41*amu;
+
+        break;
+
+    case 301:  // ZnS-CdSe
+
+        Eg                   = 1.9;
+        ECmin                = Eg;
+        EVmax                = 0;
+
+	// Strain constants
+        alpha                = 0.0;
+        beta                 = 0.0;
+        ideal_a0             = 0.582;
+
+//Anion 1 (S) and from anion 1 to cation 1 (Zn) Parameters from Phys. Rev. B 39, 10935 (1989)
+        Esa[0]               = -11.61-0.6;
+        Epa[0]               = 1.48-0.6;
+	Estara[0]            = 8.08-0.6;
+	Eda12[0]             = 0.0;
+	Eda15[0]             = 0.0;
+        lambdaa[0]           = 0.0;     //(Delta/3)
+        Vsssa[0]             = -6.3/4.0;
+        Vstarstarsa[0]       = 0.0;
+        Vsstarsa[0]          = 0.0;
+        Vspsa[0]             = 5.16*sqrt(3.0)/4.0;
+        Vstarpsa[0]          = 2.89*sqrt(3.0)/4.0;
+        Vsdsa[0]             = 0.0;
+        Vstardsa[0]          = 0.0;
+        Vppsa[0]             = (3.11+2*5.0)/4.0;
+        Vpppa[0]             = (3.11-5.0)/4.0;
+        Vpdsa[0]             = 0.0;
+        Vpdpa[0]             = 0.0;
+        Vddsa[0]             = 0.0;
+        Vddpa[0]             = 0.0;
+        Vddda[0]             = 0.0;
+//Strain
+        Csasc[0]             = 0.0;
+        Cstarastarc[0]       = 0.0;
+        Csastarc[0]          = 0.0;
+        Csapc[0]             = 0.0;
+        Cstarapc[0]          = 0.0;
+        Csadc[0]             = 0.0;
+        Cstaradc[0]          = 0.0;
+        Cpapc[0]             = 0.0;
+        Cpadc[0]             = 0.0;
+        Cdadc[0]             = 0.0;
+
+//Cation 1 (Zn) and from cation 1 to anion 1 (S)
+        Esc[0]               = 1.11-0.6;
+        Epc[0]               = 6.52-0.6;
+        Estarc[0]            = 8.02-0.6;
+        Edc12[0]             = 0.0;
+	Edc15[0]             = 0.0;
+        lambdac[0]           = 0.0;     //(Delta/3)
+        Vsssc[0]             = -6.3/4.0;
+        Vstarstarsc[0]       = 0.0;
+        Vsstarsc[0]          = 0.0;
+        Vspsc[0]             = 5.17*sqrt(3.0)/4.0;
+        Vstarpsc[0]          = 1.75*sqrt(3.0)/4.0;
+        Vsdsc[0]             = 0.0;
+        Vstardsc[0]          = 0.0;
+        Vppsc[0]             = (3.11+2*5.0)/4.0;
+        Vpppc[0]             = (3.11-5.0)/4.0;
+        Vpdsc[0]             = 0.0;
+        Vpdpc[0]             = 0.0;
+        Vddsc[0]             = 0.0;
+        Vddpc[0]             = 0.0;
+        Vdddc[0]             = 0.0;
+//Strain
+        Cscsa[0]             = 0.0;
+        Cstarcstara[0]       = 0.0;
+        Cscstara[0]          = 0.0;
+        Cscpa[0]             = 0.0;
+        Cstarcpa[0]          = 0.0;
+        Cscda[0]             = 0.0;
+        Cstarcda[0]          = 0.0;
+        Cpcpa[0]             = 0.0;
+        Cpcda[0]             = 0.0;
+        Cdcda[0]             = 0.0;
+
+        eta_sss[0]           = 0.0;
+        eta_sstars[0]        = 0.0;
+        eta_starstars[0]     = 0.0;
+        eta_sps[0]           = 0.0;
+        eta_starps[0]        = 0.0;
+        eta_sds[0]           = 0.0;
+        eta_stards[0]        = 0.0;
+        eta_pps[0]           = 0.0;
+        eta_ppp[0]           = 0.0;
+        eta_pds[0]           = 0.0;
+        eta_pdp[0]           = 0.0;
+        eta_dds[0]           = 0.0;
+        eta_ddp[0]           = 0.0;
+        eta_ddd[0]           = 0.0;
+
+        Eshift[0]            = 27;
+
+        bond_length[0]       = 0.582*sqrt(3.0)/4.0;
+
+//Anion 2 (Se) and from anion 2 to cation 1 (Cd) Parameters from Phys. Rev. B 41, 6079 (1990)
+        Esa[1]               = -9.63;
+        Epa[1]               = 1.47;
+        Estara[1]            = 7.53;
+        Eda12[1]             = 0.0;
+	Eda15[1]             = 0.0;
+        lambdaa[1]           = 0.0;     //(Delta/3)
+        Vsssa[1]             = -4.64/4.0;
+        Vstarstarsa[1]       = 0.0;
+        Vsstarsa[1]          = 0.0;
+        Vspsa[1]             = 4.57*sqrt(3.0)/4.0;
+        Vstarpsa[1]          = 3.05*sqrt(3.0)/4.0;
+        Vsdsa[1]             = 0.0;
+        Vstardsa[1]          = 0.0;
+        Vppsa[1]             = (2.64+2*5.36)/4.0;
+        Vpppa[1]             = (2.64-5.36)/4.0;
+        Vpdsa[1]             = 0.0;
+        Vpdpa[1]             = 0.0;
+        Vddsa[1]             = 0.0;
+        Vddpa[1]             = 0.0;
+        Vddda[1]             = 0.0;
+//Strain
+	Csasc[1]             = 0.0;
+        Cstarastarc[1]       = 0.0;
+        Csastarc[1]          = 0.0;
+        Csapc[1]             = 0.0;
+        Cstarapc[1]          = 0.0;
+        Csadc[1]             = 0.0;
+        Cstaradc[1]          = 0.0;
+        Cpapc[1]             = 0.0;
+        Cpadc[1]             = 0.0;
+        Cdadc[1]             = 0.0;
+
+//Cation 1 (Cd) and from cation 1 to anion 2 (Se)
+        Esc[1]               = 0.03;
+        Epc[1]               = 4.73;
+        Estarc[1]            = 5.72;
+        Edc12[1]             = 0.0;
+	Edc15[1]             = 0.0;
+        lambdac[1]           = 0.0;     //(Delta/3)
+        Vsssc[1]             = -4.64/4.0;
+        Vstarstarsc[1]       = 0.0;
+        Vsstarsc[1]          = 0.0;
+        Vspsc[1]             = 5.54*sqrt(3.0)/4.0;
+        Vstarpsc[1]          = 2.49*sqrt(3.0)/4.0;
+        Vsdsc[1]             = 0.0;
+        Vstardsc[1]          = 0.0;
+        Vppsc[1]             = (2.64+2*5.36)/4.0;
+        Vpppc[1]             = (2.64-5.36)/4.0;
+        Vpdsc[1]             = 0.0;
+        Vpdpc[1]             = 0.0;
+        Vddsc[1]             = 0.0;
+        Vddpc[1]             = 0.0;
+        Vdddc[1]             = 0.0;
+//Strain
+	Cscsa[1]             = 0.0;
+        Cstarcstara[1]       = 0.0;
+        Cscstara[1]          = 0.0;
+        Cscpa[1]             = 0.0;
+        Cstarcpa[1]          = 0.0;
+        Cscda[1]             = 0.0;
+        Cstarcda[1]          = 0.0;
+        Cpcpa[1]             = 0.0;
+        Cpcda[1]             = 0.0;
+        Cdcda[1]             = 0.0;
+
+        eta_sss[1]           = 0.0;
+        eta_sstars[1]        = 0.0;
+        eta_starstars[1]     = 0.0;
+        eta_sps[1]           = 0.0;
+        eta_starps[1]        = 0.0;
+        eta_sds[1]           = 0.0;
+        eta_stards[1]        = 0.0;
+        eta_pps[1]           = 0.0;
+        eta_ppp[1]           = 0.0;
+        eta_pds[1]           = 0.0;
+        eta_pdp[1]           = 0.0;
+        eta_dds[1]           = 0.0;
+        eta_ddp[1]           = 0.0;
+        eta_ddd[1]           = 0.0;
+
+        Eshift[1]            = 27;
+
+        bond_length[1]       = 0.582*sqrt(3.0)/4.0;
+
+//Anion 1 (S) and from anion 1 to cation 2 (Cd) Parameters from Phys. Rev. B 39, 10935 (1989)
+	Esa[2]               = -11.53-0.4;
+        Epa[2]               = 0.53-0.4;
+	Estara[2]            = 7.13-0.4;
+	Eda12[2]             = 0.0;
+	Eda15[2]             = 0.0;
+        lambdaa[2]           = 0.0;     //(Delta/3)
+        Vsssa[2]             = -3.07/4.0;
+        Vstarstarsa[2]       = 0.0;
+        Vsstarsa[2]          = 0.0;
+        Vspsa[2]             = 2.17*sqrt(3.0)/4.0;
+        Vstarpsa[2]          = 1.99*sqrt(3.0)/4.0;
+        Vsdsa[2]             = 0.0;
+        Vstardsa[2]          = 0.0;
+        Vppsa[2]             = (1.76+2*4.23)/4.0;
+        Vpppa[2]             = (1.76-4.23)/4.0;
+        Vpdsa[2]             = 0.0;
+        Vpdpa[2]             = 0.0;
+        Vddsa[2]             = 0.0;
+        Vddpa[2]             = 0.0;
+        Vddda[2]             = 0.0;
+//Strain
+        Csasc[2]             = 0.0;
+        Cstarastarc[2]       = 0.0;
+        Csastarc[2]          = 0.0;
+        Csapc[2]             = 0.0;
+        Cstarapc[2]          = 0.0;
+        Csadc[2]             = 0.0;
+        Cstaradc[2]          = 0.0;
+        Cpapc[2]             = 0.0;
+        Cpadc[2]             = 0.0;
+        Cdadc[2]             = 0.0;
+
+//Cation 2 (Cd) and from cation 2 to anion 1 (S)
+        Esc[2]               = 1.83-0.4;
+        Epc[2]               = 5.87-0.4;
+        Estarc[2]            = 6.87-0.4;
+        Edc12[2]             = 0.0;
+	Edc15[2]             = 0.0;
+        lambdac[2]           = 0.0;     //(Delta/3)
+        Vsssc[2]             = -3.07/4.0;
+        Vstarstarsc[2]       = 0.0;
+        Vsstarsc[2]          = 0.0;
+        Vspsc[2]             = 5.48*sqrt(3.0)/4.0;
+        Vstarpsc[2]          = 3.06*sqrt(3.0)/4.0;
+        Vsdsc[2]             = 0.0;
+        Vstardsc[2]          = 0.0;
+        Vppsc[2]             = (1.76+2*4.23)/4.0;
+        Vpppc[2]             = (1.76-4.23)/4.0;
+        Vpdsc[2]             = 0.0;
+        Vpdpc[2]             = 0.0;
+        Vddsc[2]             = 0.0;
+        Vddpc[2]             = 0.0;
+        Vdddc[2]             = 0.0;
+//Strain
+        Cscsa[2]             = 0.0;
+        Cstarcstara[2]       = 0.0;
+        Cscstara[2]          = 0.0;
+        Cscpa[2]             = 0.0;
+        Cstarcpa[2]          = 0.0;
+        Cscda[2]             = 0.0;
+        Cstarcda[2]          = 0.0;
+        Cpcpa[2]             = 0.0;
+        Cpcda[2]             = 0.0;
+        Cdcda[2]             = 0.0;
+
+        eta_sss[2]           = 0.0;
+        eta_sstars[2]        = 0.0;
+        eta_starstars[2]     = 0.0;
+        eta_sps[2]           = 0.0;
+        eta_starps[2]        = 0.0;
+        eta_sds[2]           = 0.0;
+        eta_stards[2]        = 0.0;
+        eta_pps[2]           = 0.0;
+        eta_ppp[2]           = 0.0;
+        eta_pds[2]           = 0.0;
+        eta_pdp[2]           = 0.0;
+        eta_dds[2]           = 0.0;
+        eta_ddp[2]           = 0.0;
+        eta_ddd[2]           = 0.0;
+
+        Eshift[2]            = 27;
+
+        bond_length[2]       = 0.582*sqrt(3.0)/4.0;
+
+//Anion 2 (Se) and from anion 2 to cation 1 (Zn)
+        Esa[3]               = Esa[1];
+        Epa[3]               = Epa[1];
+        Estara[3]            = Estara[1];
+        Eda12[3]             = Eda12[1];
+	Eda15[3]             = Eda15[1];
+        lambdaa[3]           = lambdaa[1];     //(Delta/3)
+        Vsssa[3]             = (Vsssa[0]+Vsssa[1])/2.0;
+        Vstarstarsa[3]       = (Vstarstarsa[0]+Vstarstarsa[1])/2.0;
+        Vsstarsa[3]          = (Vsstarsa[0]+Vsstarsa[1])/2.0;
+        Vspsa[3]             = (Vspsa[0]+Vspsa[1])/2.0;
+        Vstarpsa[3]          = (Vstarpsa[0]+Vstarpsa[1])/2.0;
+        Vsdsa[3]             = (Vsdsa[0]+Vsdsa[1])/2.0;
+        Vstardsa[3]          = (Vstardsa[0]+Vstardsa[1])/2.0;
+        Vppsa[3]             = (Vppsa[0]+Vppsa[1])/2.0;
+        Vpppa[3]             = (Vpppa[0]+Vpppa[1])/2.0;
+        Vpdsa[3]             = (Vpdsa[0]+Vpdsa[1])/2.0;
+        Vpdpa[3]             = (Vpdpa[0]+Vpdpa[1])/2.0;
+        Vddsa[3]             = (Vddsa[0]+Vddsa[1])/2.0;
+        Vddpa[3]             = (Vddpa[0]+Vddpa[1])/2.0;
+        Vddda[3]             = (Vddda[0]+Vddda[1])/2.0;
+//Strain
+	Csasc[3]             = (Csasc[0]+Csasc[1])/2.0;
+        Cstarastarc[3]       = (Cstarastarc[0]+Cstarastarc[1])/2.0;
+        Csastarc[3]          = (Csastarc[0]+Csastarc[1])/2.0;
+        Csapc[3]             = (Csapc[0]+Csapc[1])/2.0;
+        Cstarapc[3]          = (Cstarapc[0]+Cstarapc[1])/2.0;
+        Csadc[3]             = (Csadc[0]+Csadc[1])/2.0;
+        Cstaradc[3]          = (Cstaradc[0]+Cstaradc[1])/2.0;
+        Cpapc[3]             = (Cpapc[0]+Cpapc[1])/2.0;
+        Cpadc[3]             = (Cpadc[0]+Cpadc[1])/2.0;
+        Cdadc[3]             = (Cdadc[0]+Cdadc[1])/2.0;
+
+//Cation 1 (Zn) and from cation 1 to anion 2 (Se)
+        Esc[3]               = Esc[0];
+        Epc[3]               = Epc[0];
+        Estarc[3]            = Estarc[0];
+        Edc12[3]             = Edc12[0];
+	Edc15[3]             = Edc15[0];
+        lambdac[3]           = lambdac[0];     //(Delta/3)
+        Vsssc[3]             = (Vsssc[0]+Vsssc[1])/2.0;
+        Vstarstarsc[3]       = (Vstarstarsc[0]+Vstarstarsc[1])/2.0;
+        Vsstarsc[3]          = (Vsstarsc[0]+Vsstarsc[1])/2.0;
+        Vspsc[3]             = (Vspsc[0]+Vspsc[1])/2.0;
+        Vstarpsc[3]          = (Vstarpsc[0]+Vstarpsc[1])/2.0;
+        Vsdsc[3]             = (Vsdsc[0]+Vsdsc[1])/2.0;
+        Vstardsc[3]          = (Vstardsc[0]+Vstardsc[1])/2.0;
+        Vppsc[3]             = (Vppsc[0]+Vppsc[1])/2.0;
+        Vpppc[3]             = (Vpppc[0]+Vpppc[1])/2.0;
+        Vpdsc[3]             = (Vpdsc[0]+Vpdsc[1])/2.0;
+        Vpdpc[3]             = (Vpdpc[0]+Vpdpc[1])/2.0;
+        Vddsc[3]             = (Vddsc[0]+Vddsc[1])/2.0;
+        Vddpc[3]             = (Vddpc[0]+Vddpc[1])/2.0;
+        Vdddc[3]             = (Vdddc[0]+Vdddc[1])/2.0;
+//Strain
+	Cscsa[3]             = (Cscsa[0]+Cscsa[1])/2.0;
+        Cstarcstara[3]       = (Cstarcstara[0]+Cstarcstara[1])/2.0;
+        Cscstara[3]          = (Cscstara[0]+Cscstara[1])/2.0;
+        Cscpa[3]             = (Cscpa[0]+Cscpa[1])/2.0;
+        Cstarcpa[3]          = (Cstarcpa[0]+Cstarcpa[1])/2.0;
+        Cscda[3]             = (Cscda[0]+Cscda[1])/2.0;
+        Cstarcda[3]          = (Cstarcda[0]+Cstarcda[1])/2.0;
+        Cpcpa[3]             = (Cpcpa[0]+Cpcpa[1])/2.0;
+        Cpcda[3]             = (Cpcda[0]+Cpcda[1])/2.0;
+        Cdcda[3]             = (Cdcda[0]+Cdcda[1])/2.0;
+
+        eta_sss[3]           = (eta_sss[0]+eta_sss[1])/2.0;
+        eta_sstars[3]        = (eta_sstars[0]+eta_sstars[1])/2.0;
+        eta_starstars[3]     = (eta_starstars[0]+eta_starstars[1])/2.0;
+        eta_sps[3]           = (eta_sps[0]+eta_sps[1])/2.0;
+        eta_starps[3]        = (eta_starps[0]+eta_starps[1])/2.0;
+        eta_sds[3]           = (eta_sds[0]+eta_sds[1])/2.0;
+        eta_stards[3]        = (eta_stards[0]+eta_stards[1])/2.0;
+        eta_pps[3]           = (eta_pps[0]+eta_pps[1])/2.0;
+        eta_ppp[3]           = (eta_ppp[0]+eta_ppp[1])/2.0;
+        eta_pds[3]           = (eta_pds[0]+eta_pds[1])/2.0;
+        eta_pdp[3]           = (eta_pdp[0]+eta_pdp[1])/2.0;
+        eta_dds[3]           = (eta_dds[0]+eta_dds[1])/2.0;
+        eta_ddp[3]           = (eta_ddp[0]+eta_ddp[1])/2.0;
+        eta_ddd[3]           = (eta_ddd[0]+eta_ddd[1])/2.0;
+
+        Eshift[3]            = 27.0;
+
+        bond_length[3]       = 0.582*sqrt(3.0)/4.0;
+
+	neighbor_table[0][1] = 11;
+        neighbor_table[1][0] = 12;
+        neighbor_table[2][3] = 21;
+        neighbor_table[3][2] = 22;
+	neighbor_table[0][3] = 31;
+        neighbor_table[3][0] = 32;
+        neighbor_table[2][1] = 41;
+        neighbor_table[1][2] = 42;
+
+	no_orb[0]            = sp3ss; //S
+	no_orb[1]            = sp3ss; //Zn
+	no_orb[2]            = sp3ss; //Se
+	no_orb[3]            = sp3ss; //Cd
+
+	atomic_mass[0]       = 32.06*amu;
+	atomic_mass[1]       = 65.38*amu;
+	atomic_mass[2]       = 78.96*amu;
+	atomic_mass[3]       = 112.41*amu;
+
+        break;
+    
+    case 302:  // PbSe_lent Superlattices Microstruct. 2, 491 (1986)
+
+        Eg                   = 0.16;
+        ECmin                = Eg;
+        EVmax                = 0.0;
+
+	// Strain constants
+        alpha                = 0.0;
+        beta                 = 0.0;
+        ideal_a0             = 0.6121;
+
+//Anion Se and from anion Se to cation Pb
+        Esa[0]               = -13.742;
+        Epa[0]               = -1.478;
+        Estara[0]            = 0.0;
+        Eda12[0]             = 11.95;
+	Eda15[0]             = 11.95;
+        lambdaa[0]           = 0.121/2.0;     //(Delta/3)
+        Vsssa[0]             = -0.402;
+        Vstarstarsa[0]       = 0.0;
+        Vsstarsa[0]          = 0.0;
+        Vspsa[0]             = 0.159;
+        Vstarpsa[0]          = 0.0;
+        Vsdsa[0]             = 0.0;
+        Vstardsa[0]          = 0.0;
+        Vppsa[0]             = 1.920;
+        Vpppa[0]             = -0.356;
+        Vpdsa[0]             = -1.09;
+        Vpdpa[0]             = 0.0497;
+        Vddsa[0]             = -1.90;
+        Vddpa[0]             = 0.0;
+        Vddda[0]             = 0.692;
+//Strain
+        Csasc[0]             = 0.0;
+        Cstarastarc[0]       = 0.0;
+        Csastarc[0]          = 0.0;
+        Csapc[0]             = 0.0;
+        Cstarapc[0]          = 0.0;
+        Csadc[0]             = 0.0;
+        Cstaradc[0]          = 0.0;
+        Cpapc[0]             = 0.0;
+        Cpadc[0]             = 0.0;
+        Cdadc[0]             = 0.0;
+
+//Cation Pb and from cation Pb to anion Se
+        Esc[0]               = -7.010;
+        Epc[0]               = 4.201;
+        Estarc[0]            = 0.0;
+        Edc12[0]             = 8.72;
+	Edc15[0]             = 8.72;
+        lambdac[0]           = 1.693/2.0;     //(Delta/3)
+        Vsssc[0]             = -0.402;
+        Vstarstarsc[0]       = 0.0;
+        Vsstarsc[0]          = 0.0;
+        Vspsc[0]             = 0.929;
+        Vstarpsc[0]          = 0.0;
+        Vsdsc[0]             = 0.0;
+        Vstardsc[0]          = 0.0;
+        Vppsc[0]             = 1.920;
+        Vpppc[0]             = -0.356;
+        Vpdsc[0]             = -1.590;
+        Vpdpc[0]             = 1.45;
+        Vddsc[0]             = -1.90;
+        Vddpc[0]             = 0.0;
+        Vdddc[0]             = 0.692;
+//Strain
+        Cscsa[0]             = 0.0;
+        Cstarcstara[0]       = 0.0;
+        Cscstara[0]          = 0.0;
+        Cscpa[0]             = 0.0;
+        Cstarcpa[0]          = 0.0;
+        Cscda[0]             = 0.0;
+        Cstarcda[0]          = 0.0;
+        Cpcpa[0]             = 0.0;
+        Cpcda[0]             = 0.0;
+        Cdcda[0]             = 0.0;
+
+        eta_sss[0]           = 0.0;
+        eta_sstars[0]        = 0.0;
+        eta_starstars[0]     = 0.0;
+        eta_sps[0]           = 0.0;
+        eta_starps[0]        = 0.0;
+        eta_sds[0]           = 0.0;
+        eta_stards[0]        = 0.0;
+        eta_pps[0]           = 0.0;
+        eta_ppp[0]           = 0.0;
+        eta_pds[0]           = 0.0;
+        eta_pdp[0]           = 0.0;
+        eta_dds[0]           = 0.0;
+        eta_ddp[0]           = 0.0;
+        eta_ddd[0]           = 0.0;
+
+        Eshift[0]            = 27;
+
+        bond_length[0]       = 0.6121*sqrt(3.0)/4.0;
+
+        neighbor_table[0][1] = 11;
+        neighbor_table[1][0] = 12;
+
+	no_orb[0]            = sp3d5; //Se
+	no_orb[1]            = sp3d5; //Pb
+
+	atomic_mass[0]       = 78.96*amu;;  //Se
+	atomic_mass[1]       = 207.2*amu;   //Pb
+	
+	IS                   = 0;
+	IPX                  = 1;
+	IPY                  = 2;
+	IPZ                  = 3;
+	ID1                  = 4;
+	ID2                  = 5;
+	ID3                  = 6;
+	ID4                  = 7;
+	ID5                  = 8;
+	ISS                  = 9;
+        
+        break;
+
+    case 303:  // PbSe_allan PHYSICAL REVIEW B 70, 245321 (2004)
+
+        Eg                   = 0.18;
+        ECmin                = Eg;
+        EVmax                = 0.0;
+
+	// Strain constants
+        alpha                = 0.0;
+        beta                 = 0.0;
+        ideal_a0             = 0.6121;
+
+//Anion Se and from anion Se to cation Pb
+        Esa[0]               = -11.45405;
+        Epa[0]               = -1.47533;
+        Estara[0]            = 17.60374;
+        Eda12[0]             = 12.13125;
+	Eda15[0]             = 12.13125;
+        lambdaa[0]           = 0.24000;     //(Delta/3)
+        Vsssa[0]             = -0.36267;
+        Vstarstarsa[0]       = -0.93835;
+        Vsstarsa[0]          = -1.12089;
+        Vspsa[0]             = 1.20593;
+        Vstarpsa[0]          = 2.51117;
+        Vsdsa[0]             = -0.83693;
+        Vstardsa[0]          = -0.92754;
+        Vppsa[0]             = 1.71542;
+        Vpppa[0]             = -0.38235;
+        Vpdsa[0]             = -1.07458;
+        Vpdpa[0]             = -0.14844;
+        Vddsa[0]             = -0.27384;
+        Vddpa[0]             = 1.48923;
+        Vddda[0]             = -0.35624;
+//Strain
+        Csasc[0]             = 0.0;
+        Cstarastarc[0]       = 0.0;
+        Csastarc[0]          = 0.0;
+        Csapc[0]             = 0.0;
+        Cstarapc[0]          = 0.0;
+        Csadc[0]             = 0.0;
+        Cstaradc[0]          = 0.0;
+        Cpapc[0]             = 0.0;
+        Cpadc[0]             = 0.0;
+        Cdadc[0]             = 0.0;
+
+//Cation Pb and from cation Pb to anion Se
+        Esc[0]               = -5.07781;
+        Epc[0]               = 4.33168;
+        Estarc[0]            = 24.35922;
+        Edc12[0]             = 10.97439;
+	Edc15[0]             = 10.97439;
+        lambdac[0]           = 0.55000;     //(Delta/3)
+        Vsssc[0]             = -0.36267;
+        Vstarstarsc[0]       = -0.93835;
+        Vsstarsc[0]          = -1.29525;
+        Vspsc[0]             = 1.31029;
+        Vstarpsc[0]          = 2.27510;
+        Vsdsc[0]             = -1.71725;
+        Vstardsc[0]          = 0.18794;
+        Vppsc[0]             = 1.71542;
+        Vpppc[0]             = -0.38235;
+        Vpdsc[0]             = -2.13886;
+        Vpdpc[0]             = 0.73701;
+        Vddsc[0]             = -0.27384;
+        Vddpc[0]             = 1.48923;
+        Vdddc[0]             = -0.35624;
+//Strain
+        Cscsa[0]             = 0.0;
+        Cstarcstara[0]       = 0.0;
+        Cscstara[0]          = 0.0;
+        Cscpa[0]             = 0.0;
+        Cstarcpa[0]          = 0.0;
+        Cscda[0]             = 0.0;
+        Cstarcda[0]          = 0.0;
+        Cpcpa[0]             = 0.0;
+        Cpcda[0]             = 0.0;
+        Cdcda[0]             = 0.0;
+
+        eta_sss[0]           = 0.0;
+        eta_sstars[0]        = 0.0;
+        eta_starstars[0]     = 0.0;
+        eta_sps[0]           = 0.0;
+        eta_starps[0]        = 0.0;
+        eta_sds[0]           = 0.0;
+        eta_stards[0]        = 0.0;
+        eta_pps[0]           = 0.0;
+        eta_ppp[0]           = 0.0;
+        eta_pds[0]           = 0.0;
+        eta_pdp[0]           = 0.0;
+        eta_dds[0]           = 0.0;
+        eta_ddp[0]           = 0.0;
+        eta_ddd[0]           = 0.0;
+
+        Eshift[0]            = 27;
+
+        bond_length[0]       = 0.6121*sqrt(3.0)/4.0;
+
+        neighbor_table[0][1] = 11;
+        neighbor_table[1][0] = 12;
+
+	no_orb[0]            = sp3d5ss; //Se
+	no_orb[1]            = sp3d5ss; //Pb
+
+	atomic_mass[0]       = 78.96*amu;;  //Se
+	atomic_mass[1]       = 207.2*amu;   //Pb
+        
+        break;	
+
+    case 304:  // ZnSe-CdSe
+
+        Eg                   = 1.9;
+        ECmin                = Eg;
+        EVmax                = 0;
+
+	// Strain constants
+        alpha                = 0.0;
+        beta                 = 0.0;
+        ideal_a0             = 0.582;
+
+//Anion 1 (Se) and from anion 1 to cation 1 (Zn) J. Phys. Chem. Solids 44 (1983) 365
+        Esa[0]               = -11.8383-0.07;   //shift from Chem. Mater. 17, 4038 (2005)
+        Epa[0]               = 1.5072-0.07;
+	Estara[0]            = 7.5872-0.07;
+	Eda12[0]             = 0.0;
+	Eda15[0]             = 0.0;
+        lambdaa[0]           = 0.0;     //(Delta/3)
+        Vsssa[0]             = -6.2163/4.0;
+        Vstarstarsa[0]       = 0.0;
+        Vsstarsa[0]          = 0.0;
+        Vspsa[0]             = 3.4980*sqrt(3.0)/4.0;
+        Vstarpsa[0]          = 2.5891*sqrt(3.0)/4.0;
+        Vsdsa[0]             = 0.0;
+        Vstardsa[0]          = 0.0;
+        Vppsa[0]             = (3.0054+2*5.9942)/4.0;
+        Vpppa[0]             = (3.0054-5.9942)/4.0;
+        Vpdsa[0]             = 0.0;
+        Vpdpa[0]             = 0.0;
+        Vddsa[0]             = 0.0;
+        Vddpa[0]             = 0.0;
+        Vddda[0]             = 0.0;
+//Strain
+        Csasc[0]             = 0.0;
+        Cstarastarc[0]       = 0.0;
+        Csastarc[0]          = 0.0;
+        Csapc[0]             = 0.0;
+        Cstarapc[0]          = 0.0;
+        Csadc[0]             = 0.0;
+        Cstaradc[0]          = 0.0;
+        Cpapc[0]             = 0.0;
+        Cpadc[0]             = 0.0;
+        Cdadc[0]             = 0.0;
+
+//Cation 1 (Zn) and from cation 1 to anion 1 (Se)
+        Esc[0]               = 0.0183-0.07;
+        Epc[0]               = 5.9928-0.07;
+        Estarc[0]            = 8.9928-0.07;
+        Edc12[0]             = 0.0;
+	Edc15[0]             = 0.0;
+        lambdac[0]           = 0.0;     //(Delta/3)
+        Vsssc[0]             = -6.2163/4.0;
+        Vstarstarsc[0]       = 0.0;
+        Vsstarsc[0]          = 0.0;
+        Vspsc[0]             = 6.3191*sqrt(3.0)/4.0;
+        Vstarpsc[0]          = 3.9533*sqrt(3.0)/4.0;
+        Vsdsc[0]             = 0.0;
+        Vstardsc[0]          = 0.0;
+        Vppsc[0]             = (3.0054+2*5.9942)/4.0;
+        Vpppc[0]             = (3.0054-5.9942)/4.0;
+        Vpdsc[0]             = 0.0;
+        Vpdpc[0]             = 0.0;
+        Vddsc[0]             = 0.0;
+        Vddpc[0]             = 0.0;
+        Vdddc[0]             = 0.0;
+//Strain
+        Cscsa[0]             = 0.0;
+        Cstarcstara[0]       = 0.0;
+        Cscstara[0]          = 0.0;
+        Cscpa[0]             = 0.0;
+        Cstarcpa[0]          = 0.0;
+        Cscda[0]             = 0.0;
+        Cstarcda[0]          = 0.0;
+        Cpcpa[0]             = 0.0;
+        Cpcda[0]             = 0.0;
+        Cdcda[0]             = 0.0;
+
+        eta_sss[0]           = 0.0;
+        eta_sstars[0]        = 0.0;
+        eta_starstars[0]     = 0.0;
+        eta_sps[0]           = 0.0;
+        eta_starps[0]        = 0.0;
+        eta_sds[0]           = 0.0;
+        eta_stards[0]        = 0.0;
+        eta_pps[0]           = 0.0;
+        eta_ppp[0]           = 0.0;
+        eta_pds[0]           = 0.0;
+        eta_pdp[0]           = 0.0;
+        eta_dds[0]           = 0.0;
+        eta_ddp[0]           = 0.0;
+        eta_ddd[0]           = 0.0;
+
+        Eshift[0]            = 27;
+
+        bond_length[0]       = 0.582*sqrt(3.0)/4.0;
+
+//Anion 2 (Se) and from anion 2 to cation 1 (Cd) Parameters from Phys. Rev. B 41, 6079 (1990)
+        Esa[1]               = -9.63;
+        Epa[1]               = 1.47;
+        Estara[1]            = 7.53;
+        Eda12[1]             = 0.0;
+	Eda15[1]             = 0.0;
+        lambdaa[1]           = 0.0;     //(Delta/3)
+        Vsssa[1]             = -4.64/4.0;
+        Vstarstarsa[1]       = 0.0;
+        Vsstarsa[1]          = 0.0;
+        Vspsa[1]             = 4.57*sqrt(3.0)/4.0;
+        Vstarpsa[1]          = 3.05*sqrt(3.0)/4.0;
+        Vsdsa[1]             = 0.0;
+        Vstardsa[1]          = 0.0;
+        Vppsa[1]             = (2.64+2*5.36)/4.0;
+        Vpppa[1]             = (2.64-5.36)/4.0;
+        Vpdsa[1]             = 0.0;
+        Vpdpa[1]             = 0.0;
+        Vddsa[1]             = 0.0;
+        Vddpa[1]             = 0.0;
+        Vddda[1]             = 0.0;
+//Strain
+	Csasc[1]             = 0.0;
+        Cstarastarc[1]       = 0.0;
+        Csastarc[1]          = 0.0;
+        Csapc[1]             = 0.0;
+        Cstarapc[1]          = 0.0;
+        Csadc[1]             = 0.0;
+        Cstaradc[1]          = 0.0;
+        Cpapc[1]             = 0.0;
+        Cpadc[1]             = 0.0;
+        Cdadc[1]             = 0.0;
+
+//Cation 1 (Cd) and from cation 1 to anion 2 (Se)
+        Esc[1]               = 0.03;
+        Epc[1]               = 4.73;
+        Estarc[1]            = 5.72;
+        Edc12[1]             = 0.0;
+	Edc15[1]             = 0.0;
+        lambdac[1]           = 0.0;     //(Delta/3)
+        Vsssc[1]             = -4.64/4.0;
+        Vstarstarsc[1]       = 0.0;
+        Vsstarsc[1]          = 0.0;
+        Vspsc[1]             = 5.54*sqrt(3.0)/4.0;
+        Vstarpsc[1]          = 2.49*sqrt(3.0)/4.0;
+        Vsdsc[1]             = 0.0;
+        Vstardsc[1]          = 0.0;
+        Vppsc[1]             = (2.64+2*5.36)/4.0;
+        Vpppc[1]             = (2.64-5.36)/4.0;
+        Vpdsc[1]             = 0.0;
+        Vpdpc[1]             = 0.0;
+        Vddsc[1]             = 0.0;
+        Vddpc[1]             = 0.0;
+        Vdddc[1]             = 0.0;
+//Strain
+	Cscsa[1]             = 0.0;
+        Cstarcstara[1]       = 0.0;
+        Cscstara[1]          = 0.0;
+        Cscpa[1]             = 0.0;
+        Cstarcpa[1]          = 0.0;
+        Cscda[1]             = 0.0;
+        Cstarcda[1]          = 0.0;
+        Cpcpa[1]             = 0.0;
+        Cpcda[1]             = 0.0;
+        Cdcda[1]             = 0.0;
+
+        eta_sss[1]           = 0.0;
+        eta_sstars[1]        = 0.0;
+        eta_starstars[1]     = 0.0;
+        eta_sps[1]           = 0.0;
+        eta_starps[1]        = 0.0;
+        eta_sds[1]           = 0.0;
+        eta_stards[1]        = 0.0;
+        eta_pps[1]           = 0.0;
+        eta_ppp[1]           = 0.0;
+        eta_pds[1]           = 0.0;
+        eta_pdp[1]           = 0.0;
+        eta_dds[1]           = 0.0;
+        eta_ddp[1]           = 0.0;
+        eta_ddd[1]           = 0.0;
+
+        Eshift[1]            = 27;
+
+        bond_length[1]       = 0.582*sqrt(3.0)/4.0;
+
+	neighbor_table[0][1] = 11;
+	neighbor_table[0][3] = 21;
+        neighbor_table[1][0] = 12;
+	neighbor_table[1][2] = 12;
+	neighbor_table[2][1] = 11;
+        neighbor_table[2][3] = 21;
+        neighbor_table[3][0] = 22;
+        neighbor_table[3][2] = 22;
+
+	no_orb[0]            = sp3ss; //Se
+	no_orb[1]            = sp3ss; //Zn
+	no_orb[2]            = sp3ss; //Se
+	no_orb[3]            = sp3ss; //Cd
+
+	atomic_mass[0]       = 78.96*amu;
+	atomic_mass[1]       = 65.38*amu;
+	atomic_mass[2]       = 78.96*amu;
+	atomic_mass[3]       = 112.41*amu;
+
+        break;
+
+    case 305:  // ZnS-CdS
+
+        Eg                   = 1.9;
+        ECmin                = Eg;
+        EVmax                = 0;
+
+	// Strain constants
+        alpha                = 0.0;
+        beta                 = 0.0;
+        ideal_a0             = 0.582;
+
+//Anion 1 (S) and from anion 1 to cation 1 (Zn) Parameters from Phys. Rev. B 39, 10935 (1989)
+        Esa[0]               = -11.61-0.2;  //shift from Physical review 153, 844 (1967)
+        Epa[0]               = 1.48-0.2;
+	Estara[0]            = 8.08-0.2;
+	Eda12[0]             = 0.0;
+	Eda15[0]             = 0.0;
+        lambdaa[0]           = 0.0;     //(Delta/3)
+        Vsssa[0]             = -6.3/4.0;
+        Vstarstarsa[0]       = 0.0;
+        Vsstarsa[0]          = 0.0;
+        Vspsa[0]             = 5.16*sqrt(3.0)/4.0;
+        Vstarpsa[0]          = 2.89*sqrt(3.0)/4.0;
+        Vsdsa[0]             = 0.0;
+        Vstardsa[0]          = 0.0;
+        Vppsa[0]             = (3.11+2*5.0)/4.0;
+        Vpppa[0]             = (3.11-5.0)/4.0;
+        Vpdsa[0]             = 0.0;
+        Vpdpa[0]             = 0.0;
+        Vddsa[0]             = 0.0;
+        Vddpa[0]             = 0.0;
+        Vddda[0]             = 0.0;
+//Strain
+        Csasc[0]             = 0.0;
+        Cstarastarc[0]       = 0.0;
+        Csastarc[0]          = 0.0;
+        Csapc[0]             = 0.0;
+        Cstarapc[0]          = 0.0;
+        Csadc[0]             = 0.0;
+        Cstaradc[0]          = 0.0;
+        Cpapc[0]             = 0.0;
+        Cpadc[0]             = 0.0;
+        Cdadc[0]             = 0.0;
+
+//Cation 1 (Zn) and from cation 1 to anion 1 (S)
+        Esc[0]               = 1.11-0.2;
+        Epc[0]               = 6.52-0.2;
+        Estarc[0]            = 8.02-0.2;
+        Edc12[0]             = 0.0;
+	Edc15[0]             = 0.0;
+        lambdac[0]           = 0.0;     //(Delta/3)
+        Vsssc[0]             = -6.3/4.0;
+        Vstarstarsc[0]       = 0.0;
+        Vsstarsc[0]          = 0.0;
+        Vspsc[0]             = 5.17*sqrt(3.0)/4.0;
+        Vstarpsc[0]          = 1.75*sqrt(3.0)/4.0;
+        Vsdsc[0]             = 0.0;
+        Vstardsc[0]          = 0.0;
+        Vppsc[0]             = (3.11+2*5.0)/4.0;
+        Vpppc[0]             = (3.11-5.0)/4.0;
+        Vpdsc[0]             = 0.0;
+        Vpdpc[0]             = 0.0;
+        Vddsc[0]             = 0.0;
+        Vddpc[0]             = 0.0;
+        Vdddc[0]             = 0.0;
+//Strain
+        Cscsa[0]             = 0.0;
+        Cstarcstara[0]       = 0.0;
+        Cscstara[0]          = 0.0;
+        Cscpa[0]             = 0.0;
+        Cstarcpa[0]          = 0.0;
+        Cscda[0]             = 0.0;
+        Cstarcda[0]          = 0.0;
+        Cpcpa[0]             = 0.0;
+        Cpcda[0]             = 0.0;
+        Cdcda[0]             = 0.0;
+
+        eta_sss[0]           = 0.0;
+        eta_sstars[0]        = 0.0;
+        eta_starstars[0]     = 0.0;
+        eta_sps[0]           = 0.0;
+        eta_starps[0]        = 0.0;
+        eta_sds[0]           = 0.0;
+        eta_stards[0]        = 0.0;
+        eta_pps[0]           = 0.0;
+        eta_ppp[0]           = 0.0;
+        eta_pds[0]           = 0.0;
+        eta_pdp[0]           = 0.0;
+        eta_dds[0]           = 0.0;
+        eta_ddp[0]           = 0.0;
+        eta_ddd[0]           = 0.0;
+
+        Eshift[0]            = 27;
+
+        bond_length[0]       = 0.582*sqrt(3.0)/4.0;
+
+ //Anion 1 (S) and from anion 1 to cation 2 (Cd) Parameters from Phys. Rev. B 39, 10935 (1989)
+	Esa[1]               = -11.53;
+        Epa[1]               = 0.53;
+	Estara[1]            = 7.13;
+	Eda12[1]             = 0.0;
+	Eda15[1]             = 0.0;
+        lambdaa[1]           = 0.0;     //(Delta/3)
+        Vsssa[1]             = -3.07/4.0;
+        Vstarstarsa[1]       = 0.0;
+        Vsstarsa[1]          = 0.0;
+        Vspsa[1]             = 2.17*sqrt(3.0)/4.0;
+        Vstarpsa[1]          = 1.99*sqrt(3.0)/4.0;
+        Vsdsa[1]             = 0.0;
+        Vstardsa[1]          = 0.0;
+        Vppsa[1]             = (1.76+2*4.23)/4.0;
+        Vpppa[1]             = (1.76-4.23)/4.0;
+        Vpdsa[1]             = 0.0;
+        Vpdpa[1]             = 0.0;
+        Vddsa[1]             = 0.0;
+        Vddpa[1]             = 0.0;
+        Vddda[1]             = 0.0;
+//Strain
+        Csasc[1]             = 0.0;
+        Cstarastarc[1]       = 0.0;
+        Csastarc[1]          = 0.0;
+        Csapc[1]             = 0.0;
+        Cstarapc[1]          = 0.0;
+        Csadc[1]             = 0.0;
+        Cstaradc[1]          = 0.0;
+        Cpapc[1]             = 0.0;
+        Cpadc[1]             = 0.0;
+        Cdadc[1]             = 0.0;
+
+//Cation 2 (Cd) and from cation 2 to anion 1 (S)
+        Esc[1]               = 1.83;
+        Epc[1]               = 5.87;
+        Estarc[1]            = 6.87;
+        Edc12[1]             = 0.0;
+	Edc15[1]             = 0.0;
+        lambdac[1]           = 0.0;     //(Delta/3)
+        Vsssc[1]             = -3.07/4.0;
+        Vstarstarsc[1]       = 0.0;
+        Vsstarsc[1]          = 0.0;
+        Vspsc[1]             = 5.48*sqrt(3.0)/4.0;
+        Vstarpsc[1]          = 3.06*sqrt(3.0)/4.0;
+        Vsdsc[1]             = 0.0;
+        Vstardsc[1]          = 0.0;
+        Vppsc[1]             = (1.76+2*4.23)/4.0;
+        Vpppc[1]             = (1.76-4.23)/4.0;
+        Vpdsc[1]             = 0.0;
+        Vpdpc[1]             = 0.0;
+        Vddsc[1]             = 0.0;
+        Vddpc[1]             = 0.0;
+        Vdddc[1]             = 0.0;
+//Strain
+        Cscsa[1]             = 0.0;
+        Cstarcstara[1]       = 0.0;
+        Cscstara[1]          = 0.0;
+        Cscpa[1]             = 0.0;
+        Cstarcpa[1]          = 0.0;
+        Cscda[1]             = 0.0;
+        Cstarcda[1]          = 0.0;
+        Cpcpa[1]             = 0.0;
+        Cpcda[1]             = 0.0;
+        Cdcda[1]             = 0.0;
+
+        eta_sss[1]           = 0.0;
+        eta_sstars[1]        = 0.0;
+        eta_starstars[1]     = 0.0;
+        eta_sps[1]           = 0.0;
+        eta_starps[1]        = 0.0;
+        eta_sds[1]           = 0.0;
+        eta_stards[1]        = 0.0;
+        eta_pps[1]           = 0.0;
+        eta_ppp[1]           = 0.0;
+        eta_pds[1]           = 0.0;
+        eta_pdp[1]           = 0.0;
+        eta_dds[1]           = 0.0;
+        eta_ddp[1]           = 0.0;
+        eta_ddd[1]           = 0.0;
+
+        Eshift[1]            = 27;
+
+        bond_length[1]       = 0.582*sqrt(3.0)/4.0;
+
+	neighbor_table[0][1] = 11;
+	neighbor_table[0][3] = 21;
+        neighbor_table[1][0] = 12;
+	neighbor_table[1][2] = 12;
+	neighbor_table[2][1] = 11;
+        neighbor_table[2][3] = 21;
+        neighbor_table[3][0] = 22;
+        neighbor_table[3][2] = 22;
+
+	no_orb[0]            = sp3ss; //S
+	no_orb[1]            = sp3ss; //Zn
+	no_orb[2]            = sp3ss; //S
+	no_orb[3]            = sp3ss; //Cd
+
+	atomic_mass[0]       = 32.06*amu;  //S
+	atomic_mass[1]       = 65.38*amu;  //Zn
+	atomic_mass[2]       = 32.06*amu;  //S
+	atomic_mass[3]       = 112.41*amu; //Cd
+
+	break;
+
+    case 306:  // PbS_lent Superlattices Microstruct. 2, 491 (1986)
+
+        Eg                   = 0.28;
+        ECmin                = Eg;
+        EVmax                = 0.0;
+
+	// Strain constants
+        alpha                = 0.0;
+        beta                 = 0.0;
+        ideal_a0             = 0.6121;
+
+//Anion Se and from anion Se to cation Pb
+        Esa[0]               = -13.827;
+        Epa[0]               = -1.153;
+        Estara[0]            = 0.0;
+        Eda12[0]             = 10.38;
+	Eda15[0]             = 10.38;
+        lambdaa[0]           = -0.211/2.0;     //(Delta/3)
+        Vsssa[0]             = -0.364;
+        Vstarstarsa[0]       = 0.0;
+        Vsstarsa[0]          = 0.0;
+        Vspsa[0]             = 0.186;
+        Vstarpsa[0]          = 0.0;
+        Vsdsa[0]             = 0.0;
+        Vstardsa[0]          = 0.0;
+        Vppsa[0]             = 2.073;
+        Vpppa[0]             = -0.281;
+        Vpdsa[0]             = -1.54;
+        Vpdpa[0]             = 0.517;
+        Vddsa[0]             = -1.67;
+        Vddpa[0]             = 0.0;
+        Vddda[0]             = 0.659;
+//Strain
+        Csasc[0]             = 0.0;
+        Cstarastarc[0]       = 0.0;
+        Csastarc[0]          = 0.0;
+        Csapc[0]             = 0.0;
+        Cstarapc[0]          = 0.0;
+        Csadc[0]             = 0.0;
+        Cstaradc[0]          = 0.0;
+        Cpapc[0]             = 0.0;
+        Cpadc[0]             = 0.0;
+        Cdadc[0]             = 0.0;
+
+//Cation Pb and from cation Pb to anion Se
+        Esc[0]               = -6.546;
+        Epc[0]               = 3.486;
+        Estarc[0]            = 0.0;
+        Edc12[0]             = 9.27;
+	Edc15[0]             = 9.27;
+        lambdac[0]           = 1.559/2.0;     //(Delta/3)
+        Vsssc[0]             = -0.364;
+        Vstarstarsc[0]       = 0.0;
+        Vsstarsc[0]          = 0.0;
+        Vspsc[0]             = 0.936;
+        Vstarpsc[0]          = 0.0;
+        Vsdsc[0]             = 0.0;
+        Vstardsc[0]          = 0.0;
+        Vppsc[0]             = 2.073;
+        Vpppc[0]             = -0.281;
+        Vpdsc[0]             = -1.142;
+        Vpdpc[0]             = 1.16;
+        Vddsc[0]             = -1.67;
+        Vddpc[0]             = 0.0;
+        Vdddc[0]             = 0.659;
+//Strain
+        Cscsa[0]             = 0.0;
+        Cstarcstara[0]       = 0.0;
+        Cscstara[0]          = 0.0;
+        Cscpa[0]             = 0.0;
+        Cstarcpa[0]          = 0.0;
+        Cscda[0]             = 0.0;
+        Cstarcda[0]          = 0.0;
+        Cpcpa[0]             = 0.0;
+        Cpcda[0]             = 0.0;
+        Cdcda[0]             = 0.0;
+
+        eta_sss[0]           = 0.0;
+        eta_sstars[0]        = 0.0;
+        eta_starstars[0]     = 0.0;
+        eta_sps[0]           = 0.0;
+        eta_starps[0]        = 0.0;
+        eta_sds[0]           = 0.0;
+        eta_stards[0]        = 0.0;
+        eta_pps[0]           = 0.0;
+        eta_ppp[0]           = 0.0;
+        eta_pds[0]           = 0.0;
+        eta_pdp[0]           = 0.0;
+        eta_dds[0]           = 0.0;
+        eta_ddp[0]           = 0.0;
+        eta_ddd[0]           = 0.0;
+
+        Eshift[0]            = 27;
+
+        bond_length[0]       = 0.6121*sqrt(3.0)/4.0;
+
+        neighbor_table[0][1] = 11;
+        neighbor_table[1][0] = 12;
+
+	no_orb[0]            = sp3d5; //Se
+	no_orb[1]            = sp3d5; //Pb
+
+	atomic_mass[0]       = 78.96*amu;;  //Se
+	atomic_mass[1]       = 207.2*amu;   //Pb
+	
+	IS                   = 0;
+	IPX                  = 1;
+	IPY                  = 2;
+	IPZ                  = 3;
+	ID1                  = 4;
+	ID2                  = 5;
+	ID3                  = 6;
+	ID4                  = 7;
+	ID5                  = 8;
+	ISS                  = 9;
+        
+        break;
+
+    case 307:  // PbTe_lent Superlattices Microstruct. 2, 491 (1986)
+
+        Eg                   = 0.18;
+        ECmin                = Eg;
+        EVmax                = 0.0;
+
+	// Strain constants
+        alpha                = 0.0;
+        beta                 = 0.0;
+        ideal_a0             = 0.6121;
+
+//Anion Se and from anion Se to cation Pb
+        Esa[0]               = -11.002;
+        Epa[0]               = -0.237;
+        Estara[0]            = 0.0;
+        Eda12[0]             = 7.73;
+	Eda15[0]             = 7.73;
+        lambdaa[0]           = 0.428/2.0;     //(Delta/3)
+        Vsssa[0]             = -0.474;
+        Vstarstarsa[0]       = 0.0;
+        Vsstarsa[0]          = 0.0;
+        Vspsa[0]             = 0.633;
+        Vstarpsa[0]          = 0.0;
+        Vsdsa[0]             = 0.0;
+        Vstardsa[0]          = 0.0;
+        Vppsa[0]             = 2.066;
+        Vpppa[0]             = -0.430;
+        Vpdsa[0]             = -1.59;
+        Vpdpa[0]             = 0.531;
+        Vddsa[0]             = -1.35;
+        Vddpa[0]             = 0.0;
+        Vddda[0]             = 0.668;
+//Strain
+        Csasc[0]             = 0.0;
+        Cstarastarc[0]       = 0.0;
+        Csastarc[0]          = 0.0;
+        Csapc[0]             = 0.0;
+        Cstarapc[0]          = 0.0;
+        Csadc[0]             = 0.0;
+        Cstaradc[0]          = 0.0;
+        Cpapc[0]             = 0.0;
+        Cpadc[0]             = 0.0;
+        Cdadc[0]             = 0.0;
+
+//Cation Pb and from cation Pb to anion Se
+        Esc[0]               = -7.612;
+        Epc[0]               = 3.195;
+        Estarc[0]            = 0.0;
+        Edc12[0]             = 7.73;
+	Edc15[0]             = 7.73;
+        lambdac[0]           = 1.5/2.0;     //(Delta/3)
+        Vsssc[0]             = -0.474;
+        Vstarstarsc[0]       = 0.0;
+        Vsstarsc[0]          = 0.0;
+        Vspsc[0]             = 0.705;
+        Vstarpsc[0]          = 0.0;
+        Vsdsc[0]             = 0.0;
+        Vstardsc[0]          = 0.0;
+        Vppsc[0]             = 2.066;
+        Vpppc[0]             = -0.430;
+        Vpdsc[0]             = -1.29;
+        Vpdpc[0]             = 0.835;
+        Vddsc[0]             = -1.35;
+        Vddpc[0]             = 0.0;
+        Vdddc[0]             = 0.668;
+//Strain
+        Cscsa[0]             = 0.0;
+        Cstarcstara[0]       = 0.0;
+        Cscstara[0]          = 0.0;
+        Cscpa[0]             = 0.0;
+        Cstarcpa[0]          = 0.0;
+        Cscda[0]             = 0.0;
+        Cstarcda[0]          = 0.0;
+        Cpcpa[0]             = 0.0;
+        Cpcda[0]             = 0.0;
+        Cdcda[0]             = 0.0;
+
+        eta_sss[0]           = 0.0;
+        eta_sstars[0]        = 0.0;
+        eta_starstars[0]     = 0.0;
+        eta_sps[0]           = 0.0;
+        eta_starps[0]        = 0.0;
+        eta_sds[0]           = 0.0;
+        eta_stards[0]        = 0.0;
+        eta_pps[0]           = 0.0;
+        eta_ppp[0]           = 0.0;
+        eta_pds[0]           = 0.0;
+        eta_pdp[0]           = 0.0;
+        eta_dds[0]           = 0.0;
+        eta_ddp[0]           = 0.0;
+        eta_ddd[0]           = 0.0;
+
+        Eshift[0]            = 27;
+
+        bond_length[0]       = 0.6121*sqrt(3.0)/4.0;
+
+        neighbor_table[0][1] = 11;
+        neighbor_table[1][0] = 12;
+
+	no_orb[0]            = sp3d5; //Se
+	no_orb[1]            = sp3d5; //Pb
+
+	atomic_mass[0]       = 78.96*amu;;  //Se
+	atomic_mass[1]       = 207.2*amu;   //Pb
+	
+	IS                   = 0;
+	IPX                  = 1;
+	IPY                  = 2;
+	IPZ                  = 3;
+	ID1                  = 4;
+	ID2                  = 5;
+	ID3                  = 6;
+	ID4                  = 7;
+	ID5                  = 8;
+	ISS                  = 9;
+        
+        break;
+    
     default:
         read_material_from_file(F);
     }
 
     if(init_gap_tables){
-        for(int i=0;i<table_dim;i++){
-	    for(int j=0;j<table_dim;j++){
-	        mid_gap_energy[i][j] = (ECmin+EVmax)/2.0;
-		band_gap_table[i][j] = Eg;
+
+        FILE *FT = fopen(table_file,"r");
+
+	if(FT==NULL){
+	    for(int i=0;i<table_dim;i++){
+	        for(int j=0;j<table_dim;j++){
+		    mid_gap_energy[i][j] = (ECmin+EVmax)/2.0;
+		    band_gap_table[i][j] = Eg;
+		}
 	    }
+	}else{
+ 
+	    int no_entries;
+	    int indi,indj;
+	    double val1,val2;
+
+	    fscanf(FT,"%i",&no_entries);
+
+	    for(int i=0;i<no_entries;i++){
+	        fscanf(FT,"%i",&indi);
+		fscanf(FT,"%i",&indj);
+		fscanf(FT,"%lg",&val1);
+		fscanf(FT,"%lg",&val2);
+		mid_gap_energy[indi-1][indj-1] = val1;
+		band_gap_table[indi-1][indj-1] = val2;
+	    }
+
+	    fclose(FT);
 	}
-    }
-    
+    }    
 }
 
 /************************************************************************************************/
@@ -6512,142 +9688,193 @@ void Material::read_material_from_file(FILE *F)
     int condition;
     int IA,IC,IT,ind1,ind2,NT,NCA;
     
-    condition = (mat_name[0]=='p')&&(mat_name[1]=='h');
+    if(!read_hamiltonian){
 
-    if(!condition){
+        condition = (mat_name[0]=='p')&&(mat_name[1]=='h');
 
-	fscanf(F,"%lg",&Eg);
-	fscanf(F,"%lg",&ECmin);
-	fscanf(F,"%lg",&EVmax);
-    
-	for(IA=0;IA<no_anion;IA++){
+	if(!condition){
 
-	    for(IC=0;IC<no_cation;IC++){
+	    fscanf(F,"%lg",&Eg);
+	    fscanf(F,"%lg",&ECmin);
+	    fscanf(F,"%lg",&EVmax);
+
+	    for(IA=0;IA<no_anion;IA++){
+
+	        for(IC=0;IC<no_cation;IC++){
 	  
-	        //Anion IA and from anion IA to cation IC
-	        fscanf(F,"%lg",&Esa[IA*no_cation+IC]);
-		fscanf(F,"%lg",&Epa[IA*no_cation+IC]);
-		fscanf(F,"%lg",&Estara[IA*no_cation+IC]);
-		fscanf(F,"%lg",&Eda12[IA*no_cation+IC]);
-		Eda15[IA*no_cation+IC] = Eda12[IA*no_cation+IC];
-		fscanf(F,"%lg",&lambdaa[IA*no_cation+IC]);
-		fscanf(F,"%lg",&Vsssa[IA*no_cation+IC]);
-		fscanf(F,"%lg",&Vstarstarsa[IA*no_cation+IC]);
-		fscanf(F,"%lg",&Vsstarsa[IA*no_cation+IC]);
-		fscanf(F,"%lg",&Vspsa[IA*no_cation+IC]);
-		fscanf(F,"%lg",&Vstarpsa[IA*no_cation+IC]);
-		fscanf(F,"%lg",&Vsdsa[IA*no_cation+IC]);
-		fscanf(F,"%lg",&Vstardsa[IA*no_cation+IC]);
-		fscanf(F,"%lg",&Vppsa[IA*no_cation+IC]);
-		fscanf(F,"%lg",&Vpppa[IA*no_cation+IC]);
-		fscanf(F,"%lg",&Vpdsa[IA*no_cation+IC]);
-		fscanf(F,"%lg",&Vpdpa[IA*no_cation+IC]);
-		fscanf(F,"%lg",&Vddsa[IA*no_cation+IC]);
-		fscanf(F,"%lg",&Vddpa[IA*no_cation+IC]);
-		fscanf(F,"%lg",&Vddda[IA*no_cation+IC]);
+		    //Anion IA and from anion IA to cation IC
+		    fscanf(F,"%lg",&Esa[IA*no_cation+IC]);
+		    fscanf(F,"%lg",&Epa[IA*no_cation+IC]);
+		    fscanf(F,"%lg",&Estara[IA*no_cation+IC]);
+		    fscanf(F,"%lg",&Eda12[IA*no_cation+IC]);
+		    Eda15[IA*no_cation+IC] = Eda12[IA*no_cation+IC];
+		    fscanf(F,"%lg",&lambdaa[IA*no_cation+IC]);
+		    fscanf(F,"%lg",&Vsssa[IA*no_cation+IC]);
+		    fscanf(F,"%lg",&Vstarstarsa[IA*no_cation+IC]);
+		    fscanf(F,"%lg",&Vsstarsa[IA*no_cation+IC]);
+		    fscanf(F,"%lg",&Vspsa[IA*no_cation+IC]);
+		    fscanf(F,"%lg",&Vstarpsa[IA*no_cation+IC]);
+		    fscanf(F,"%lg",&Vsdsa[IA*no_cation+IC]);
+		    fscanf(F,"%lg",&Vstardsa[IA*no_cation+IC]);
+		    fscanf(F,"%lg",&Vppsa[IA*no_cation+IC]);
+		    fscanf(F,"%lg",&Vpppa[IA*no_cation+IC]);
+		    fscanf(F,"%lg",&Vpdsa[IA*no_cation+IC]);
+		    fscanf(F,"%lg",&Vpdpa[IA*no_cation+IC]);
+		    fscanf(F,"%lg",&Vddsa[IA*no_cation+IC]);
+		    fscanf(F,"%lg",&Vddpa[IA*no_cation+IC]);
+		    fscanf(F,"%lg",&Vddda[IA*no_cation+IC]);
 
-		//Strain
-		fscanf(F,"%lg",&Csasc[IA*no_cation+IC]);
-		fscanf(F,"%lg",&Cstarastarc[IA*no_cation+IC]);
-		fscanf(F,"%lg",&Csastarc[IA*no_cation+IC]);
-		fscanf(F,"%lg",&Csapc[IA*no_cation+IC]);
-		fscanf(F,"%lg",&Cstarapc[IA*no_cation+IC]);
-		fscanf(F,"%lg",&Csadc[IA*no_cation+IC]);
-		fscanf(F,"%lg",&Cstaradc[IA*no_cation+IC]);
-		fscanf(F,"%lg",&Cpapc[IA*no_cation+IC]);
-		fscanf(F,"%lg",&Cpadc[IA*no_cation+IC]);
-		fscanf(F,"%lg",&Cdadc[IA*no_cation+IC]);
+		    //Strain
+		    fscanf(F,"%lg",&Csasc[IA*no_cation+IC]);
+		    fscanf(F,"%lg",&Cstarastarc[IA*no_cation+IC]);
+		    fscanf(F,"%lg",&Csastarc[IA*no_cation+IC]);
+		    fscanf(F,"%lg",&Csapc[IA*no_cation+IC]);
+		    fscanf(F,"%lg",&Cstarapc[IA*no_cation+IC]);
+		    fscanf(F,"%lg",&Csadc[IA*no_cation+IC]);
+		    fscanf(F,"%lg",&Cstaradc[IA*no_cation+IC]);
+		    fscanf(F,"%lg",&Cpapc[IA*no_cation+IC]);
+		    fscanf(F,"%lg",&Cpadc[IA*no_cation+IC]);
+		    fscanf(F,"%lg",&Cdadc[IA*no_cation+IC]);
 
-		//Cation IC and from cation IC to anion IA
-		fscanf(F,"%lg",&Esc[IA*no_cation+IC]);
-		fscanf(F,"%lg",&Epc[IA*no_cation+IC]);
-		fscanf(F,"%lg",&Estarc[IA*no_cation+IC]);
-		fscanf(F,"%lg",&Edc12[IA*no_cation+IC]);
-		Edc15[IA*no_cation+IC] = Edc12[IA*no_cation+IC];
-		fscanf(F,"%lg",&lambdac[IA*no_cation+IC]);
-		fscanf(F,"%lg",&Vsssc[IA*no_cation+IC]);
-		fscanf(F,"%lg",&Vstarstarsc[IA*no_cation+IC]);
-		fscanf(F,"%lg",&Vsstarsc[IA*no_cation+IC]);
-		fscanf(F,"%lg",&Vspsc[IA*no_cation+IC]);
-		fscanf(F,"%lg",&Vstarpsc[IA*no_cation+IC]);
-		fscanf(F,"%lg",&Vsdsc[IA*no_cation+IC]);
-		fscanf(F,"%lg",&Vstardsc[IA*no_cation+IC]);
-		fscanf(F,"%lg",&Vppsc[IA*no_cation+IC]);
-		fscanf(F,"%lg",&Vpppc[IA*no_cation+IC]);
-		fscanf(F,"%lg",&Vpdsc[IA*no_cation+IC]);
-		fscanf(F,"%lg",&Vpdpc[IA*no_cation+IC]);
-		fscanf(F,"%lg",&Vddsc[IA*no_cation+IC]);
-		fscanf(F,"%lg",&Vddpc[IA*no_cation+IC]);
-		fscanf(F,"%lg",&Vdddc[IA*no_cation+IC]);
+		    //Cation IC and from cation IC to anion IA
+		    fscanf(F,"%lg",&Esc[IA*no_cation+IC]);
+		    fscanf(F,"%lg",&Epc[IA*no_cation+IC]);
+		    fscanf(F,"%lg",&Estarc[IA*no_cation+IC]);
+		    fscanf(F,"%lg",&Edc12[IA*no_cation+IC]);
+		    Edc15[IA*no_cation+IC] = Edc12[IA*no_cation+IC];
+		    fscanf(F,"%lg",&lambdac[IA*no_cation+IC]);
+		    fscanf(F,"%lg",&Vsssc[IA*no_cation+IC]);
+		    fscanf(F,"%lg",&Vstarstarsc[IA*no_cation+IC]);
+		    fscanf(F,"%lg",&Vsstarsc[IA*no_cation+IC]);
+		    fscanf(F,"%lg",&Vspsc[IA*no_cation+IC]);
+		    fscanf(F,"%lg",&Vstarpsc[IA*no_cation+IC]);
+		    fscanf(F,"%lg",&Vsdsc[IA*no_cation+IC]);
+		    fscanf(F,"%lg",&Vstardsc[IA*no_cation+IC]);
+		    fscanf(F,"%lg",&Vppsc[IA*no_cation+IC]);
+		    fscanf(F,"%lg",&Vpppc[IA*no_cation+IC]);
+		    fscanf(F,"%lg",&Vpdsc[IA*no_cation+IC]);
+		    fscanf(F,"%lg",&Vpdpc[IA*no_cation+IC]);
+		    fscanf(F,"%lg",&Vddsc[IA*no_cation+IC]);
+		    fscanf(F,"%lg",&Vddpc[IA*no_cation+IC]);
+		    fscanf(F,"%lg",&Vdddc[IA*no_cation+IC]);
 
-		//Strain
-		fscanf(F,"%lg",&Cscsa[IA*no_cation+IC]);
-		fscanf(F,"%lg",&Cstarcstara[IA*no_cation+IC]);
-		fscanf(F,"%lg",&Cscstara[IA*no_cation+IC]);
-		fscanf(F,"%lg",&Cscpa[IA*no_cation+IC]);
-		fscanf(F,"%lg",&Cstarcpa[IA*no_cation+IC]);
-		fscanf(F,"%lg",&Cscda[IA*no_cation+IC]);
-		fscanf(F,"%lg",&Cstarcda[IA*no_cation+IC]);
-		fscanf(F,"%lg",&Cpcpa[IA*no_cation+IC]);
-		fscanf(F,"%lg",&Cpcda[IA*no_cation+IC]);
-		fscanf(F,"%lg",&Cdcda[IA*no_cation+IC]);
+		    //Strain
+		    fscanf(F,"%lg",&Cscsa[IA*no_cation+IC]);
+		    fscanf(F,"%lg",&Cstarcstara[IA*no_cation+IC]);
+		    fscanf(F,"%lg",&Cscstara[IA*no_cation+IC]);
+		    fscanf(F,"%lg",&Cscpa[IA*no_cation+IC]);
+		    fscanf(F,"%lg",&Cstarcpa[IA*no_cation+IC]);
+		    fscanf(F,"%lg",&Cscda[IA*no_cation+IC]);
+		    fscanf(F,"%lg",&Cstarcda[IA*no_cation+IC]);
+		    fscanf(F,"%lg",&Cpcpa[IA*no_cation+IC]);
+		    fscanf(F,"%lg",&Cpcda[IA*no_cation+IC]);
+		    fscanf(F,"%lg",&Cdcda[IA*no_cation+IC]);
 
-		fscanf(F,"%lg",&eta_sss[IA*no_cation+IC]);
-		fscanf(F,"%lg",&eta_sstars[IA*no_cation+IC]);
-		fscanf(F,"%lg",&eta_starstars[IA*no_cation+IC]);
-		fscanf(F,"%lg",&eta_sps[IA*no_cation+IC]);
-		fscanf(F,"%lg",&eta_starps[IA*no_cation+IC]);
-		fscanf(F,"%lg",&eta_sds[IA*no_cation+IC]);
-		fscanf(F,"%lg",&eta_stards[IA*no_cation+IC]);
-		fscanf(F,"%lg",&eta_pps[IA*no_cation+IC]);
-		fscanf(F,"%lg",&eta_ppp[IA*no_cation+IC]);
-		fscanf(F,"%lg",&eta_pds[IA*no_cation+IC]);
-		fscanf(F,"%lg",&eta_pdp[IA*no_cation+IC]);
-		fscanf(F,"%lg",&eta_dds[IA*no_cation+IC]);
-		fscanf(F,"%lg",&eta_ddp[IA*no_cation+IC]);
-		fscanf(F,"%lg",&eta_ddd[IA*no_cation+IC]);
+		    fscanf(F,"%lg",&eta_sss[IA*no_cation+IC]);
+		    fscanf(F,"%lg",&eta_sstars[IA*no_cation+IC]);
+		    fscanf(F,"%lg",&eta_starstars[IA*no_cation+IC]);
+		    fscanf(F,"%lg",&eta_sps[IA*no_cation+IC]);
+		    fscanf(F,"%lg",&eta_starps[IA*no_cation+IC]);
+		    fscanf(F,"%lg",&eta_sds[IA*no_cation+IC]);
+		    fscanf(F,"%lg",&eta_stards[IA*no_cation+IC]);
+		    fscanf(F,"%lg",&eta_pps[IA*no_cation+IC]);
+		    fscanf(F,"%lg",&eta_ppp[IA*no_cation+IC]);
+		    fscanf(F,"%lg",&eta_pds[IA*no_cation+IC]);
+		    fscanf(F,"%lg",&eta_pdp[IA*no_cation+IC]);
+		    fscanf(F,"%lg",&eta_dds[IA*no_cation+IC]);
+		    fscanf(F,"%lg",&eta_ddp[IA*no_cation+IC]);
+		    fscanf(F,"%lg",&eta_ddd[IA*no_cation+IC]);
 
-		fscanf(F,"%lg",&Eshift[IA*no_cation+IC]);
+		    fscanf(F,"%lg",&Eshift[IA*no_cation+IC]);
 
-		fscanf(F,"%lg",&bond_length[IA*no_cation+IC]);
+		    fscanf(F,"%lg",&bond_length[IA*no_cation+IC]);
 
-	    }   
+		}   
+	    }
+	}else{
+
+	    for(IA=0;IA<no_anion;IA++){
+	        for(IC=0;IC<no_cation;IC++){
+		    fscanf(F,"%lg",&bond_length[IA*no_cation+IC]);
+		}
+	    }
+	}
+
+	fscanf(F,"%i",&NT);
+
+	for(IT=0;IT<NT;IT++){
+	    fscanf(F,"%i",&ind1);
+	    fscanf(F,"%i",&ind2);
+	    fscanf(F,"%i",&neighbor_table[ind1-1][ind2-1]);
+	}
+    
+	fscanf(F,"%i",&NCA);
+	for(IA=0;IA<NCA;IA++){
+	    fscanf(F,"%i",&no_orb[IA]);
+	}
+
+	for(IA=0;IA<NCA;IA++){
+	    if(condition){
+	        fscanf(F,"%lg",&atomic_mass[IA]);
+		fscanf(F,"%lg",&alpha_ph[IA]);
+		fscanf(F,"%lg",&beta_ph[IA]);
+		fscanf(F,"%lg",&kappa_ph[IA]);
+		fscanf(F,"%lg",&tau_ph[IA]);
+		fscanf(F,"%lg",&gamma_ph[IA]);
+	    }
+	    atomic_mass[IA] = atomic_mass[IA]*amu;
 	}
     }else{
 
-        for(IA=0;IA<no_anion;IA++){
-	    for(IC=0;IC<no_cation;IC++){
-	        fscanf(F,"%lg",&bond_length[IA*no_cation+IC]);
-	    }
-	}
-    }
+        fscanf(F,"%lg",&Eg);
+	fscanf(F,"%lg",&ECmin);
+	fscanf(F,"%lg",&EVmax);
 
-    fscanf(F,"%i",&NT);
-    
-    for(IT=0;IT<NT;IT++){
-        fscanf(F,"%i",&ind1);
-	fscanf(F,"%i",&ind2);
-	fscanf(F,"%i",&neighbor_table[ind1-1][ind2-1]);
-    }
-    
-    fscanf(F,"%i",&NCA);
-    for(IA=0;IA<NCA;IA++){
-        fscanf(F,"%i",&no_orb[IA]);
-    }
-    
-    for(IA=0;IA<NCA;IA++){
-        if(condition){
-	    fscanf(F,"%lg",&atomic_mass[IA]);
-	    fscanf(F,"%lg",&alpha_ph[IA]);
-	    fscanf(F,"%lg",&beta_ph[IA]);
-	    fscanf(F,"%lg",&kappa_ph[IA]);
-	    fscanf(F,"%lg",&tau_ph[IA]);
-	    fscanf(F,"%lg",&gamma_ph[IA]);
+	for(IA=0;IA<(no_anion+no_cation);IA++){
+	    fscanf(F,"%i",&no_orb[IA]);
 	}
-	atomic_mass[IA] = atomic_mass[IA]*amu;
     }
     
     fclose(F);
+
+}
+
+/************************************************************************************************/
+
+double Material::si_temp_dep(double Temp)
+{
+
+    double factor;
+    double alpha = 0.2;
+    double T1    = 200.0;
+    double T2    = 400.0;
+    double c1    = -0.2097;
+    double c2    = 0.00598;
+    double c3    = -7.6438e-06;
+    double c4    = 1.6668e-09;
+
+    if(Temp<=T1){
+        factor = pow(Temp/300.0,0.9);
+    }
+    if((Temp>T1)&&(Temp<=T2)){
+        factor = c1+c2*Temp+c3*Temp*Temp+c4*Temp*Temp*Temp;
+    }
+    if(Temp>T2){
+        factor = 1+alpha*(Temp-300.0)/300.0;
+    }
+
+    /*
+    double factor;
+    double alpha = 0.2;
+
+    if(Temp<=300.0){
+        factor = pow(Temp/300.0,0.9);
+    }else{
+        factor = 1+alpha*(Temp-300.0)/300.0;;
+    }
+    */
+
+    return factor;
 
 }
 
@@ -6657,6 +9884,21 @@ void Material::get_band_edge(double *pECmin,double *pEVmax)
 {
     *pECmin = ECmin;
     *pEVmax = EVmax;
+}
+
+/************************************************************************************************/
+
+double Material::graphene_scaling_function(double d0_d,double mu_scal)
+{
+  
+    double alpha = 46.0;
+    double f     = 1.0/(1.0+exp(alpha*(1.0/d0_d-1.0)))+\
+      pow(d0_d,-mu_scal)*exp(-mu_scal*(1.0/d0_d-1.0))/(1.0+exp(-alpha*(1.0/d0_d-1.0)));
+  
+    //double f = pow(d0_d,-mu_scal)*exp(-mu_scal*(1.0/d0_d-1.0));
+
+    return f;
+
 }
 
 /************************************************************************************************/
@@ -6710,35 +9952,35 @@ void Material::calc_matrix_element(double *V, double l, double m, double n, doub
         
     }else{
 
-        vsssa       = Vsssa[fst_entry]*pow(d0_d,eta_sss[fst_entry])*pow(d0_d,-mu_scal)*exp(-mu_scal*(1.0/d0_d-1.0));
-        vstarstarsa = Vstarstarsa[fst_entry]*pow(d0_d,eta_starstars[fst_entry])*pow(d0_d,-mu_scal)*exp(-mu_scal*(1.0/d0_d-1.0));
-        vsstarsa    = Vsstarsa[fst_entry]*pow(d0_d,eta_sstars[fst_entry])*pow(d0_d,-mu_scal)*exp(-mu_scal*(1.0/d0_d-1.0));
-        vspsa       = Vspsa[fst_entry]*pow(d0_d,eta_sps[fst_entry])*pow(d0_d,-mu_scal)*exp(-mu_scal*(1.0/d0_d-1.0));
-        vstarpsa    = Vstarpsa[fst_entry]*pow(d0_d,eta_starps[fst_entry])*pow(d0_d,-mu_scal)*exp(-mu_scal*(1.0/d0_d-1.0));
-        vsdsa       = Vsdsa[fst_entry]*pow(d0_d,eta_sds[fst_entry])*pow(d0_d,-mu_scal)*exp(-mu_scal*(1.0/d0_d-1.0));
-        vstardsa    = Vstardsa[fst_entry]*pow(d0_d,eta_stards[fst_entry])*pow(d0_d,-mu_scal)*exp(-mu_scal*(1.0/d0_d-1.0));
-        vppsa       = Vppsa[fst_entry]*pow(d0_d,eta_pps[fst_entry])*pow(d0_d,-mu_scal)*exp(-mu_scal*(1.0/d0_d-1.0));
-        vpppa       = Vpppa[fst_entry]*pow(d0_d,eta_ppp[fst_entry])*pow(d0_d,-mu_scal)*exp(-mu_scal*(1.0/d0_d-1.0));
-        vpdsa       = Vpdsa[fst_entry]*pow(d0_d,eta_pds[fst_entry])*pow(d0_d,-mu_scal)*exp(-mu_scal*(1.0/d0_d-1.0));
-        vpdpa       = Vpdpa[fst_entry]*pow(d0_d,eta_pdp[fst_entry])*pow(d0_d,-mu_scal)*exp(-mu_scal*(1.0/d0_d-1.0));
-        vddsa       = Vddsa[fst_entry]*pow(d0_d,eta_dds[fst_entry])*pow(d0_d,-mu_scal)*exp(-mu_scal*(1.0/d0_d-1.0));
-        vddpa       = Vddpa[fst_entry]*pow(d0_d,eta_ddp[fst_entry])*pow(d0_d,-mu_scal)*exp(-mu_scal*(1.0/d0_d-1.0));
-        vddda       = Vddda[fst_entry]*pow(d0_d,eta_ddd[fst_entry])*pow(d0_d,-mu_scal)*exp(-mu_scal*(1.0/d0_d-1.0));
+        vsssa       = Vsssa[fst_entry]*pow(d0_d,eta_sss[fst_entry])*graphene_scaling_function(d0_d,mu_scal);
+        vstarstarsa = Vstarstarsa[fst_entry]*pow(d0_d,eta_starstars[fst_entry])*graphene_scaling_function(d0_d,mu_scal);
+        vsstarsa    = Vsstarsa[fst_entry]*pow(d0_d,eta_sstars[fst_entry])*graphene_scaling_function(d0_d,mu_scal);
+        vspsa       = Vspsa[fst_entry]*pow(d0_d,eta_sps[fst_entry])*graphene_scaling_function(d0_d,mu_scal);
+        vstarpsa    = Vstarpsa[fst_entry]*pow(d0_d,eta_starps[fst_entry])*graphene_scaling_function(d0_d,mu_scal);
+        vsdsa       = Vsdsa[fst_entry]*pow(d0_d,eta_sds[fst_entry])*graphene_scaling_function(d0_d,mu_scal);
+        vstardsa    = Vstardsa[fst_entry]*pow(d0_d,eta_stards[fst_entry])*graphene_scaling_function(d0_d,mu_scal);
+        vppsa       = Vppsa[fst_entry]*pow(d0_d,eta_pps[fst_entry])*graphene_scaling_function(d0_d,mu_scal);
+        vpppa       = Vpppa[fst_entry]*pow(d0_d,eta_ppp[fst_entry])*graphene_scaling_function(d0_d,mu_scal);
+        vpdsa       = Vpdsa[fst_entry]*pow(d0_d,eta_pds[fst_entry])*graphene_scaling_function(d0_d,mu_scal);
+        vpdpa       = Vpdpa[fst_entry]*pow(d0_d,eta_pdp[fst_entry])*graphene_scaling_function(d0_d,mu_scal);
+        vddsa       = Vddsa[fst_entry]*pow(d0_d,eta_dds[fst_entry])*graphene_scaling_function(d0_d,mu_scal);
+        vddpa       = Vddpa[fst_entry]*pow(d0_d,eta_ddp[fst_entry])*graphene_scaling_function(d0_d,mu_scal);
+        vddda       = Vddda[fst_entry]*pow(d0_d,eta_ddd[fst_entry])*graphene_scaling_function(d0_d,mu_scal);
 
-        vsssc       = Vsssc[fst_entry]*pow(d0_d,eta_sss[fst_entry])*pow(d0_d,-mu_scal)*exp(-mu_scal*(1.0/d0_d-1.0));
-        vstarstarsc = Vstarstarsc[fst_entry]*pow(d0_d,eta_starstars[fst_entry])*pow(d0_d,-mu_scal)*exp(-mu_scal*(1.0/d0_d-1.0));
-        vsstarsc    = Vsstarsc[fst_entry]*pow(d0_d,eta_sstars[fst_entry])*pow(d0_d,-mu_scal)*exp(-mu_scal*(1.0/d0_d-1.0));
-        vspsc       = Vspsc[fst_entry]*pow(d0_d,eta_sps[fst_entry])*pow(d0_d,-mu_scal)*exp(-mu_scal*(1.0/d0_d-1.0));
-        vstarpsc    = Vstarpsc[fst_entry]*pow(d0_d,eta_starps[fst_entry])*pow(d0_d,-mu_scal)*exp(-mu_scal*(1.0/d0_d-1.0));
-        vsdsc       = Vsdsc[fst_entry]*pow(d0_d,eta_sds[fst_entry])*pow(d0_d,-mu_scal)*exp(-mu_scal*(1.0/d0_d-1.0));
-        vstardsc    = Vstardsc[fst_entry]*pow(d0_d,eta_stards[fst_entry])*pow(d0_d,-mu_scal)*exp(-mu_scal*(1.0/d0_d-1.0));
-        vppsc       = Vppsc[fst_entry]*pow(d0_d,eta_pps[fst_entry])*pow(d0_d,-mu_scal)*exp(-mu_scal*(1.0/d0_d-1.0));
-        vpppc       = Vpppc[fst_entry]*pow(d0_d,eta_ppp[fst_entry])*pow(d0_d,-mu_scal)*exp(-mu_scal*(1.0/d0_d-1.0));
-        vpdsc       = Vpdsc[fst_entry]*pow(d0_d,eta_pds[fst_entry])*pow(d0_d,-mu_scal)*exp(-mu_scal*(1.0/d0_d-1.0));
-        vpdpc       = Vpdpc[fst_entry]*pow(d0_d,eta_pdp[fst_entry])*pow(d0_d,-mu_scal)*exp(-mu_scal*(1.0/d0_d-1.0));
-        vddsc       = Vddsc[fst_entry]*pow(d0_d,eta_dds[fst_entry])*pow(d0_d,-mu_scal)*exp(-mu_scal*(1.0/d0_d-1.0));
-        vddpc       = Vddpc[fst_entry]*pow(d0_d,eta_ddp[fst_entry])*pow(d0_d,-mu_scal)*exp(-mu_scal*(1.0/d0_d-1.0));
-        vdddc       = Vdddc[fst_entry]*pow(d0_d,eta_ddd[fst_entry])*pow(d0_d,-mu_scal)*exp(-mu_scal*(1.0/d0_d-1.0));    
+        vsssc       = Vsssc[fst_entry]*pow(d0_d,eta_sss[fst_entry])*graphene_scaling_function(d0_d,mu_scal);
+        vstarstarsc = Vstarstarsc[fst_entry]*pow(d0_d,eta_starstars[fst_entry])*graphene_scaling_function(d0_d,mu_scal);
+        vsstarsc    = Vsstarsc[fst_entry]*pow(d0_d,eta_sstars[fst_entry])*graphene_scaling_function(d0_d,mu_scal);
+        vspsc       = Vspsc[fst_entry]*pow(d0_d,eta_sps[fst_entry])*graphene_scaling_function(d0_d,mu_scal);
+        vstarpsc    = Vstarpsc[fst_entry]*pow(d0_d,eta_starps[fst_entry])*graphene_scaling_function(d0_d,mu_scal);
+        vsdsc       = Vsdsc[fst_entry]*pow(d0_d,eta_sds[fst_entry])*graphene_scaling_function(d0_d,mu_scal);
+        vstardsc    = Vstardsc[fst_entry]*pow(d0_d,eta_stards[fst_entry])*graphene_scaling_function(d0_d,mu_scal);
+        vppsc       = Vppsc[fst_entry]*pow(d0_d,eta_pps[fst_entry])*graphene_scaling_function(d0_d,mu_scal);
+        vpppc       = Vpppc[fst_entry]*pow(d0_d,eta_ppp[fst_entry])*graphene_scaling_function(d0_d,mu_scal);
+        vpdsc       = Vpdsc[fst_entry]*pow(d0_d,eta_pds[fst_entry])*graphene_scaling_function(d0_d,mu_scal);
+        vpdpc       = Vpdpc[fst_entry]*pow(d0_d,eta_pdp[fst_entry])*graphene_scaling_function(d0_d,mu_scal);
+        vddsc       = Vddsc[fst_entry]*pow(d0_d,eta_dds[fst_entry])*graphene_scaling_function(d0_d,mu_scal);
+        vddpc       = Vddpc[fst_entry]*pow(d0_d,eta_ddp[fst_entry])*graphene_scaling_function(d0_d,mu_scal);
+        vdddc       = Vdddc[fst_entry]*pow(d0_d,eta_ddd[fst_entry])*graphene_scaling_function(d0_d,mu_scal);    
             
     }
     
@@ -7090,7 +10332,7 @@ void Material::get_d_matrix(CSR *H00, int fst_entry, int snd_entry, int tb)
     double L[2] = {lambdaa[fst_entry],lambdac[fst_entry]};
     double P[20];
 
-    if(mat_code==57){
+    if((mat_code==23)||(mat_code==57)){
 
         P[IS]       = Esa[fst_entry];
 	P[IPX]      = Epa1[fst_entry];
