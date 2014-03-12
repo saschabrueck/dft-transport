@@ -14,7 +14,7 @@ int energyvector(TCSR<double> *Overlap,TCSR<double> *KohnSham,int n_mu,double* m
     double sabtime;
 // check parameters
     if ( Overlap->size_tot%transport_params.n_cells || transport_params.bandwidth<1 ) return (LOGCERR, EXIT_FAILURE);
-    int tasks_per_point=1;
+    int tasks_per_point=1; // set to 2 for SPIKE
     if (tasks_per_point>1) if (!iam) cout<<"Distributing matrix over "<<tasks_per_point<<" tasks"<<endl;
     if ( nprocs%tasks_per_point ) {
         if (!iam) cout << "Choose number of tasks per energy point as a divider of total number of tasks" << endl;

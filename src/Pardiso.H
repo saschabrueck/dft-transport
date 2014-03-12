@@ -123,12 +123,11 @@ void sparse_solve(TCSR<T>* A, T* b, int b_cols, T* x) {
 
 #ifndef SRC_PARDISO
   // Initialize pardiso
-  printf("Pardiso init start\n");
 #ifdef OLD_PARDISO_INTERFACE
-  printf("***** Using old interface *****\n");
+  //printf("***** Using old interface *****\n");
   fortran_name(pardisoinit,PARDISOINIT)(pt, &mtype, iparm);
 #else
-  printf("***** Using new interface *****\n");
+  //printf("***** Using new interface *****\n");
   double dparm[64];
   int solver = 0;       // Use the sparse direct solver
   fortran_name(pardisoinit,PARDISOINIT)(pt, &mtype, &solver, iparm, dparm,
@@ -154,7 +153,6 @@ void sparse_solve(TCSR<T>* A, T* b, int b_cols, T* x) {
       break;
   }
 #endif
-  printf("Pardiso init done\n");
 #endif /* SRC_PARDISO */
 
 
@@ -165,7 +163,7 @@ void sparse_solve(TCSR<T>* A, T* b, int b_cols, T* x) {
 #else
   int phase = 12; // SRC pardiso: analysis & numerical factorization
 #endif
-  printf("entering phase %d\n", phase);
+  //printf("entering phase %d\n", phase);
 #ifdef OLD_PARDISO_INTERFACE
   fortran_name(pardiso,PARDISO)(pt, &maxfct, &mnum, &mtype, &phase,
                                 &n, a, ia, ja, NULL, &b_cols, iparm, &msglvl,
@@ -183,7 +181,7 @@ void sparse_solve(TCSR<T>* A, T* b, int b_cols, T* x) {
 #ifndef SRC_PARDISO
   // Numerical factorization (not needed for SRC pardiso)
   phase = 22;
-  printf("entering phase %d\n", phase);
+  //printf("entering phase %d\n", phase);
 #ifdef OLD_PARDISO_INTERFACE
   fortran_name(pardiso,PARDISO)(pt, &maxfct, &mnum, &mtype, &phase,
                                 &n, a, ia, ja, NULL, &b_cols, iparm, &msglvl,
@@ -202,7 +200,7 @@ void sparse_solve(TCSR<T>* A, T* b, int b_cols, T* x) {
   // Back substitution and iterative refinement 
   phase = 33;
   iparm[7] = 2;       // Max number of refinement steps
-  printf("entering phase %d\n", phase);
+  //printf("entering phase %d\n", phase);
 #ifdef OLD_PARDISO_INTERFACE
   fortran_name(pardiso,PARDISO)(pt, &maxfct, &mnum, &mtype, &phase,
                                 &n, a, ia, ja, NULL, &b_cols, iparm, &msglvl,
@@ -219,7 +217,7 @@ void sparse_solve(TCSR<T>* A, T* b, int b_cols, T* x) {
 
   // Release of memory
   phase = -1;
-  printf("entering phase %d\n", phase);
+  //printf("entering phase %d\n", phase);
 #ifdef OLD_PARDISO_INTERFACE
   fortran_name(pardiso,PARDISO)(pt, &maxfct, &mnum, &mtype, &phase, &n,
                                 NULL, ia, ja, NULL, &b_cols, iparm, &msglvl,

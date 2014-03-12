@@ -20,9 +20,12 @@
 #include "mpi.h"
 
 // Timing / benchmarking
+#if __cplusplus <= 199711L
 #include <ctime>
 #include <ratio>
 #include <chrono>
+using namespace std::chrono; 
+#endif
 
 // Debugging
 #ifdef SPIKE_DEBUG
@@ -32,16 +35,13 @@ using std::cout;
 #define SPIKE_DEBUG_PATH "/users/camauro/transport/c++/src/dbg/"
 #endif /* SPIKE_DEBUG */
 
-
-using namespace std::chrono; 
-
 template <typename T>
 class Spike {
 
  public: 
-  Spike(TCSR<T>* matrix, int bandwidth, T* RHS, int RHS_col,
-        MPI_Comm communicator, std::vector<int> partition_lines,
+  Spike(TCSR<T>* matrix, T* RHS, int RHS_col, MPI_Comm communicator,
         bool diagonal_dense);
+  ~Spike();
   void solve_full(T* sol);
 #ifdef SPIKE_DEBUG
   void debug();
@@ -120,6 +120,8 @@ class Spike {
   // Members
   TCSR<T>* M;                     // Partion Matrix
   int M_size, M_rows, M_cols;
+  std::vector<int> partition_lines;
+  int bandwidth;
   
   T* F;                           // Local part of right hand side (RHS).
   int F_size, F_rows, F_cols;             
@@ -163,7 +165,6 @@ class Spike {
   int spike_width;
   int partition_height;
   int* ipiv;                      // Pivot vector for factorization.
-  std::vector<int> partition_ranges ;
   
   // MPI
   MPI_Comm        comm;           // MPI Communicator
@@ -184,19 +185,60 @@ class Spike {
 
 
 template<typename T>
-Spike<T>:: Spike(TCSR<T>* matrix, int bandwidth, T* RHS, int RHS_col, 
-                 MPI_Comm communicator, std::vector<int> partition_lines,
-                 bool diagonal_dense) {
+Spike<T>:: Spike(TCSR<T>* matrix, T* RHS, int RHS_col, MPI_Comm communicator,
+                 bool diagonal_dense = false) {
 
   MPI_Comm_rank(communicator, &rank);
   MPI_Comm_size(communicator, &num_ranks);
   set_mpi_dataype();
-  partition_ranges  = partition_lines;
   master_rank       = 0;
   last_rank         = num_ranks - 1;
   comm              = communicator;
-  partition_height  = partition_lines[rank + 1]-partition_lines[rank];
-  int max_column    =  get_max_column(matrix); 
+
+  // Determine the partitioning
+  int* partition_sizes = new int[num_ranks];
+  MPI_Allgather(&matrix->size, 1, MPI_INT, partition_sizes, 1, MPI_INT,
+                communicator);
+  partition_lines.resize(num_ranks + 1);
+  for (int i = 1; i < num_ranks + 1; ++i) {
+    partition_lines[i] = partition_lines[i - 1] + partition_sizes[i - 1];
+  } 
+  delete[] partition_sizes;
+  // DEBUG
+  printf("rank %d: AUTODETECT: partition lines @", rank);
+  for (int i = 0; i < num_ranks + 1; ++i) {
+    printf("%d ", partition_lines[i]);
+  }
+  printf("\n");
+
+  partition_height  = partition_lines[rank + 1] - partition_lines[rank];
+
+  // Determine the bandwidth
+  // TODO: determining the width of B and/or C would probably result in a
+  // tighter bandwidth, which would be a good thing.
+  int local_bandwidth = 0;
+  for (int row = 0; row < partition_height; ++row) {
+    for (int index = matrix->edge_i[row]; index < matrix->edge_i[row + 1];
+       ++index) {
+
+      int i = row + partition_lines[rank];
+      int j = matrix->index_j[index] - matrix->findx;
+
+      // ignore explicit zeros
+      if (abs(matrix->nnz[index]) != 0.0) {
+        int distance = abs(i - j);
+        if (distance > local_bandwidth) {
+          local_bandwidth = distance;
+        }
+      }
+    }
+  }
+  MPI_Allreduce(&local_bandwidth, &bandwidth, 1, MPI_INT, MPI_MAX, communicator);
+  // DEBUG:
+  printf("rank %d: AUTODETECT: bandwidth %d\n", rank, bandwidth);
+
+
+  int max_column    = get_max_column(matrix); 
   spike_width       = bandwidth;
   ipiv              = new int[partition_height];
   
@@ -260,6 +302,13 @@ Spike<T>:: Spike(TCSR<T>* matrix, int bandwidth, T* RHS, int RHS_col,
   debug_path = SPIKE_DEBUG_PATH;
 #endif
   
+}
+
+template <typename T>
+Spike<T>::~Spike() {
+
+  delete[] ipiv;
+
 }
 
 
@@ -355,7 +404,7 @@ void Spike<T>::expand_reduced_system() {
       xLACPY('A', spike_width, Xr_local_cols, &Xr_local[X0b_offset],
              Xr_local_rows, &X[Xb_offset], X_rows);
 
-    } else {
+    } else if (rank == last_rank) {
 
       int Gl_offset = spike_width;
       int Xl_offset = spike_width;
@@ -381,7 +430,6 @@ void Spike<T>::expand_reduced_system() {
     }
 
 
-
   } else {
 
     // TODO: this is probably not fully working yet
@@ -392,12 +440,14 @@ void Spike<T>::expand_reduced_system() {
     
     int GNprime_prefactor;
     T* C;
+    bool allocated_C = false;
    
     if (has_right_hand_side()) {
       GNprime_prefactor = 1;
-      C =  &G[spike_width];
+      C = &G[spike_width];
     } else {
       C = new T[middle_size];
+      allocated_C = true;
       memset(C, 0, middle_size * sizeof(T)); 
       GNprime_prefactor = 0;   // so we don't need to initialize
     }
@@ -424,7 +474,6 @@ void Spike<T>::expand_reduced_system() {
                        F_cols * middle_height, partition_height, middle_height);
         merge_matrix_c(X, partition_height, 0, spike_width + m, &Xr_local[spike_width],
                        F_cols * spike_width, Xr_local_rows, spike_width);
-        delete[] V; 
 
     } else if (rank == last_rank) {
        
@@ -450,8 +499,7 @@ void Spike<T>::expand_reduced_system() {
                        F_cols * middle_height, partition_height, middle_height);
         merge_matrix_c(X, partition_height, 0, spike_width + m, &Xr_local[2 * spike_width],
                        F_cols * spike_width, Xr_local_rows, spike_width);
-        delete[] W;
-        
+
     } else {
 
       int m = partition_height - 2 * spike_width;
@@ -480,14 +528,23 @@ void Spike<T>::expand_reduced_system() {
                      F_cols * middle_height, partition_height, middle_height);
       merge_matrix_c(X, partition_height, 0, spike_width + m, &Xr_local[2 * spike_width],
                      F_cols * spike_width, Xr_local_rows, spike_width);
-      delete[] V;
-      delete[] W;
 
+    }
+
+    if (allocated_C) {
+      delete[] C;
     }
 
   }
 
+  if (rank != last_rank) {
+    delete[] V;
+  }
+  if (rank != master_rank) {
+    delete[] W;
+  }
   delete[] Xr_local;
+  delete[] G;
 
   dump_f(X, X_rows, X_cols, "X");
 
@@ -523,11 +580,10 @@ void Spike<T>::distribute_Xr() {
   // respectively. All matrices are in column major format. Concatenation is
   // according to matlab, i.e. vertical in the above notation.
 
-  transpose_dense_matrix(Xr, Xr_rows, Xr_cols); 
- 
   int Xr_offset;
   
   if (rank == master_rank) {
+    transpose_dense_matrix(Xr, Xr_rows, Xr_cols); 
     MPI_Win_create(Xr, Xr_size * sizeof(T), sizeof(T), 
                    MPI_INFO_NULL, comm, &win_Xr);  
   } else {
@@ -651,50 +707,55 @@ void Spike<T>::prepare_send_buffer_G() {
 template <typename T>
 void Spike<T>::distribute_reduced_G() {
 
-  // 2 PARTITION NOTE:
-  //      rank1 only needs to send G1t
+  if (has_right_hand_side()) {
 
-  int gr_offset = rank * (Gr_sendbuffer_size);
+    // 2 PARTITION NOTE:
+    //      rank1 only needs to send G1t
 
-  if (rank == master_rank) {
+    int gr_offset = rank * (Gr_sendbuffer_size);
 
-    MPI_Win_create(Gr, Gr_size * sizeof(T), sizeof(T), MPI_INFO_NULL,
-                   comm, &win_Gr);
+    if (rank == master_rank) {
 
-  } else {
+      MPI_Win_create(Gr, Gr_size * sizeof(T), sizeof(T), MPI_INFO_NULL,
+                     comm, &win_Gr);
 
-    MPI_Win_create(MPI_BOTTOM, 0, 1, MPI_INFO_NULL, comm,
-                   &win_Gr);
+    } else {
+
+      MPI_Win_create(MPI_BOTTOM, 0, 1, MPI_INFO_NULL, comm,
+                     &win_Gr);
+
+    }
+
+    // Start fence
+    MPI_Win_fence(0, win_Gr);
+
+    if (has_right_hand_side() && rank != master_rank) {
+
+          MPI_Put(Gr_sendbuffer, Gr_sendbuffer_size, MPI_data_type, master_rank,
+                   gr_offset, Gr_sendbuffer_size, MPI_data_type, win_Gr);
+
+    } else if (rank == master_rank) {
+
+          memcpy(Gr, Gr_sendbuffer, Gr_sendbuffer_size * sizeof(T));   
+
+    }
+
+    // Stop fence
+    MPI_Win_fence(0, win_Gr);
+    MPI_Win_free(&win_Gr);
+
+    delete[] Gr_sendbuffer;
+
+    if (rank == master_rank) {
+
+      transpose_dense_matrix(Gr, Gr_rows, Gr_cols); 
+
+      dump_f(Gr, Gr_rows, Gr_cols, "Gr");
+
+    }
 
   }
 
-  // Start fence
-  MPI_Win_fence(0, win_Gr);
-
-  if (has_right_hand_side() && rank != master_rank) {
-
-        MPI_Put(Gr_sendbuffer, Gr_sendbuffer_size, MPI_data_type, master_rank,
-                 gr_offset, Gr_sendbuffer_size, MPI_data_type, win_Gr);
-
-  } else if (rank == master_rank) {
-
-        memcpy(Gr, Gr_sendbuffer, Gr_sendbuffer_size * sizeof(T));   
-
-  }
-
-  // Stop fence
-  MPI_Win_fence(0, win_Gr);
-  MPI_Win_free(&win_Gr);
-
-  delete[] Gr_sendbuffer;
-
-  transpose_dense_matrix(Gr, Gr_rows, Gr_cols); 
-
-  if (rank == master_rank) {
-
-    dump_f(Gr, Gr_rows, Gr_cols, "Gr");
-
-  }
 }
 
 template <typename T>
@@ -765,6 +826,8 @@ void Spike<T>::prepare_send_buffer_spikes() {
                    Sr_sendbuffer_cols, Sr_sendbuffer_cols, Sr_sendbuffer_cols);   
  
   }
+
+  delete[] ones;
  
 }
 
@@ -1302,7 +1365,6 @@ void Spike<T>::transpose_dense_matrix(T* matrix, int rows, int cols) {
   int size = rows * cols; 
   T* temp = new T[size];
 
-  // MARKER: why is this needed?
   memcpy(temp, matrix, size * sizeof(T)); 
   
   trans(temp, matrix, rows, cols);
