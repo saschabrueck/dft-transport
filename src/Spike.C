@@ -5,24 +5,24 @@
 
 template <>
 void Spike<CPX>::set_mpi_dataype() {
-        MPI_data_type = MPI_COMPLEX16;
+  MPI_data_type = MPI_COMPLEX16;
 }
 
 template <>
 void Spike<double>::set_mpi_dataype() {
-        MPI_data_type = MPI_DOUBLE;   
+  MPI_data_type = MPI_DOUBLE;   
 }
 
 template <>
 void Spike<CPX>::calculate_lu_decomposition(CPX* m, int rows, int cols) {
-    int info; 
-    c_zgetrf(rows, cols, m, rows, ipiv, &info);
+  int info; 
+  c_zgetrf(rows, cols, m, rows, ipiv, &info);
 }
 
 template <>
 void Spike<double>::calculate_lu_decomposition(double* m, int rows, int cols) {
-    int info;
-    c_dgetrf(rows, cols, m, rows, ipiv, &info); 
+  int info;
+  c_dgetrf(rows, cols, m, rows, ipiv, &info); 
 }
 
 /** \brief Solves a linear system using dense linear algebra
@@ -53,110 +53,120 @@ void Spike<double>::solve_linear_system_dense(double *LU, int rows, int cols,dou
 
 
 template <>
-void Spike<CPX>::spy(CPX * matrix, int rows, int column) {
-    std::cout << "\n";
-    for(int i = 0; i < rows; ++i) {
-         for(int j = 0; j < column; ++j) {
-              int position = (i * (column)) + j;
-               if (real(matrix[position]) != 0 || imag(matrix[position]) != 0) {
-                  std::cout << "\033[0;31m" << "*" << "\033[0;30m";
-               } else
-                 std::cout << "*";     
-         }
-          std::cout << std::endl; 
+void Spike<CPX>::spy(CPX* matrix, int rows, int columns) {
+  std::cout << "\n";
+  for(int i = 0; i < rows; ++i) {
+    for(int j = 0; j < columns; ++j) {
+      int position = (i * columns) + j;
+      if (real(matrix[position]) != 0 || imag(matrix[position]) != 0) {
+        std::cout << "\033[0;31m" << "*" << "\033[0;30m";
+      } else {
+         std::cout << "*";     
+      }
     }
+    std::cout << std::endl; 
+  }
 }
 
 template <>
-void Spike<double>::spy(double * matrix, int rows, int column) {
-    std::cout << "\n";
-    for(int i = 0; i < rows; ++i) {
-         for(int j = 0; j < column; ++j) {
-              int position = (i * (column)) + j;
-               if (matrix[position] != 0) {
-                  std::cout << "\033[0;31m" << "*" << "\033[0;30m";
-               } else
-                 std::cout << "*";     
-         }
-          std::cout << std::endl; 
+void Spike<double>::spy(double* matrix, int rows, int columns) {
+  std::cout << "\n";
+  for(int i = 0; i < rows; ++i) {
+    for(int j = 0; j < columns; ++j) {
+      int position = (i * columns) + j;
+      if (matrix[position] != 0) {
+        std::cout << "\033[0;31m" << "*" << "\033[0;30m";
+      } else {
+        std::cout << "*";     
+      }
     }
+    std::cout << std::endl; 
+  }
 }
 
 template <>
-void Spike<CPX>::spy(TCSR<CPX> * matrix, int rows, int cols){
-    for(int i = 0; i < rows; ++i){
-         for(int j = 0; j < cols; ++j){
-               CPX f = get_sparse_matrix_value(matrix,i,j);
-               if(real(f) != 0 || imag(f) != 0){
-                  std::cout << "\033[0;31m" << "*" << "\033[0;30m";
-               }else
-                 std::cout << "*";     
-         }
-         std::cout << std::endl; 
+void Spike<CPX>::spy(TCSR<CPX>* matrix, int rows, int cols){
+  for(int i = 0; i < rows; ++i){
+    for(int j = 0; j < cols; ++j){
+      CPX f = get_sparse_matrix_value(matrix,i,j);
+      if (real(f) != 0 || imag(f) != 0) {
+        std::cout << "\033[0;31m" << "*" << "\033[0;30m";
+      } else {
+        std::cout << "*";
+      }
     }
+    std::cout << std::endl; 
+  }
 }
 
 template <>
-void Spike<CPX>::full(TCSR<CPX> * matrix, int rows, int cols){
-    for(int i = 0; i < rows; ++i){
-         for(int j = 0; j < cols; ++j){
-               CPX f = get_sparse_matrix_value(matrix,i,j);
-               if(real(f) != 0 || imag(f) != 0){
-                  std::cout << "\033[0;31m" << f << "\033[0;30m";
-               }else
-                 std::cout << "0";     
-         }
-         std::cout << std::endl; 
+void Spike<CPX>::full(TCSR<CPX>* matrix, int rows, int cols){
+  for(int i = 0; i < rows; ++i){
+    for(int j = 0; j < cols; ++j){
+      CPX f = get_sparse_matrix_value(matrix,i,j);
+      if (real(f) != 0 || imag(f) != 0) {
+        std::cout << "\033[0;31m" << f << "\033[0;30m";
+      } else {
+        std::cout << "0";     
+      }
     }
+    std::cout << std::endl; 
+  }
 }
 
 
 template <>
-void Spike<CPX>::full(CPX * matrix, int rows, int column) {
-    std::cout << "\n[";
-    int field_width = 25;
-    for(int i = 0; i < rows; ++i) {
-         for(int j = 0; j < column; ++j) {
-              int position = (i * (column)) + j;
-               if (real(matrix[position]) != 0 || imag(matrix[position]) != 0) {
-                   std::stringstream number_to_print;
-                   number_to_print << real(matrix[position]) << "+" 
-                                << imag(matrix[position]) << "i";
-                   std::cout << "\033[0;31m" << std::setw(field_width) << number_to_print.str() << "\033[0;30m";
-               } else
-                 std::cout <<std::setw(field_width)<< "0";     
-         }
-          std::cout <<";" <<std::endl; 
-    }std::cout << "]\n";
-}
-
-template <>
-void Spike<double>::full(double * matrix, int rows, int column) {
-    std::cout << "\n";
-    int field_width = 15;
-    for(int i = 0; i < rows; ++i) {
-         for(int j = 0; j < column; ++j) {
-              int position = (i * (column)) + j;
-               if (matrix[position] != 0) {
-                 std::cout << "\033[0;31m" << std::setw(field_width) << matrix[position] << "\033[0;30m";
-               } else
-                 std::cout <<std::setw(field_width) << "0";     
-         }
-         std::cout << std::endl; 
-    }
-}
-
-
-template <>
-void Spike<CPX>::print_array(CPX * matrix, int size) {
-    std::cout << "\n";
-    int field_width = 10;
-    for(int i = 0; i < size; ++i) {
+void Spike<CPX>::full(CPX* matrix, int rows, int columns) {
+  std::cout << "\n[";
+  int field_width = 25;
+  for(int i = 0; i < rows; ++i) {
+    for(int j = 0; j < columns; ++j) {
+      int position = (i * columns) + j;
+      if (real(matrix[position]) != 0 || imag(matrix[position]) != 0) {
         std::stringstream number_to_print;
-        number_to_print << real(matrix[i]) << "+" 
-                     << imag(matrix[i]) << "i";
-        std::cout << "\033[0;31m" << std::setw(field_width) << number_to_print.str() << "\033[0;30m";
+        number_to_print << real(matrix[position]) << "+" 
+                        << imag(matrix[position]) << "i";
+        std::cout << "\033[0;31m" << std::setw(field_width)
+                  << number_to_print.str() << "\033[0;30m";
+      } else {
+        std::cout <<std::setw(field_width)<< "0";     
+      }
     }
+    std::cout <<";" <<std::endl; 
+  }
+  std::cout << "]\n";
+}
+
+template <>
+void Spike<double>::full(double* matrix, int rows, int columns) {
+  std::cout << "\n";
+  int field_width = 15;
+  for(int i = 0; i < rows; ++i) {
+    for(int j = 0; j < columns; ++j) {
+      int position = (i * columns) + j;
+      if (matrix[position] != 0) {
+        std::cout << "\033[0;31m" << std::setw(field_width) 
+                  << matrix[position] << "\033[0;30m";
+      } else {
+        std::cout <<std::setw(field_width) << "0";     
+      }
+    }
+    std::cout << std::endl; 
+  }
+}
+
+
+template <>
+void Spike<CPX>::print_array(CPX* matrix, int size) {
+  std::cout << "\n";
+  int field_width = 10;
+  for(int i = 0; i < size; ++i) {
+    std::stringstream number_to_print;
+    number_to_print << real(matrix[i]) << "+" 
+                    << imag(matrix[i]) << "i";
+    std::cout << "\033[0;31m" << std::setw(field_width)
+              << number_to_print.str() << "\033[0;30m";
+  }
 }
 
 /** \brief Templated routines for dense MMM

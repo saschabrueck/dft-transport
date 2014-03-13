@@ -254,17 +254,16 @@ if (!matrix_rank) {
             LinearSolver<CPX>* solver;
             // SPIKE solver
             solver = new SpikeSolver<CPX>(HamSig, matrix_comm);
-            int bandwidth = 1092;     // TODO: write routine to find bandwidth
             std::vector<int> p_lines(matrix_procs+1);
             for (int i = 0; i < matrix_procs + 1; ++i) {
               p_lines[i] = displc_sol[i];
             }
-            solver->prepare(bandwidth, p_lines);
+            solver->prepare();
             CPX* sol = new CPX[dist_sol[matrix_rank]*(nprol+npror)]();
             solver->solve_equation(sol, inj, nprol+npror);
 
             delete[] inj;
-            //delete solver; // TODO: probably
+            delete solver;
             delete HamSig;
 if (!matrix_rank) {
             Sol = new CPX[displc_sol[matrix_procs]*(nprol+npror)];
