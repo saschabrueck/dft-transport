@@ -163,7 +163,7 @@ if (!matrix_rank) {
             tmprGF::sparse_invert(HamSig,Bvec);
             Ps->add_imag(HamSig,+weight/M_PI);
             Overlap->atomdensity(HamSig,+2.0*weight/M_PI,atom_of_bf,erhoperatom);
-            Ps->contactdensity(ndof,bandwidth);
+//            Ps->contactdensity(ndof,bandwidth);
 }
             delete HamSig;
 #ifdef HAVE_PARDISO            
@@ -171,7 +171,7 @@ if (!matrix_rank) {
 if (!matrix_rank) {
             Pardiso::sparse_invert(HamSig);
             Ps->add_imag(HamSig,+weight/M_PI);
-            Ps->contactdensity(ndof,bandwidth);
+//            Ps->contactdensity(ndof,bandwidth);
 }
             delete HamSig;
 #endif
@@ -204,7 +204,7 @@ if (!matrix_rank) {
             delete InverseMatTrans;
             Ps->add_imag(InverseMatTotal,+weight/M_PI);
             delete InverseMatTotal;
-            Ps->contactdensity(ndof,bandwidth);
+//            Ps->contactdensity(ndof,bandwidth);
 } else {
             delete HamSig;
 }
@@ -283,7 +283,7 @@ if (!matrix_rank) {
 // WARNING THOSE ONLY WORK FOR COMPLETE MATRIX ON THIS RANK
         Ps->psipsidagger(Sol,nprol,-weight*fermil);
         Ps->psipsidagger(&Sol[Ps->size_tot*nprol],npror,-weight*fermir);
-        Ps->contactdensity(ndof,bandwidth);//do this later at the end of Energyvector in parallel
+//        Ps->contactdensity(ndof,bandwidth);//do this later at the end of Energyvector in parallel
         current=Overlap->psipsidaggerdosdebug(Sol,nprol+npror);
         Overlap->psipsidagger(Sol,nprol,-2.0*weight*fermil,atom_of_bf,erhoperatom);
         Overlap->psipsidagger(&Sol[Ps->size_tot*nprol],npror,-2.0*weight*fermir,atom_of_bf,erhoperatom);

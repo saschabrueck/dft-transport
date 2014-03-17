@@ -147,7 +147,7 @@ Singularities::~Singularities()
 void Singularities::get_propagating(vector< vector<double> > &prop,const vector<CPX> &evec)
 {
     prop.resize(evec.size());
-    for (int ie=0;ie<evec.size();ie++) {
+    for (uint ie=0;ie<evec.size();ie++) {
         if (!imag(evec[ie])) {
             for (int iband=0;iband<ndof;iband++) {
                 for (int i_k=0;i_k<n_k-1;i_k++) {
@@ -190,19 +190,19 @@ void Singularities::determine_fermi(double &mu,double doping,double Temp)
     double nocciter = 0.0;
     for (int j=0;j<n_k;j++) {
         for (int i=0;i<ndof;i++) {
-            nocciter+=fermi(energies_matrix[i+j*ndof],mu,Temp,0);
+            nocciter+=2.0*fermi(energies_matrix[i+j*ndof],mu,Temp,0);
         }
     }
     nocciter /= (double) n_k;
     cout << "Starting Number of Electrons " << nocciter << endl;
     double nocctol=1.0/n_k;
-    while (nocciter<noccunitcell+doping-nocctol || nocciter>noccunitcell+doping+nocctol) {
-        mu+=(noccunitcell+doping-nocciter)/10.0;
+    while (nocciter<2.0*noccunitcell+doping-nocctol || nocciter>2.0*noccunitcell+doping+nocctol) {
+        mu+=(2.0*noccunitcell+doping-nocciter)/10.0;
         cout << "New Fermi Level " << mu << endl;
         nocciter=0.0;
         for (int j=0;j<n_k;j++) {
             for (int i=0;i<ndof;i++) {
-                nocciter+=fermi(energies_matrix[i+j*ndof],mu,Temp,0);
+                nocciter+=2.0*fermi(energies_matrix[i+j*ndof],mu,Temp,0);
             }
         }
         nocciter /= (double) n_k;
@@ -395,7 +395,7 @@ int Singularities::eigen(CPX *H_Sum_k,CPX *S_Sum_k,CPX *H,CPX *S,CPX kval,double
         c_zaxpy(ndofsq,pow(kval,ibandw),&S[(bandwidth+ibandw)*ndofsq],1,S_Sum_k,1);
     }
 
-    int do_extended=1;
+    int do_extended=0;
     if (do_extended) {
         int iinfo;
         CPX twork;

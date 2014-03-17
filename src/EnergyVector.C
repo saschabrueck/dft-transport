@@ -202,14 +202,14 @@ methodvector[0]=transport_methods::WF;
     singularities.delete_matrices();
     int *propagating_sizes = new int[energyvector.size()];
     if (!iam) {
-        for (int ie=0;ie<energyvector.size();ie++) {
+        for (uint ie=0;ie<energyvector.size();ie++) {
             propagating_sizes[ie]=propagating[ie].size();
         }
     }
     MPI_Bcast(propagating_sizes,energyvector.size(),MPI_INT,0,MPI_COMM_WORLD);
 if (!iam) {
 ofstream myfile("Propagating");
-for (int ii=0;ii<energyvector.size();ii++) myfile << real(energyvector[ii]) << " " << propagating[ii].size() << endl;
+for (uint ii=0;ii<energyvector.size();ii++) myfile << real(energyvector[ii]) << " " << propagating[ii].size() << endl;
 myfile.close();
 }
 // run distributed
@@ -284,6 +284,11 @@ myfile.close();
     delete Ps;
     MPI_Comm_free(&matrix_comm);
     MPI_Comm_free(&eq_rank_matrix_comm);
+
+    int ndof=Overlap->size_tot/n_cells;
+    for (int i_mu=0;i_mu<n_mu;i_mu++) {
+        Overlap->contactdensity(ndof,transport_params.bandwidth,contactvec[i_mu],MPI_COMM_WORLD);
+    }
 
     return 0;
 }

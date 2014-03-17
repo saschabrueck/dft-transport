@@ -22,7 +22,7 @@ int iam;MPI_Comm_rank(MPI_COMM_WORLD,&iam);
 if (!iam) cout << "N_ATOMS " << NAtom_work << endl;
 
     double Vs=0.0;
-    double Vg=0.6;
+    double Vg=0.046;
     double Vd=0.0;
     double Temp=transport_params.extra_param3;
     double *Vbf = new double[Overlap->size_tot];
@@ -44,8 +44,8 @@ if (!iam) cout << "N_ATOMS " << NAtom_work << endl;
     if (!do_semiself) {
         int addpotential=0;
         if (addpotential) {
-            dopingvec[0]=0.125;
-            dopingvec[1]=0.125;
+            dopingvec[0]=0.14;
+            dopingvec[1]=0.14;
             int na=6;
             int nb=na+8;
             for (int ivvec=0;                                               ivvec<na*(Overlap->size_tot/transport_params.n_cells); ivvec++) Vbf[ivvec] = Vs;
@@ -80,8 +80,11 @@ if (!iam) cout << "N_ATOMS " << NAtom_work << endl;
 
     for (int ix=0;ix<FEM->NGrid;ix++) {
         double x=FEM->grid[3*ix]-FEM->grid[0];
-        if (x<=Ls) Vnew[ix]=Vs;
+//        if (x<=Ls) Vnew[ix]=Vs;
+        if (x<=Ls-0.5) Vnew[ix]=Vs;
+        else if (x>Ls-0.5 && x<=Ls) Vnew[ix]=Vs+Vg*(x-Ls+0.5)/0.5;
         else if (x>Ls && x<=Ls+Lg) Vnew[ix]=Vg;
+        else if (x>Ls+Lg && x<=Ls+Lg+0.5) Vnew[ix]=Vg*(x-Ls-Lg-0.5)/(-0.5)+Vd;
         else Vnew[ix]=Vd;
     }
 
@@ -94,6 +97,13 @@ if (!iam) cout << "N_ATOMS " << NAtom_work << endl;
 
         for (int ibf=0;ibf<Overlap->size_tot;ibf++) {
             Vbf[ibf]=Vnew[FEM->real_at_index[atom_of_bf[ibf]]];
+        }
+        if (i_iter==0) {
+            int na=6;
+            int nb=na+8;
+            for (int ivvec=0;                                               ivvec<na*(Overlap->size_tot/transport_params.n_cells); ivvec++) Vbf[ivvec] = Vs;
+            for (int ivvec=na*(Overlap->size_tot/transport_params.n_cells); ivvec<nb*(Overlap->size_tot/transport_params.n_cells); ivvec++) Vbf[ivvec] = Vg;
+            for (int ivvec=nb*(Overlap->size_tot/transport_params.n_cells); ivvec<Overlap->size_tot; ivvec++)                               Vbf[ivvec] = Vd;
         }
         TCSR<double> *Pot = new TCSR<double>(Overlap,Vbf);
         TCSR<double> *KohnShamPot = new TCSR<double>(1.0,KohnSham,1.0/transport_params.evoltfactor,Pot);
