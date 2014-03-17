@@ -185,9 +185,8 @@ void MUMPS<CPX>::solve_equation(CPX *res, CPX *arg_rhs, int no_rhs)
     
     zmumps_c(&id);   
 
-    MPI_Bcast(id.rhs,no_rhs*id.n,MPI_DOUBLE_COMPLEX,0,slu_comm);
- 
     if (do_distribute) {
+        MPI_Bcast(id.rhs,no_rhs*id.n,MPI_DOUBLE_COMPLEX,0,slu_comm);
         for(IM=fst_row;IM<fst_row+m_loc;IM++){
             for(IRHS=0;IRHS<no_rhs;IRHS++){
                 res[IRHS*m_loc+IM-fst_row] = \

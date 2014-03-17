@@ -929,6 +929,7 @@ if (!boundary_rank) {
     delete[] vecout;
 if (nprotra) { cout<<worldrank<<" AT "<<real(energyp)<<" NPROTRA "<<nprotra<<" NPROREF "<<nproref<<" NDECTRA "<<ndectra<<" NDECREF "<<ndecref<<endl; } else cout<<worldrank<<" FAILED ! ! ! ! !"<<endl;
 for (int iout=0;iout<nprotra;iout++) cout<<worldrank<<" VALUE "<<lambdavec[protravec[iout]]<<endl;
+#ifdef _ALLEIGVALS_WRITEOUT
 ofstream myfile;
 stringstream mysstream;
 mysstream << "AllEigvals" << worldrank;
@@ -937,6 +938,7 @@ myfile.precision(15);
 for (int iele=0;iele<neigval;iele++)
     myfile << real(lambdavec[iele]) << " " << imag(lambdavec[iele]) << endl;
 myfile.close();
+#endif
 //if (!nprotra) {
 //arpack=0;
 //}

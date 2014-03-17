@@ -111,8 +111,6 @@ public:
     void scatter(TCSR<T>*,int,MPI_Comm);
     void reduce(int,MPI_Comm);
     void reducescatter(TCSR<T>*,MPI_Comm);
-    void reducescatterfactorconvert(TCSR<double>*,MPI_Comm,double);
-    void reducescatterconvert(TCSR<double>*,MPI_Comm);
     double psipsidaggerdosdebug(CPX*,int);
     void psipsidagger(CPX*,int,CPX);
     void psipsidagger(CPX*,int,CPX,int*,double*);
@@ -661,7 +659,7 @@ inline TCSR<T>::TCSR(TCSR<T> *matlocal,int *rootvec,int rootnum,MPI_Comm my_comm
     MPI_Comm_create(my_comm,sub_group,&sub_comm);
     MPI_Group_free(&my_group);
     MPI_Group_free(&sub_group);
-    MPI_Bcast(nnz,n_nonzeros_mpi,give_me_MPI_datatype(nnz),rootvec[0],sub_comm);
+    MPI_Bcast(nnz,n_nonzeros,give_me_MPI_datatype(nnz),rootvec[0],sub_comm);
     MPI_Bcast(index_j,n_nonzeros,MPI_INT,rootvec[0],sub_comm);
     MPI_Bcast(index_i,size,MPI_INT,rootvec[0],sub_comm);
     MPI_Comm_free(&sub_comm);
@@ -1985,7 +1983,9 @@ void TCSR<T>::reduce(int root,MPI_Comm my_comm)
         nnz_tmp=new T[n_nonzeros];
     }
 
-    MPI_Reduce(nnz,nnz_tmp,n_nonzeros,give_me_MPI_datatype(nnz),MPI_SUM,root,my_comm);
+    if (n_nonzeros){
+        MPI_Reduce(nnz,nnz_tmp,n_nonzeros,give_me_MPI_datatype(nnz),MPI_SUM,root,my_comm);
+    }
 
     if (iam==root){
         c_tcopy(n_nonzeros,nnz_tmp,1,nnz,1);
@@ -2014,53 +2014,6 @@ void TCSR<T>::reducescatter(TCSR<T>*matdist,MPI_Comm my_comm)
 /************************************************************************************************/
 
 template <>
-inline void TCSR<CPX>::reducescatterfactorconvert(TCSR<double>*matdist,MPI_Comm my_comm, double factor)
-{
-    int iam,nprocs;
-    MPI_Comm_size(my_comm,&nprocs);
-    MPI_Comm_rank(my_comm,&iam);
-
-    int *recvcounts=new int[nprocs];
-
-    int recvloc=matdist->n_nonzeros;
-    MPI_Allgather(&recvloc,1,MPI_INT,recvcounts,1,MPI_INT,my_comm);
-
-    double *nnztmp = new double[n_nonzeros];
-    c_dcopy(n_nonzeros,(double*)nnz,2,nnztmp,1);
-    c_dscal(n_nonzeros,factor,nnztmp,1);
-
-    MPI_Reduce_scatter(nnztmp,matdist->nnz,recvcounts,give_me_MPI_datatype(nnztmp),MPI_SUM,my_comm);
-
-    delete[] nnztmp;
-    delete[] recvcounts;
-}
-
-/************************************************************************************************/
-
-template <>
-inline void TCSR<CPX>::reducescatterconvert(TCSR<double>*matdist,MPI_Comm my_comm)
-{
-    int iam,nprocs;
-    MPI_Comm_size(my_comm,&nprocs);
-    MPI_Comm_rank(my_comm,&iam);
-
-    int *recvcounts=new int[nprocs];
-
-    int recvloc=matdist->n_nonzeros;
-    MPI_Allgather(&recvloc,1,MPI_INT,recvcounts,1,MPI_INT,my_comm);
-
-    double *nnztmp = new double[n_nonzeros];
-    c_dcopy(n_nonzeros,(double*)nnz,2,nnztmp,1);
-
-    MPI_Reduce_scatter(nnztmp,matdist->nnz,recvcounts,give_me_MPI_datatype(nnztmp),MPI_SUM,my_comm);
-
-    delete[] nnztmp;
-    delete[] recvcounts;
-}
-
-/************************************************************************************************/
-
-template <>
 inline double TCSR<double>::psipsidaggerdosdebug(CPX* psi,int nkval)
 {
     int i,e;
@@ -2078,7 +2031,6 @@ inline double TCSR<double>::psipsidaggerdosdebug(CPX* psi,int nkval)
 template <>
 inline void TCSR<double>::psipsidagger(CPX* psi,int nkval,CPX factor)
 {
-if (first_row) throw CSR_Exception(__LINE__,__FILE__);
     int i,e;
     for(i=0;i<size;i++){
         for(e=edge_i[i]-findx;e<edge_i[i+1]-findx;e++){
@@ -2092,7 +2044,6 @@ if (first_row) throw CSR_Exception(__LINE__,__FILE__);
 template <>
 inline void TCSR<double>::psipsidagger(CPX* psi,int nkval,CPX factor,int* atom_of_bf,double* result)
 {
-if (first_row) throw CSR_Exception(__LINE__,__FILE__);
     int i,e;
     for(i=0;i<size;i++){
         for(e=edge_i[i]-findx;e<edge_i[i+1]-findx;e++){
@@ -2106,8 +2057,6 @@ if (first_row) throw CSR_Exception(__LINE__,__FILE__);
 template <>
 inline void TCSR<double>::atomdensity(TCSR<CPX>* A,CPX factor,int* atom_of_bf,double* result)
 {
-if (first_row) throw CSR_Exception(__LINE__,__FILE__);
-
     if (size      != A->size      ) throw CSR_Exception(__LINE__,__FILE__);
     if (size_tot  != A->size_tot  ) throw CSR_Exception(__LINE__,__FILE__);
     if (type      != A->type      ) throw CSR_Exception(__LINE__,__FILE__);
