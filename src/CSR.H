@@ -101,17 +101,12 @@ public:
 // sab begin
     void write_CSR_bin(const char*);
     void mat_vec_mult_add(T*,T*,int,T);
-    int get_bandwidth(int);
     void shift_resize(int,int,int,int);
-    void contactunitcell(T*,int,int,int,int);
-    void contactunitcell(T*,int,int,int);
-    void addcontact(T*,int,int,int);
     void contactdensity(int,int);
+    void contactdensity(int,int,int,MPI_Comm);
     int additionalentries(TCSR<T>*);
     void add(TCSR<T>*,T);
     void add_imag(TCSR<CPX>*,CPX);
-    void assemble(TCSR<T>*,TCSR<T>*,TCSR<T>*,int,int);
-    void assembleshift(TCSR<T>*,TCSR<T>*,TCSR<T>*,int,int);
     void Bcast(int,MPI_Comm);
     void scatter(TCSR<T>*,int,MPI_Comm);
     void reduce(int,MPI_Comm);
@@ -1720,23 +1715,6 @@ inline void TCSR<CPX>::mat_vec_mult_add(CPX *in, CPX *out, int nrhs, CPX fac)
 /************************************************************************************************/
 
 template <class T>
-int TCSR<T>::get_bandwidth(int ndof)
-// do not use, delete later, contains error (should be edge_i[ndof+1] I think), is useless
-{
-    int jmax=0;
-    for(int entry=0;entry<edge_i[ndof]-findx;entry++) {
-        if (index_j[entry]-findx>jmax && nnz[entry]!=0.0) {
-            jmax=index_j[entry]-findx;
-        }
-    }
-    double bandw=ceil(double(jmax)/ndof);
-    return int(bandw)-1;
-// maybe add security check to make sure that bandw from other side is the same
-}
-
-/************************************************************************************************/
-
-template <class T>
 void TCSR<T>::shift_resize(int istart, int ilength, int jstart, int jlength)
 {
 
@@ -1761,90 +1739,6 @@ void TCSR<T>::shift_resize(int istart, int ilength, int jstart, int jlength)
     get_row_edge();
     get_diag_pos();
 
-}
-
-/************************************************************************************************/
-
-template <class T>
-void TCSR<T>::contactunitcell(T *contacty,int rows,int ndof,int bandw,int signy)
-{
-// this is only experimental
-    int i,j,index;
-    init_variable(contacty,rows*ndof*(bandw+1));
-    if (signy==1) {
-        for(i=0;i<rows;i++) {
-            for(j=edge_i[i]-findx;j<edge_i[i+1]-findx;j++) {
-                if ( (index=index_j[j]-findx) < ndof*(bandw+1) ) {
-                    //TRANSPOSED FOR EASY MPI TRANSFER
-                    contacty[i*ndof*(bandw+1)+index] = nnz[j];
-                }
-            }
-        }
-    } else {
-        for(i=size-ndof;i<size;i++) {
-            for(j=edge_i[i]-findx;j<edge_i[i+1]-findx;j++) {
-                if ( (index=index_j[j]-findx) >= size-ndof*(bandw+1) ) {
-                }
-            }
-        }
-    }
-}
-
-/************************************************************************************************/
-
-template <class T>
-void TCSR<T>::contactunitcell(T *contacty,int ndof,int bandw,int signy)
-{
-// this is the version for the serial case and no spin orbit coupling
-    int i,j,index;
-    init_variable(contacty,ndof*ndof*(2*bandw+1));
-    if (signy==1) {
-        for(i=0;i<ndof;i++) {
-            for(j=edge_i[i]-findx;j<edge_i[i+1]-findx;j++) {
-                if ( (index=index_j[j]-findx) < ndof*(bandw+1) ) {
-                    contacty[bandw*ndof*ndof+i+index*ndof] = nnz[j];
-                }
-            }
-        }
-        for (int ibw=1;ibw<=bandw;ibw++)
-            full_transpose(ndof,ndof,&contacty[(bandw+ibw)*ndof*ndof],&contacty[(bandw-ibw)*ndof*ndof]);
-    } else {
-        for(i=size-ndof;i<size;i++) {
-            for(j=edge_i[i]-findx;j<edge_i[i+1]-findx;j++) {
-                if ( (index=index_j[j]-findx) >= size-ndof*(bandw+1) ) {
-                    contacty[i-(size-ndof)+(index-(size-ndof*(bandw+1)))*ndof] = nnz[j];
-                }
-            }
-        }
-        for (int ibw=1;ibw<=bandw;ibw++)
-            full_transpose(ndof,ndof,&contacty[(bandw-ibw)*ndof*ndof],&contacty[(bandw+ibw)*ndof*ndof]);
-    }
-}
-
-/************************************************************************************************/
-
-template <class T>
-void TCSR<T>::addcontact(T *contacty,int ndof,int bw,int signy)
-{
-    int i,e;
-    int bwndof=bw*ndof;
-    if (signy==1) {
-        for(i=0;i<bwndof;i++) {
-            for(e=edge_i[i]-findx;e<edge_i[i+1]-findx;e++) {
-                if ( index_j[e]-findx-i < bwndof ) {
-                    contacty[i+(index_j[e]-findx)*bwndof] += nnz[e];
-                }
-            }
-        }
-    } else {
-        for(i=size-bwndof;i<size;i++) {
-            for(e=edge_i[i]-findx;e<edge_i[i+1]-findx;e++) {
-                if ( index_j[e]-findx-i > -bwndof ) {
-                    contacty[i-(size-bwndof)+(index_j[e]-findx-(size-2*bwndof))*bwndof] += nnz[e];
-                }
-            }
-        }
-    }
 }
 
 /************************************************************************************************/
@@ -1885,6 +1779,55 @@ void TCSR<T>::contactdensity(int ndof,int bandw)
         }
     }
     delete[] stripe;
+}
+
+/************************************************************************************************/
+
+template <class T>
+void TCSR<T>::contactdensity(int ndof,int bandw,int contact,MPI_Comm my_comm)
+{
+    int i,e;
+    T* linefull = new T[(2*bandw+1)*ndof];
+    if (contact==1) {
+        TCSR<T> *Pscut = new TCSR<T>(this,bandw*ndof,ndof,0,(2*bandw+1)*ndof);
+        TCSR<T> *Pcell = new TCSR<T>(Pscut,my_comm);
+        delete Pscut;
+        Pcell->shift_resize(bandw*ndof,ndof,0,(2*bandw+1)*ndof);
+        for (i=0;i<size;i++) {
+            int i_band=(i+first_row)/ndof;
+            int i_elem=(i+first_row)%ndof;
+            if (i_band<bandw) {
+                init_variable(linefull,(2*bandw+1)*ndof);
+                for (e=Pcell->edge_i[i_elem]-Pcell->findx;e<Pcell->edge_i[i_elem+1]-Pcell->findx;e++) {
+                    linefull[Pcell->index_j[e]-Pcell->findx]=Pcell->nnz[e];
+                }
+                for (e=edge_i[i]-findx;e<edge_i[i+1]-findx;e++) {
+                    nnz[e]=linefull[(index_j[e]-findx+(bandw-i_band)*ndof)%size_tot];
+                }
+            }
+        }
+        delete Pcell;
+    } else if (contact==2) {
+        TCSR<T> *Pscut = new TCSR<T>(this,size_tot-(bandw+1)*ndof,ndof,size_tot-(2*bandw+1)*ndof,(2*bandw+1)*ndof);
+        TCSR<T> *Pcell = new TCSR<T>(Pscut,my_comm);
+        delete Pscut;
+        Pcell->shift_resize(size_tot-(bandw+1)*ndof,ndof,size_tot-(2*bandw+1)*ndof,(2*bandw+1)*ndof);
+        for (i=0;i<size;i++) {
+            int i_band=(i+first_row)/ndof;
+            int i_elem=(i+first_row)%ndof;
+            if (i_band>size_tot/ndof-bandw-1) {
+                init_variable(linefull,(2*bandw+1)*ndof);
+                for (e=Pcell->edge_i[i_elem]-Pcell->findx;e<Pcell->edge_i[i_elem+1]-Pcell->findx;e++) {
+                    linefull[Pcell->index_j[e]-Pcell->findx]=Pcell->nnz[e];
+                }
+                for (e=edge_i[i]-findx;e<edge_i[i+1]-findx;e++) {
+                    nnz[e]=linefull[(index_j[e]-findx+(bandw-i_band)*ndof+size_tot)%size_tot];
+                }
+            }
+        }
+        delete Pcell;
+    }
+    delete[] linefull;
 }
 
 /************************************************************************************************/
@@ -1960,77 +1903,6 @@ inline void TCSR<double>::add_imag(TCSR<CPX> *A,CPX factor)
         }
     }
     delete[] linefull;
-}
-
-/************************************************************************************************/
-
-template <class T>
-void TCSR<T>::assemble(TCSR<T> *leftmat,TCSR<T> *middlemat,TCSR<T> *rightmat,int lsize,int rsize)
-// this is experimental
-{
-    int nleft=leftmat->n_nonzeros;
-    c_tcopy(nleft,leftmat->nnz,1,nnz,1);
-    c_icopy(lsize,leftmat->index_i,1,index_i,1);
-    c_icopy(nleft,leftmat->index_j,1,index_j,1);
-
-    int nmid=middlemat->edge_i[size-rsize]-middlemat->edge_i[lsize];
-    int poslmiddle=middlemat->edge_i[lsize]-middlemat->findx;
-    c_tcopy(nmid,&middlemat->nnz[poslmiddle],1,&nnz[nleft],1);
-    c_icopy(size-lsize-rsize,&middlemat->index_i[lsize],1,&index_i[lsize],1);
-    c_icopy(nmid,&middlemat->index_j[poslmiddle],1,&index_j[nleft],1);
-
-    int nright=rightmat->n_nonzeros;
-    c_tcopy(nright,rightmat->nnz,1,&nnz[nleft+nmid],1);
-    c_icopy(rsize,rightmat->index_i,1,&index_i[size-rsize],1);
-    c_icopy(nright,rightmat->index_j,1,&index_j[nleft+nmid],1);
-
-
-// this shift comes from the fact that j of the right stuff was not on the right place anyway!!!
-// i should add this shift not here but in other function because i need it elsewhere as well
-//    int shift=middlemat->size-lsize-rsize;
-//    if (shift!=0) {
-//        for (int i=0;i<nright;i++) {
-//            index_j[nleft+nmid+i]+=shift;
-//        }
-//    }
-
-    first_row=middlemat->first_row;
-    size_tot=middlemat->size_tot;
-
-    get_row_edge();
-    get_diag_pos();
-
-}
-
-/************************************************************************************************/
-
-template <class T>
-void TCSR<T>::assembleshift(TCSR<T> *leftmat,TCSR<T> *middlemat,TCSR<T> *rightmat,int lrsize,int shift)
-{
-    int nleft=leftmat->edge_i[lrsize]-leftmat->findx;
-    c_tcopy(nleft,leftmat->nnz,1,nnz,1);
-    c_icopy(lrsize,leftmat->index_i,1,index_i,1);
-    c_icopy(nleft,leftmat->index_j,1,index_j,1);
-
-    int nmid=middlemat->edge_i[size_tot-lrsize]-middlemat->edge_i[lrsize];
-    int poslmiddle=middlemat->edge_i[lrsize]-middlemat->findx;
-    c_tcopy(nmid,&middlemat->nnz[poslmiddle],1,&nnz[nleft],1);
-    c_icopy(size_tot-2*lrsize,&middlemat->index_i[lrsize],1,&index_i[lrsize],1);
-    c_icopy(nmid,&middlemat->index_j[poslmiddle],1,&index_j[nleft],1);
-
-    int nright=rightmat->edge_i[lrsize]-rightmat->findx;
-    c_tcopy(nright,rightmat->nnz,1,&nnz[nleft+nmid],1);
-    c_icopy(lrsize,rightmat->index_i,1,&index_i[size_tot-lrsize],1);
-    c_icopy(nright,rightmat->index_j,1,&index_j[nleft+nmid],1);
-
-    if (shift!=0) {
-        for (int i=0;i<nright;i++) {
-            index_j[nleft+nmid+i]+=shift;
-        }
-    }
-
-    get_row_edge();
-    get_diag_pos();
 }
 
 /************************************************************************************************/
