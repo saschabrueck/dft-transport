@@ -22,6 +22,7 @@ int energyvector(TCSR<double> *Overlap,TCSR<double> *KohnSham,int n_mu,double* m
     }
 // additional parameters not needed in the future
     int n_cells=transport_params.n_cells;
+    int distribute_pmat=1;
 // only to write out unit cell Hamiltonian and Overlap matrix
 #ifdef _CONTACT_WRITEOUT
     int ndof=Overlap->size_tot/n_cells;
@@ -66,14 +67,18 @@ int energyvector(TCSR<double> *Overlap,TCSR<double> *KohnSham,int n_mu,double* m
         int matrix_rank, n_mat_comm;
         MPI_Comm_size(eq_rank_matrix_comm,&n_mat_comm);
         MPI_Comm_rank(matrix_comm,&matrix_rank);
-        int *master_ranks = new int[n_mat_comm];
-        if (matrix_rank==0) {
-            MPI_Gather(&iam,1,MPI_INT,master_ranks,1,MPI_INT,0,eq_rank_matrix_comm);
+        if (distribute_pmat) {
+            Ps = new TCSR<double>(OverlapCollect);
+        } else {
+            int *master_ranks = new int[n_mat_comm];
+            if (matrix_rank==0) {
+                MPI_Gather(&iam,1,MPI_INT,master_ranks,1,MPI_INT,0,eq_rank_matrix_comm);
+            }
+            MPI_Bcast(master_ranks,n_mat_comm,MPI_INT,0,MPI_COMM_WORLD);
+            Ps = new TCSR<double>(Overlap,master_ranks,n_mat_comm,MPI_COMM_WORLD);
+            delete[] master_ranks;
         }
-        MPI_Bcast(master_ranks,n_mat_comm,MPI_INT,0,MPI_COMM_WORLD);
-        Ps = new TCSR<double>(Overlap,master_ranks,n_mat_comm,MPI_COMM_WORLD);
         Ps->init_variable(Ps->nnz,Ps->n_nonzeros);
-        delete[] master_ranks;
     } else {
         KohnShamCollect = new TCSR<double>(KohnSham,MPI_COMM_WORLD);
         OverlapCollect = new TCSR<double>(Overlap,MPI_COMM_WORLD);
@@ -221,10 +226,10 @@ myfile.close();
     MPI_Comm_rank(eq_rank_matrix_comm,&matrix_id);
     uint jpos;
     for (int iseq=0;iseq<int(ceil(double(energyvector.size())/n_mat_comm));iseq++)
-//      for (int iseq=0;iseq<1;iseq++)
+//    for (int iseq=0;iseq<1;iseq++)
         if ( (jpos=matrix_id+iseq*n_mat_comm)<energyvector.size())
             if (abs(stepvector[jpos])>0.0)
-                if (density(KohnShamCollect,OverlapCollect,Ps,energyvector[jpos],stepvector[jpos],methodvector[jpos],n_mu,muvec,contactvec,currentvector[jpos],propagating_sizes[jpos],atom_of_bf,eperatom,dperatom,transport_params,matrix_comm))
+                if (density(KohnShamCollect,OverlapCollect,Ps,energyvector[jpos],stepvector[jpos],methodvector[jpos],n_mu,muvec,contactvec,currentvector[jpos],propagating_sizes[jpos],atom_of_bf,eperatom,dperatom,transport_params,distribute_pmat,matrix_comm))
                     return (LOGCERR, EXIT_FAILURE);
     delete KohnShamCollect;
     delete OverlapCollect;
@@ -270,11 +275,11 @@ myfile.close();
         int matrix_rank, matrix_size;
         MPI_Comm_size(matrix_comm,&matrix_size);
         MPI_Comm_rank(matrix_comm,&matrix_rank);
-        if (matrix_rank==0) {
-            Ps->reduce(0,eq_rank_matrix_comm);
-        }
+        Ps->reduce(0,eq_rank_matrix_comm);
         if (transport_params.method!=3) {
-            Ps->scatter(Overlap,0,MPI_COMM_WORLD);
+            for (int i_rank=0;i_rank<matrix_size;i_rank++) {
+                Ps->scatter(Overlap,i_rank,MPI_COMM_WORLD);
+            }
         }
     } else {
         if (transport_params.method!=3) {
