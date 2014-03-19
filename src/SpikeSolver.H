@@ -6,7 +6,7 @@
 #include "LinearSolver.H"
 #include "Spike.H"
 
-#include <iostream> // DEBUG
+#include <omp.h>
 
 template <typename T>
 class SpikeSolver : public LinearSolver<T> {
@@ -28,6 +28,8 @@ template <typename T>
 SpikeSolver<T>::SpikeSolver(TCSR<T>* matrix, MPI_Comm communicator)
                        : _matrix(matrix),
                          _communicator(communicator) {
+  // DEBUG
+  printf("SpikeSolver: using %d threads\n", omp_get_max_threads());
 };
 
 template <typename T>
