@@ -9,8 +9,6 @@
 #include <algorithm>
 
 #include <mpi.h>
-//#include <mkl.h>
-//#include <mkl_lapack.h>
 #include "Blas.H"
 #include "CSR.H"
 #include "Types.H"
@@ -19,13 +17,6 @@
 #include "LinearSolver.H"
 #include "mpi.h"
 
-// Timing / benchmarking
-#if __cplusplus <= 199711L
-#include <ctime>
-#include <ratio>
-#include <chrono>
-using namespace std::chrono; 
-#endif
 
 // Debugging
 #ifdef SPIKE_DEBUG
@@ -34,6 +25,7 @@ using namespace std::chrono;
 using std::cout;
 #define SPIKE_DEBUG_PATH "/users/camauro/transport/c++/src/dbg/"
 #endif /* SPIKE_DEBUG */
+
 
 template <typename T>
 class Spike {
@@ -102,16 +94,6 @@ class Spike {
   T get_sparse_matrix_value(TCSR<T>* Mat, int i, int j);
   void transpose_dense_matrix(T* mat, int row, int col);
   void trans(T* src, T* dst, const int N, const int M); 
-  void MMM_dense_f(int A_rows, int A_cols, int B_cols, 
-                   T prefactor_AB, T* A, 
-                   int leading_dimension_A, T* B, 
-                   int leading_dimension_B, T prefactor_C,
-                   T* C, int leading_dimension_C);
-  void MMM_dense_c(int A_rows, int A_cols, int B_cols, 
-                   T prefactor_AB, T* A,
-                   int leading_dimension_A, T* B, 
-                   int leading_dimension_B, T prefactor_C, T* C,
-                   int leading_dimension_C);
   void xLACPY(char UPLO, int M, int N, T* A, int LDA, T* B, int LDB);
   void xGEMM(char TRANSA, char TRANSB, int M, int N, int K, T ALPHA, T* A,
              int LDA, T* B, int LDB, T BETA, T* C, int LDC);
@@ -180,6 +162,11 @@ class Spike {
   void dump(TCSR<T>* matrix, const char* prefix);
   void dump_c(T* matrix, int rows, int cols, const char* prefix);
   void dump_f(T* matrix, int rows, int cols, const char* prefix);
+
+#ifdef SPIKE_TIMING
+  // Timing
+  double start_time;
+#endif
 };
 
 
@@ -204,12 +191,13 @@ Spike<T>:: Spike(TCSR<T>* matrix, T* RHS, int RHS_col, MPI_Comm communicator,
     partition_lines[i] = partition_lines[i - 1] + partition_sizes[i - 1];
   } 
   delete[] partition_sizes;
-  // DEBUG
+#ifdef SPIKE_DEBUG
   printf("rank %d: AUTODETECT: partition lines @", rank);
   for (int i = 0; i < num_ranks + 1; ++i) {
     printf("%d ", partition_lines[i]);
   }
   printf("\n");
+#endif
 
   partition_height  = partition_lines[rank + 1] - partition_lines[rank];
 
@@ -234,8 +222,9 @@ Spike<T>:: Spike(TCSR<T>* matrix, T* RHS, int RHS_col, MPI_Comm communicator,
     }
   }
   MPI_Allreduce(&local_bandwidth, &bandwidth, 1, MPI_INT, MPI_MAX, communicator);
-  // DEBUG:
+#ifdef SPIKE_DEBUG
   printf("rank %d: AUTODETECT: bandwidth %d\n", rank, bandwidth);
+#endif
 
 
   int max_column    = get_max_column(matrix); 
@@ -323,44 +312,107 @@ void Spike<T>::solve_full(T* sol) {
 
 template <typename T>
 void Spike<T>::preprocess() {
+
 #ifdef SPIKE_DEBUG
   debug();
 #endif /* SPIKE_DEBUG */
-  //printf("rank %d: preparing D\n", rank);
+
+#ifdef SPIKE_TIMING
+  start_time = get_time(0.0);
+#endif
   prepare_D();
-  //printf("rank %d: preparing sparsity pattern\n", rank);
+#ifdef SPIKE_TIMING
+  printf("rank %d: preparing D: %f\n", rank, get_time(start_time));
+#endif
+
+#ifdef SPIKE_TIMING
+  start_time = get_time(0.0);
+#endif
   prepare_sparsity_pattern();
-  //printf("rank %d: calculating spikes\n", rank);
+#ifdef SPIKE_TIMING
+  printf("rank %d: preparing sparsity pattern: %f\n", rank, get_time(start_time));
+#endif
+
+#ifdef SPIKE_TIMING
+  start_time = get_time(0.0);
+#endif
   calculate_spikes();
-  //printf("rank %d: calculating G\n", rank);
+#ifdef SPIKE_TIMING
+  printf("rank %d: calculating spikes: %f\n", rank, get_time(start_time));
+#endif
+
+#ifdef SPIKE_TIMING
+  start_time = get_time(0.0);
+#endif
   calculate_G();
+#ifdef SPIKE_TIMING
+  printf("rank %d: calculating G: %f\n", rank, get_time(start_time));
+#endif
+
   delete_D();
-  //printf("rank %d: preparing spike send buffer\n", rank);
+
+#ifdef SPIKE_TIMING
+  start_time = get_time(0.0);
+#endif
   prepare_send_buffer_spikes();
-  //printf("rank %d: distribute reduced spikes\n", rank);
+#ifdef SPIKE_TIMING
+  printf("rank %d: preparing spike send buffer: %f\n", rank, get_time(start_time));
+#endif
+
+#ifdef SPIKE_TIMING
+  start_time = get_time(0.0);
+#endif
   distribute_reduced_spikes();
-  //printf("rank %d: preparing G send buffer\n", rank);
+#ifdef SPIKE_TIMING
+  printf("rank %d: distribute reduced spikes: %f\n", rank, get_time(start_time));
+#endif
+
+#ifdef SPIKE_TIMING
+  start_time = get_time(0.0);
+#endif
   prepare_send_buffer_G();
-  //printf("rank %d: distribute G\n", rank);
+#ifdef SPIKE_TIMING
+  printf("rank %d: preparing G send buffer: %f\n", rank, get_time(start_time));
+#endif
+
+#ifdef SPIKE_TIMING
+  start_time = get_time(0.0);
+#endif
   distribute_reduced_G();
+#ifdef SPIKE_TIMING
+  printf("rank %d: distribute G: %f\n", rank, get_time(start_time));
+#endif
+
 }
 
 
 template <typename T>
 void Spike<T>::postprocess() {
 
-  if (rank == 0) {
-    //printf("rank %d: solving reduced system\n", rank);
-  }
+#ifdef SPIKE_TIMING
+  start_time = get_time(0.0);
+#endif
   solve_reduced_system();
+#ifdef SPIKE_TIMING
+  printf("rank %d: solving reduced system: %f\n", rank, get_time(start_time));
+#endif
 
-  if (rank == 0) {
-    //printf("rank %d: distributing Xr\n", rank);
-  }
+#ifdef SPIKE_TIMING
+  start_time = get_time(0.0);
+#endif
   distribute_Xr();
+#ifdef SPIKE_TIMING
+  printf("rank %d: distributing Xr: %f\n", rank, get_time(start_time));
+#endif
 
-  //printf("rank %d: expanding Xr\n", rank);
+#ifdef SPIKE_TIMING
+  start_time = get_time(0.0);
+#endif
   expand_reduced_system();
+#ifdef SPIKE_TIMING
+  printf("rank %d: expanding Xr: %f\n", rank, get_time(start_time));
+#endif
+
 }
 
 
@@ -374,300 +426,6 @@ void Spike<T>::debug() {
 #endif /* SPIKE_DEBUG */
 
 
-/** \brief Calculation of the final result by using Xr 
- */
-template <typename T>
-void Spike<T>::expand_reduced_system() {
-
-  X_rows = partition_height; 
-  X_cols = F_cols;
-  X_size = X_rows * X_cols;
-
-  if (num_ranks == 2) {
-
-    if (rank == master_rank) {
-
-      // X0u = G0u - V0u * X1t    % u -> [1:end-bw,:]
-      xLACPY('A', G_rows - spike_width, G_cols, G, G_rows, X, X_rows);
-
-      dump_f(X, X_rows, X_cols, "G0u");
-
-      int X1t_offset = 2 * spike_width;
-      xGEMM('N', 'N', V_rows - spike_width, Xr_local_cols, V_cols, T(-1.0), V,
-            V_rows, &Xr_local[X1t_offset], Xr_local_rows, T(1.0), X, X_rows);
-
-      dump_f(X, X_rows, X_cols, "X0u");
-
-      // Xb = X0b                % b -> [end-bw+1:end,:]
-      int X0b_offset = spike_width;
-      int Xb_offset = X_rows - spike_width;
-      xLACPY('A', spike_width, Xr_local_cols, &Xr_local[X0b_offset],
-             Xr_local_rows, &X[Xb_offset], X_rows);
-
-    } else if (rank == last_rank) {
-
-      int Gl_offset = spike_width;
-      int Xl_offset = spike_width;
-
-      // X1l = G1l - W1l * X0b    % l -> [bw+1:end,:]
-      xLACPY('A', G_rows - spike_width, G_cols, &G[Gl_offset], G_rows,
-             &X[Xl_offset], X_rows);
-
-      dump_f(X, X_rows, X_cols, "G1l");
-
-      int Wl_offset = spike_width;
-      xGEMM('N', 'N', W_rows - spike_width, Xr_local_cols, W_cols, T(-1.0),
-            &W[Wl_offset], W_rows, Xr_local, Xr_local_rows, T(1.0),
-            &X[Xl_offset], X_rows);
-
-      dump_f(X, X_rows, X_cols, "X1l");
-
-      // Xt = X1t                % t -> [1:bw,:]
-      int X1t_offset = spike_width;
-      xLACPY('A', spike_width, Xr_local_cols, &Xr_local[X1t_offset],
-             Xr_local_rows, X, X_rows);
-
-    }
-
-
-  } else {
-
-    // TODO: this is probably not fully working yet
-
-    // Prepare GNprime
-    int middle_height = partition_height - 2 * spike_width;
-    int middle_size = middle_height * spike_width;
-    
-    int GNprime_prefactor;
-    T* C;
-    bool allocated_C = false;
-   
-    if (has_right_hand_side()) {
-      GNprime_prefactor = 1;
-      C = &G[spike_width];
-    } else {
-      C = new T[middle_size];
-      allocated_C = true;
-      memset(C, 0, middle_size * sizeof(T)); 
-      GNprime_prefactor = 0;   // so we don't need to initialize
-    }
-    
-    if (rank == 0) {
-
-        int m = partition_height - 2 * spike_width;
-        int n = G_cols;
-        int k = spike_width;
-         
-        T* A = &V[spike_width];
-        int lda = partition_height;
-           
-        T* B = &Xr_local[2 * spike_width];
-        int ldb = Xr_local_rows;  
-       
-        int ldc = G_rows;
-          
-        MMM_dense_f(m, k, n, T(-1.0), A, lda, B,ldb, T(GNprime_prefactor), C, ldc);
-         
-        merge_matrix_c(X, partition_height, 0, 0, Xr_local,
-                       F_cols * spike_width, Xr_local_rows, spike_width);
-        merge_matrix_c(X, partition_height, 0, spike_width, C,
-                       F_cols * middle_height, partition_height, middle_height);
-        merge_matrix_c(X, partition_height, 0, spike_width + m, &Xr_local[spike_width],
-                       F_cols * spike_width, Xr_local_rows, spike_width);
-
-    } else if (rank == last_rank) {
-       
-        int m = partition_height - 2 * spike_width;
-        int n = G_cols;
-        int k = spike_width;
-        
-      
-        T* A = &W[spike_width];
-        int lda = partition_height;
-           
-        T* B = &Xr_local[0];
-        
-        int ldb = Xr_local_rows;
-        
-        int ldc = G_rows;
-          
-        MMM_dense_f(m, k, n, T(-1.0), A, lda, B,ldb, T(GNprime_prefactor), C, ldc);
-         
-        merge_matrix_c(X, partition_height, 0, 0, &Xr_local[spike_width],
-                       F_cols * spike_width, Xr_local_rows, spike_width);
-        merge_matrix_c(X, partition_height, 0, spike_width, C,
-                       F_cols * middle_height, partition_height, middle_height);
-        merge_matrix_c(X, partition_height, 0, spike_width + m, &Xr_local[2 * spike_width],
-                       F_cols * spike_width, Xr_local_rows, spike_width);
-
-    } else {
-
-      int m = partition_height - 2 * spike_width;
-      int n = G_cols;
-      int k = spike_width;
-    
-      T* A = &W[spike_width];
-      int lda = partition_height;
-         
-      T* B = &Xr_local[0];
-
-      int ldb = Xr_local_rows;
-      
-      int ldc = G_rows;
-        
-      MMM_dense_f(m, k, n, T(-1.0), A, lda, B,ldb, T(GNprime_prefactor), C, ldc); 
-      
-      A = &V[spike_width];
-      B = &Xr_local[3 * spike_width];
-      
-      MMM_dense_f(m, k, n, T(-1.0), A, lda, B,ldb, T(1), C, ldc); 
-      
-      merge_matrix_c(X, partition_height, 0, 0, &Xr_local[spike_width],
-                     F_cols * spike_width, Xr_local_rows, spike_width);
-      merge_matrix_c(X, partition_height, 0, spike_width, C,
-                     F_cols * middle_height, partition_height, middle_height);
-      merge_matrix_c(X, partition_height, 0, spike_width + m, &Xr_local[2 * spike_width],
-                     F_cols * spike_width, Xr_local_rows, spike_width);
-
-    }
-
-    if (allocated_C) {
-      delete[] C;
-    }
-
-  }
-
-  if (rank != last_rank) {
-    delete[] V;
-  }
-  if (rank != master_rank) {
-    delete[] W;
-  }
-  delete[] Xr_local;
-  delete[] G;
-
-  dump_f(X, X_rows, X_cols, "X");
-
-}
-
-template <typename T>
-void Spike<T>::distribute_Xr() {
-
-  // NOTE: Xr is sent in row major format since construction of Xr on the 
-  // other ranks happens by vertical concatenation (i.e. appending of rows);
-
-  // Let 0 denote the index of the previous rank, 1 the index of the current
-  // rank and 2 the index of the next rank. Then, after distribute_Xr(), each
-  // rank other than the first and last have
-  //
-  //          Xr = [X0b;
-  //                X1t;
-  //                X1b;
-  //                X2t;]
-  //
-  // while the first and last rank have
-  //
-  //          Xr = [X1t;
-  //                X1b;
-  //                X2t;
-  //                 * ;]
-  //             and
-  //          Xr = [X0b;
-  //                X1t;
-  //                X1b;
-  //                 * ;]
-  //
-  // respectively. All matrices are in column major format. Concatenation is
-  // according to matlab, i.e. vertical in the above notation.
-
-  int Xr_offset;
-  
-  if (rank == master_rank) {
-    transpose_dense_matrix(Xr, Xr_rows, Xr_cols); 
-    MPI_Win_create(Xr, Xr_size * sizeof(T), sizeof(T), 
-                   MPI_INFO_NULL, comm, &win_Xr);  
-  } else {
-    MPI_Win_create(MPI_BOTTOM, 0, 1, MPI_INFO_NULL, comm,
-                   &win_Xr);
-  }
- 
-  if (rank == 0 || rank == last_rank) {
-    Xr_local_cols = F_cols; 
-    Xr_local_rows = 3 * spike_width; 
-    Xr_local_size = Xr_local_cols * Xr_local_rows;
-    Xr_offset  = 0;
-  } else {
-    Xr_local_cols = F_cols; 
-    Xr_local_rows = 4 * spike_width; 
-    Xr_local_size = Xr_local_cols * Xr_local_rows;
-  }
-  
-  if (rank > 0) {
-    Xr_offset = spike_width * F_cols + (rank - 1) * (2 * spike_width * F_cols); 
-  }
-  
-  Xr_local = new CPX[Xr_local_size];
-
-
-  // Start fence
-  MPI_Win_fence(0, win_Xr);
-
-  if (rank != master_rank) {
-    MPI_Get(Xr_local, Xr_local_size, MPI_data_type, master_rank, Xr_offset,
-            Xr_local_size, MPI_data_type, win_Xr);
-  }
-  if (rank == master_rank) {
-    memcpy(Xr_local, Xr + Xr_offset, Xr_local_size * sizeof(T));
-  }
-
-  // Stop fence
-  MPI_Win_fence(0, win_Xr);
-  MPI_Win_free(&win_Xr);
-  
-  transpose_dense_matrix(Xr_local, Xr_local_rows, Xr_local_cols);
-  
-  if (rank == master_rank) {  
-    delete[] Xr;  
-  }
-
-  dump_f(Xr_local, Xr_local_rows, Xr_local_cols, "Xr_local");
-
-}
-
-
-
-
-/** \brief Solve the reduced sparse system
- */
-template<typename T>
-void Spike<T>::solve_reduced_system() {
-
-  // 2 PARTITION NOTE:
-  //  
-  //  Faster way:
-  //    E   = unity(bandwidth) - Wt*Vb;
-  //    X1t = E\(G1t - Wt * G0b);
-  //    X0b = G0b - Vb * X1t;
-  //
-  //  Then send only X0b and X1t to rank1
-
-  if (rank == master_rank) {
-
-    Xr_rows = Gr_cols;
-    Xr_cols = Gr_rows;
-    Xr_size = Xr_cols * Xr_rows;
-    Xr = new T[Xr_size];
-    memset (Xr, 0, Xr_size * sizeof(T));
-    
-    solve_linear_system_sparse(Sr, Gr, Gr_cols, Xr);
-    
-    delete[] Gr;
-    delete Sr;
-
-    dump_f(Xr, Xr_rows, Xr_cols, "Xr");
-
-  }
-}
 
 template <typename T>
 void Spike<T>::prepare_send_buffer_G() {
@@ -872,9 +630,7 @@ void Spike<T>::calculate_spikes() {
       get_dense_from_sparse_f(M, 0, M_rows * (rank + 1), M_rows,
                               M_rows * (rank + 1) + V_cols, B);
 
-      //printf("rank %d: start solving for V\n", rank);
       solve_linear_system_sparse(D_sparse, B, V_cols, V);
-      //printf("rank %d: done solving for V\n", rank);
 
       delete[] B;
 
@@ -898,9 +654,7 @@ void Spike<T>::calculate_spikes() {
 
       get_dense_from_sparse_f(M, 0, M_rows * rank - W_cols, M_rows, M_rows * rank, C);
 
-      //printf("rank %d: start solving for W\n", rank);
       solve_linear_system_sparse(D_sparse, C, W_cols, W);
-      //printf("rank %d: stop solving for W\n", rank);
 
       delete[] C;
     }
@@ -921,9 +675,7 @@ void Spike<T>::calculate_G() {
 
       T* temp = new T[G_size];
 
-      //printf("rank %d: start solving for G\n", rank);
       solve_linear_system_sparse(D_sparse, G, G_cols, temp);
-      //printf("rank %d: stop solving for G\n", rank);
 
       // NOTE:
       // What we use for G is actually 'sol', which is preallocated memory.
@@ -945,61 +697,6 @@ void Spike<T>::delete_D() {
   } else {
     delete D_sparse;
   }
-}
-
-template <typename T>
-void Spike<T>::distribute_reduced_spikes() {
-
-  // 2 PARTITION NOTE:
-  //      rank1 only needs to send Wt
-
-  // NOTE: since Sr is constructed by adding rows, we change the memory layout
-  // to row major
-
-  transpose_dense_matrix(Sr_sendbuffer, Sr_sendbuffer_rows, Sr_sendbuffer_cols);
-
-  int Sr_offset;
-
-  if (rank == master_rank) {
-
-    MPI_Win_create(Sr->nnz, Sr_size * sizeof(T), sizeof(T), MPI_INFO_NULL,
-                   comm, &win_Sr);
-    Sr_offset = 0;
-
-  } else {
-
-    MPI_Win_create(MPI_BOTTOM, 0, 1, MPI_INFO_NULL, comm, &win_Sr);
-    Sr_offset = 2 * (spike_width * spike_width + spike_width) + 2 * (rank - 1) *
-                (2 * spike_width * spike_width + spike_width);
-
-  }
-
-  // Start fence
-  MPI_Win_fence(0, win_Sr);
-
-  if (rank != master_rank) {   
-
-    MPI_Put(Sr_sendbuffer, Sr_sendbuffer_size, MPI_data_type, master_rank,
-            Sr_offset, Sr_sendbuffer_size, MPI_data_type, win_Sr);
-
-  } else if (rank == master_rank) {
-
-    memcpy(Sr->nnz, Sr_sendbuffer, Sr_sendbuffer_size * sizeof(T));  
-
-  }   
-
-  // Stop fence
-  MPI_Win_fence(0, win_Sr);
-  MPI_Win_free(&win_Sr);
-
-  delete[] Sr_sendbuffer;
-
-  if (rank == master_rank) {
-
-    dump(Sr, "Sr");
-
-  }
-
 }
 
 template<typename T>
@@ -1074,6 +771,358 @@ void Spike<T>::prepare_sparsity_pattern() {
     }
   }
 }
+
+template <typename T>
+void Spike<T>::distribute_reduced_spikes() {
+
+  // 2 PARTITION NOTE:
+  //      rank1 only needs to send Wt
+
+  // NOTE: since Sr is constructed by adding rows, we change the memory layout
+  // to row major
+
+  transpose_dense_matrix(Sr_sendbuffer, Sr_sendbuffer_rows, Sr_sendbuffer_cols);
+
+  int Sr_offset;
+
+  if (rank == master_rank) {
+
+    MPI_Win_create(Sr->nnz, Sr_size * sizeof(T), sizeof(T), MPI_INFO_NULL,
+                   comm, &win_Sr);
+    Sr_offset = 0;
+
+  } else {
+
+    MPI_Win_create(MPI_BOTTOM, 0, 1, MPI_INFO_NULL, comm, &win_Sr);
+    Sr_offset = 2 * (spike_width * spike_width + spike_width) + 2 * (rank - 1) *
+                (2 * spike_width * spike_width + spike_width);
+
+  }
+
+  // Start fence
+  MPI_Win_fence(0, win_Sr);
+
+  if (rank != master_rank) {   
+
+    MPI_Put(Sr_sendbuffer, Sr_sendbuffer_size, MPI_data_type, master_rank,
+            Sr_offset, Sr_sendbuffer_size, MPI_data_type, win_Sr);
+
+  } else if (rank == master_rank) {
+
+    memcpy(Sr->nnz, Sr_sendbuffer, Sr_sendbuffer_size * sizeof(T));  
+
+  }   
+
+  // Stop fence
+  MPI_Win_fence(0, win_Sr);
+  MPI_Win_free(&win_Sr);
+
+  delete[] Sr_sendbuffer;
+
+  if (rank == master_rank) {
+
+    dump(Sr, "Sr");
+
+  }
+
+}
+
+template <typename T>
+void Spike<T>::distribute_Xr() {
+
+  // NOTE: Xr is sent in row major format since construction of Xr on the 
+  // other ranks happens by vertical concatenation (i.e. appending of rows);
+
+  // Let 0 denote the index of the previous rank, 1 the index of the current
+  // rank and 2 the index of the next rank. Then, after distribute_Xr(), each
+  // rank other than the first and last have
+  //
+  //          Xr = [X0b;
+  //                X1t;
+  //                X1b;
+  //                X2t;]
+  //
+  // while the first and last rank have
+  //
+  //          Xr = [X1t;
+  //                X1b;
+  //                X2t;
+  //                 * ;]
+  //             and
+  //          Xr = [X0b;
+  //                X1t;
+  //                X1b;
+  //                 * ;]
+  //
+  // respectively. All matrices are in column major format. Concatenation is
+  // according to matlab, i.e. vertical in the above notation.
+
+  int Xr_offset;
+  
+  if (rank == master_rank) {
+    transpose_dense_matrix(Xr, Xr_rows, Xr_cols); 
+    MPI_Win_create(Xr, Xr_size * sizeof(T), sizeof(T), 
+                   MPI_INFO_NULL, comm, &win_Xr);  
+  } else {
+    MPI_Win_create(MPI_BOTTOM, 0, 1, MPI_INFO_NULL, comm,
+                   &win_Xr);
+  }
+ 
+  if (rank == 0 || rank == last_rank) {
+    Xr_local_cols = F_cols; 
+    Xr_local_rows = 3 * spike_width; 
+    Xr_local_size = Xr_local_cols * Xr_local_rows;
+    Xr_offset  = 0;
+  } else {
+    Xr_local_cols = F_cols; 
+    Xr_local_rows = 4 * spike_width; 
+    Xr_local_size = Xr_local_cols * Xr_local_rows;
+  }
+  
+  if (rank > 0) {
+    Xr_offset = spike_width * F_cols + (rank - 1) * (2 * spike_width * F_cols); 
+  }
+  
+  Xr_local = new CPX[Xr_local_size];
+
+
+  // Start fence
+  MPI_Win_fence(0, win_Xr);
+
+  if (rank != master_rank) {
+    MPI_Get(Xr_local, Xr_local_size, MPI_data_type, master_rank, Xr_offset,
+            Xr_local_size, MPI_data_type, win_Xr);
+  }
+  if (rank == master_rank) {
+    memcpy(Xr_local, Xr + Xr_offset, Xr_local_size * sizeof(T));
+  }
+
+  // Stop fence
+  MPI_Win_fence(0, win_Xr);
+  MPI_Win_free(&win_Xr);
+  
+  transpose_dense_matrix(Xr_local, Xr_local_rows, Xr_local_cols);
+  
+  if (rank == master_rank) {  
+    delete[] Xr;  
+  }
+
+  dump_f(Xr_local, Xr_local_rows, Xr_local_cols, "Xr_local");
+
+}
+
+
+
+
+/** \brief Solve the reduced sparse system
+ */
+template<typename T>
+void Spike<T>::solve_reduced_system() {
+
+  // 2 PARTITION NOTE:
+  //  
+  //  Faster way:
+  //    E   = unity(bandwidth) - Wt*Vb;
+  //    X1t = E\(G1t - Wt * G0b);
+  //    X0b = G0b - Vb * X1t;
+  //
+  //  Then send only X0b and X1t to rank1
+
+  if (rank == master_rank) {
+
+    Xr_rows = Gr_cols;
+    Xr_cols = Gr_rows;
+    Xr_size = Xr_cols * Xr_rows;
+    Xr = new T[Xr_size];
+    memset (Xr, 0, Xr_size * sizeof(T));
+    
+    solve_linear_system_sparse(Sr, Gr, Gr_cols, Xr);
+    
+    delete[] Gr;
+    delete Sr;
+
+    dump_f(Xr, Xr_rows, Xr_cols, "Xr");
+
+  }
+}
+
+
+/** \brief Calculation of the final result by using Xr 
+ */
+template <typename T>
+void Spike<T>::expand_reduced_system() {
+
+  X_rows = partition_height; 
+  X_cols = F_cols;
+  X_size = X_rows * X_cols;
+
+  if (num_ranks == 2) {
+
+    if (rank == master_rank) {
+
+      // X0u = G0u - V0u * X1t    % u -> [1:end-bw,:]
+      xLACPY('A', G_rows - spike_width, G_cols, G, G_rows, X, X_rows);
+
+      dump_f(X, X_rows, X_cols, "G0u");
+
+      int X1t_offset = 2 * spike_width;
+      xGEMM('N', 'N', V_rows - spike_width, Xr_local_cols, V_cols, T(-1.0), V,
+            V_rows, &Xr_local[X1t_offset], Xr_local_rows, T(1.0), X, X_rows);
+
+      dump_f(X, X_rows, X_cols, "X0u");
+
+      // Xb = X0b                % b -> [end-bw+1:end,:]
+      int X0b_offset = spike_width;
+      int Xb_offset = X_rows - spike_width;
+      xLACPY('A', spike_width, Xr_local_cols, &Xr_local[X0b_offset],
+             Xr_local_rows, &X[Xb_offset], X_rows);
+
+    } else if (rank == last_rank) {
+
+      int Gl_offset = spike_width;
+      int Xl_offset = spike_width;
+
+      // X1l = G1l - W1l * X0b    % l -> [bw+1:end,:]
+      xLACPY('A', G_rows - spike_width, G_cols, &G[Gl_offset], G_rows,
+             &X[Xl_offset], X_rows);
+
+      dump_f(X, X_rows, X_cols, "G1l");
+
+      int Wl_offset = spike_width;
+      xGEMM('N', 'N', W_rows - spike_width, Xr_local_cols, W_cols, T(-1.0),
+            &W[Wl_offset], W_rows, Xr_local, Xr_local_rows, T(1.0),
+            &X[Xl_offset], X_rows);
+
+      dump_f(X, X_rows, X_cols, "X1l");
+
+      // Xt = X1t                % t -> [1:bw,:]
+      int X1t_offset = spike_width;
+      xLACPY('A', spike_width, Xr_local_cols, &Xr_local[X1t_offset],
+             Xr_local_rows, X, X_rows);
+
+    }
+
+
+  } else {
+
+    // TODO: this is probably not fully working yet
+
+    // Prepare GNprime
+    int middle_height = partition_height - 2 * spike_width;
+    int middle_size = middle_height * spike_width;
+    
+    int GNprime_prefactor;
+    T* C;
+    bool allocated_C = false;
+   
+    if (has_right_hand_side()) {
+      GNprime_prefactor = 1;
+      C = &G[spike_width];
+    } else {
+      C = new T[middle_size];
+      allocated_C = true;
+      memset(C, 0, middle_size * sizeof(T)); 
+      GNprime_prefactor = 0;   // so we don't need to initialize
+    }
+    
+    if (rank == 0) {
+
+        int m = partition_height - 2 * spike_width;
+        int n = G_cols;
+        int k = spike_width;
+         
+        T* A = &V[spike_width];
+        int lda = partition_height;
+           
+        T* B = &Xr_local[2 * spike_width];
+        int ldb = Xr_local_rows;  
+       
+        int ldc = G_rows;
+          
+        xGEMM('N', 'N', m, k, n, T(-1.0), A, lda, B,ldb, T(GNprime_prefactor), C, ldc);
+         
+        merge_matrix_c(X, partition_height, 0, 0, Xr_local,
+                       F_cols * spike_width, Xr_local_rows, spike_width);
+        merge_matrix_c(X, partition_height, 0, spike_width, C,
+                       F_cols * middle_height, partition_height, middle_height);
+        merge_matrix_c(X, partition_height, 0, spike_width + m, &Xr_local[spike_width],
+                       F_cols * spike_width, Xr_local_rows, spike_width);
+
+    } else if (rank == last_rank) {
+       
+        int m = partition_height - 2 * spike_width;
+        int n = G_cols;
+        int k = spike_width;
+        
+      
+        T* A = &W[spike_width];
+        int lda = partition_height;
+           
+        T* B = &Xr_local[0];
+        
+        int ldb = Xr_local_rows;
+        
+        int ldc = G_rows;
+          
+        xGEMM('N', 'N', m, k, n, T(-1.0), A, lda, B,ldb, T(GNprime_prefactor), C, ldc);
+         
+        merge_matrix_c(X, partition_height, 0, 0, &Xr_local[spike_width],
+                       F_cols * spike_width, Xr_local_rows, spike_width);
+        merge_matrix_c(X, partition_height, 0, spike_width, C,
+                       F_cols * middle_height, partition_height, middle_height);
+        merge_matrix_c(X, partition_height, 0, spike_width + m, &Xr_local[2 * spike_width],
+                       F_cols * spike_width, Xr_local_rows, spike_width);
+
+    } else {
+
+      int m = partition_height - 2 * spike_width;
+      int n = G_cols;
+      int k = spike_width;
+    
+      T* A = &W[spike_width];
+      int lda = partition_height;
+         
+      T* B = &Xr_local[0];
+
+      int ldb = Xr_local_rows;
+      
+      int ldc = G_rows;
+        
+      xGEMM('N', 'N', m, k, n, T(-1.0), A, lda, B,ldb, T(GNprime_prefactor), C, ldc); 
+      
+      A = &V[spike_width];
+      B = &Xr_local[3 * spike_width];
+      
+      xGEMM('N', 'N', m, k, n, T(-1.0), A, lda, B,ldb, T(1), C, ldc); 
+      
+      merge_matrix_c(X, partition_height, 0, 0, &Xr_local[spike_width],
+                     F_cols * spike_width, Xr_local_rows, spike_width);
+      merge_matrix_c(X, partition_height, 0, spike_width, C,
+                     F_cols * middle_height, partition_height, middle_height);
+      merge_matrix_c(X, partition_height, 0, spike_width + m, &Xr_local[2 * spike_width],
+                     F_cols * spike_width, Xr_local_rows, spike_width);
+
+    }
+
+    if (allocated_C) {
+      delete[] C;
+    }
+
+  }
+
+  if (rank != last_rank) {
+    delete[] V;
+  }
+  if (rank != master_rank) {
+    delete[] W;
+  }
+  delete[] Xr_local;
+  delete[] G;
+
+  dump_f(X, X_rows, X_cols, "X");
+
+}
+
 
 
 /****************************************************************************
@@ -1318,7 +1367,15 @@ void Spike<T>::merge_matrix_c(T* inout, int ldo, int start_row,
  */
 template <typename T>
 void Spike<T>::solve_linear_system_sparse(TCSR<T>* Mat, T* B, int B_cols, T* X) {
+
+  // OMENdft
   Pardiso::sparse_solve(Mat, B, B_cols, X);
+
+  // OMEN
+  //LinearSolver<CPX> solver = new Pardiso(Mat, comm);
+  //solver->prepare();
+  //solver->solve_equation(X, B, B_cols);
+
 }
 
 

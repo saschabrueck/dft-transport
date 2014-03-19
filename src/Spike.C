@@ -169,74 +169,7 @@ void Spike<CPX>::print_array(CPX* matrix, int size) {
   }
 }
 
-/** \brief Templated routines for dense MMM
-  *
-  * The leading dimension specifies the number of storage locations between
-  * elements in the same row (if the matrix is stored in Fortran format),
-  * unless the matrix is the second argument B in which case it is the
-  * number of columns.
-  *
-  *
-  * For matrices without padding
-  *
-  *   leading_dimension_A = A_rows / C_rows
-  *   leading_dimension_B = B_cols / C_cols (? but seems to be true)
-  *   leading_dimension_C = C_rows / A_rows
-  *
-  * Note: C_rows = A_rows,
-  *       A_cols = B_rows,
-  *       C_cols = B_cols
-  */
-template <>
-void Spike<CPX>::MMM_dense_f(int A_rows, int A_cols, int B_cols, 
-                             CPX prefactor_AB, CPX *A,
-                             int leading_dimension_A, CPX *B, 
-                             int leading_dimension_B, CPX prefactor_C, CPX *C,
-                             int leading_dimension_C) {
-   
-  c_zgemm('N', 'N', A_rows, B_cols, A_cols, prefactor_AB, A,
-          leading_dimension_A, B, leading_dimension_B, prefactor_C, C,
-          leading_dimension_C);
-  
-}
-template <>
-void Spike<CPX>::MMM_dense_c(int A_rows, int A_cols, int B_cols, 
-                             CPX prefactor_AB, CPX *A,
-                             int leading_dimension_A, CPX *B, 
-                             int leading_dimension_B, CPX prefactor_C, CPX *C,
-                             int leading_dimension_C) {
-  // A_rows = m, A_cols = k, B_cols = n
-  // c-convention: all matrices need transposition so the arguments
-  //               have to be reversed.
-  // TODO: have to think about that again, probably
-  int B_rows = A_cols;
-  c_zgemm('T', 'T', B_rows, A_cols, B_cols, prefactor_AB, B,
-          leading_dimension_B, A, leading_dimension_A, prefactor_C, C,
-          leading_dimension_C);
-}
-template <>
-void Spike<double>::MMM_dense_f(int A_rows, int A_cols, int B_cols, 
-                                double prefactor_AB, double *A, 
-                                int leading_dimension_A, double *B, 
-                                int leading_dimension_B, double prefactor_C,
-                                double *C, int leading_dimension_C) {
-  c_dgemm('N', 'N', A_rows, B_cols, A_cols, prefactor_AB, A,
-          leading_dimension_A, B, leading_dimension_B, prefactor_C, C,
-          leading_dimension_C);
-}
-template <>
-void Spike<double>::MMM_dense_c(int A_rows, int A_cols, int B_cols, 
-                                double prefactor_AB, double *A, 
-                                int leading_dimension_A, double *B, 
-                                int leading_dimension_B, double prefactor_C,
-                                double *C, int leading_dimension_C) {
-  // TODO: have to think about that again, probably
-  int B_rows = A_cols;
-  c_dgemm('T', 'T', B_rows, A_cols, B_cols, prefactor_AB, B,
-          leading_dimension_B, A, leading_dimension_A, prefactor_C, C,
-          leading_dimension_C);
-}
-
+/* templated interfaces to BLAS/LAPACK routines */
 template <>
 void Spike<CPX>::xLACPY(char UPLO, int M, int N, CPX* A, int LDA, CPX* B,
                         int LDB) {
