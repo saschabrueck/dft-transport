@@ -22,6 +22,11 @@ void delete_matrices();
 std::vector<double> energies;
 /// Lower integration limit
 double energy_gs;
+/// Valence band edge
+double energy_vb;
+/// Conduction band edge
+double energy_cb;
+
 
 private:
 int ndof;
