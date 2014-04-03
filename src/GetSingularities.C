@@ -38,7 +38,9 @@ int Singularities::Execute(TCSR<double> *KohnSham,TCSR<double> *Overlap,int n_mu
         energies_matrix = new double[ndof*nprocs*seq_per_cpu];
         derivatives_matrix = new double[ndof*nprocs*seq_per_cpu];
         curvatures_matrix = new double[ndof*nprocs*seq_per_cpu];
-        energy_gs=numeric_limits<double>::max();
+        energy_gs= numeric_limits<double>::max();
+        energy_vb=-numeric_limits<double>::max();
+        energy_cb= numeric_limits<double>::max();
     }
     double *energies_local = new double[ndof*seq_per_cpu]();
     double *derivatives_local = new double[ndof*seq_per_cpu]();
@@ -120,6 +122,8 @@ int Singularities::Execute(TCSR<double> *KohnSham,TCSR<double> *Overlap,int n_mu
                 }
             }
             for (int j=0;j<n_k;j++) if (energies_matrix[j*ndof]<energy_gs) energy_gs=energies_matrix[j*ndof];
+            for (int j=0;j<n_k;j++) if (energies_matrix[j*ndof+noccunitcell-1]>energy_vb) energy_vb=energies_matrix[j*ndof+noccunitcell-1];
+            for (int j=0;j<n_k;j++) if (energies_matrix[j*ndof+noccunitcell  ]<energy_cb) energy_cb=energies_matrix[j*ndof+noccunitcell  ];
         }
     }
     if (!iam) std::sort(energies.begin(),energies.end());
@@ -128,6 +132,8 @@ int Singularities::Execute(TCSR<double> *KohnSham,TCSR<double> *Overlap,int n_mu
     energies.resize(n_energies);
     MPI_Bcast(&energies[0],n_energies,MPI_DOUBLE,0,MPI_COMM_WORLD);
     MPI_Bcast(&energy_gs,1,MPI_DOUBLE,0,MPI_COMM_WORLD);
+    MPI_Bcast(&energy_vb,1,MPI_DOUBLE,0,MPI_COMM_WORLD);
+    MPI_Bcast(&energy_cb,1,MPI_DOUBLE,0,MPI_COMM_WORLD);
     MPI_Bcast(&muvec[0],n_mu,MPI_DOUBLE,0,MPI_COMM_WORLD);
     delete[] energies_local;
     delete[] derivatives_local;
@@ -269,24 +275,36 @@ void Singularities::write_bandstructure(int i_mu)
     mysstream << "EnergiesWRTk" << i_mu;
     myfile.open(mysstream.str().c_str());
     myfile.precision(15);
-    for (int iele=0;iele<n_k*ndof;iele++)
-        myfile << energies_matrix[iele] << endl;
+    for (int iband=0;iband<ndof;iband++) {
+        for (int i_k=0;i_k<n_k;i_k++) {
+            myfile << " " << energies_matrix[iband+ndof*i_k];
+        }
+        myfile << endl;
+    }
     myfile.close();
     mysstream.str("");
     mysstream.clear();
     mysstream << "DerivativesWRTk" << i_mu;
     myfile.open(mysstream.str().c_str());
     myfile.precision(15);
-    for (int iele=0;iele<n_k*ndof;iele++)
-        myfile << derivatives_matrix[iele] << endl;
+    for (int iband=0;iband<ndof;iband++) {
+        for (int i_k=0;i_k<n_k;i_k++) {
+            myfile << " " << derivatives_matrix[iband+ndof*i_k];
+        }
+        myfile << endl;
+    }
     myfile.close();
     mysstream.str("");
     mysstream.clear();
     mysstream << "CurvaturesWRTk" << i_mu;
     myfile.open(mysstream.str().c_str());
     myfile.precision(15);
-    for (int iele=0;iele<n_k*ndof;iele++)
-        myfile << curvatures_matrix[iele] << endl;
+    for (int iband=0;iband<ndof;iband++) {
+        for (int i_k=0;i_k<n_k;i_k++) {
+            myfile << " " << curvatures_matrix[iband+ndof*i_k];
+        }
+        myfile << endl;
+    }
     myfile.close();
 }
 
