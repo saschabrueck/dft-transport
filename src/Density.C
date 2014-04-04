@@ -318,8 +318,8 @@ if (npror!=propnum) cout << "WARNING: FOUND " << npror << " OF " << propnum << "
             current=Overlap->psipsidaggerdosdebug(Sol,nprol+npror);
             Overlap->psipsidagger(Sol,nprol,+2.0*weight*fermil,atom_of_bf,erhoperatom);
             Overlap->psipsidagger(&Sol[Ps->size_tot*nprol],npror,+2.0*weight*fermir,atom_of_bf,erhoperatom);
-            Overlap->psipsidagger(Sol,nprol,+2.0*weight*dfermil,atom_of_bf,drhoperatom);
-            Overlap->psipsidagger(&Sol[Ps->size_tot*nprol],npror,+2.0*weight*dfermir,atom_of_bf,drhoperatom);
+            Overlap->psipsidagger(Sol,nprol,-2.0*weight*dfermil,atom_of_bf,drhoperatom);
+            Overlap->psipsidagger(&Sol[Ps->size_tot*nprol],npror,-2.0*weight*dfermir,atom_of_bf,drhoperatom);
         } else {
             if (!matrix_rank) {
                 Ps->psipsidagger(Sol,nprol,+weight*fermil);
