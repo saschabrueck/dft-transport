@@ -208,6 +208,18 @@ stepvector[0]=CPX(1.0,0.0);
 methodvector.resize(1);
 methodvector[0]=transport_methods::WF;
 */
+    ifstream evecfile("OMEN_E");
+    if (evecfile) {
+        energyvector.clear();
+        istream_iterator<double> start_evec(evecfile), end_evec;
+        energyvector.assign(start_evec,end_evec);
+        methodvector.resize(energyvector.size(),transport_methods::WF);
+        stepvector.resize(1,(energyvector[1]-energyvector[0])/2.0);
+        for (uint istep=1;istep<energyvector.size()-1;istep++) {
+            stepvector.push_back((energyvector[istep+1]-energyvector[istep-1])/2.0);
+        }
+        stepvector.push_back((energyvector[energyvector.size()-1]-energyvector[energyvector.size()-2])/2.0);
+    }
     if (!iam) cout << "Size of Energyvector " << energyvector.size() << endl;
 // get propagating modes from bandstructure OF RIGHT CONTACT ONLY -> ONLY FOR EQUILIBRIUM OR I HAVE TO IMPLEMENT LEFT CONTACT AS WELL
     std::vector< std::vector<double> > propagating;

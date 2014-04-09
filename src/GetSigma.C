@@ -292,8 +292,9 @@ int BoundarySelfEnergy::GetSigma(MPI_Comm boundary_comm)
 */
 int worldrank; MPI_Comm_rank(MPI_COMM_WORLD,&worldrank);
 int arpack=0;
+int feast=0;
 // FEAST
-if (0) {
+if (feast) {
     InjectionFeast<CPX> *k_inj = new InjectionFeast<CPX>();
     int neigfeast=200;
     k_inj->initialize(2*ntriblock,neigfeast);
