@@ -35,6 +35,10 @@ TCSR<CPX> *spainjldist;
 TCSR<CPX> *spainjrdist;
 /// Number of Propagating States
 int n_propagating;
+/// Propagating phase factors
+CPX *lambdaprol;
+/// Propagating phase factors
+CPX *lambdapror;
 
 private:
 

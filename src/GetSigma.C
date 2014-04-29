@@ -20,6 +20,8 @@ BoundarySelfEnergy::BoundarySelfEnergy()
     spsigmardist = NULL;
     injl = NULL;
     injr = NULL;
+    lambdaprol = NULL;
+    lambdapror = NULL;
     n_propagating=-1;
 
     master_rank=-1;;
@@ -53,6 +55,8 @@ BoundarySelfEnergy::~BoundarySelfEnergy()
     if (do_delete_inj) {
         delete[] injl;
         delete[] injr;
+        delete[] lambdaprol;
+        delete[] lambdapror;
     }
 
     if (do_delete_spsigdist) {
@@ -63,6 +67,8 @@ BoundarySelfEnergy::~BoundarySelfEnergy()
     if (do_delete_spainjdist) {
         delete spainjldist;
         delete spainjrdist;
+        delete[] lambdaprol;
+        delete[] lambdapror;
     }
 
     if (do_delete_H) {
@@ -189,6 +195,12 @@ void BoundarySelfEnergy::Distribute(TCSR<CPX> *SumHamC,MPI_Comm matrix_comm)
 
     if (compute_inj) {
         MPI_Bcast(&n_propagating,1,MPI_INT,master_rank,matrix_comm);
+        if (iam!=master_rank) {
+            lambdaprol=new CPX[n_propagating];
+            lambdapror=new CPX[n_propagating];
+        }
+        MPI_Bcast(&lambdaprol,n_propagating,MPI_DOUBLE_COMPLEX,master_rank,matrix_comm);
+        MPI_Bcast(&lambdapror,n_propagating,MPI_DOUBLE_COMPLEX,master_rank,matrix_comm);
         TCSR<CPX> *spainjl = NULL;
         if (iam==master_rank) {
             spainjl = new TCSR<CPX>(SumHamC->size_tot,ntriblock*n_propagating,SumHamC->findx);
@@ -1305,6 +1317,12 @@ myfile.close();
         c_dscal(nprotra*ntriblock,-d_one,((double*)Vref)+1,2);
         injl=new CPX[ntriblock*nprotra];
         injr=new CPX[ntriblock*nprotra];
+        lambdaprol=new CPX[nprotra];
+        lambdapror=new CPX[nprotra];
+        for (int ipro=0;ipro<nprotra;ipro++) {
+            lambdaprol[ipro]=lambdavec[protravec[ipro]];
+            lambdapror[ipro]=lambdavec[prorefvec[ipro]];
+        }
         H1t->mat_vec_mult(Vtra,injl,nprotra);
         H1->mat_vec_mult(Vref,injr,nprotra);
         CPX *injl1=new CPX[ntriblock*nprotra];

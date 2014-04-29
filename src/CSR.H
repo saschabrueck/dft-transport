@@ -102,8 +102,7 @@ public:
     void write_CSR_bin(const char*);
     void mat_vec_mult_add(T*,T*,int,T);
     void shift_resize(int,int,int,int);
-    void contactdensity(int,int);
-    void contactdensity(int,int,int,MPI_Comm);
+    void contactdensity(int,int,int,int,MPI_Comm);
     int additionalentries(TCSR<T>*);
     void add(TCSR<T>*,T);
     void add_imag(TCSR<CPX>*,CPX);
@@ -114,7 +113,9 @@ public:
     double psipsidaggerdosdebug(CPX*,int);
     void psipsidagger(CPX*,int,CPX);
     void psipsidagger(CPX*,int,CPX,int*,double*);
+    void psipsidagger(CPX*,CPX*,int,CPX,int*,double*);
     void atomdensity(TCSR<CPX>*,CPX,int*,double*);
+    void collect_density(double,double,double,double&,double*,int*);
     void moveawaypbc(T*,T*,int,int);
     void settozeropbc(int,int);
     void removepbc(int,int);
@@ -1742,55 +1743,20 @@ void TCSR<T>::shift_resize(int istart, int ilength, int jstart, int jlength)
 /************************************************************************************************/
 
 template <class T>
-void TCSR<T>::contactdensity(int ndof,int bandw)
-{
-// this is for the serial case to copy the (bandwidth+1)th strip to the ones before
-// assumes same sparsity structure at bw+1 unit cells on left and right
-    int i,e;
-    T *stripe = new T[(size_tot+bandw*ndof)*ndof];
-    init_variable(stripe,(size_tot+bandw*ndof)*ndof);
-    for(i=bandw*ndof;i<bandw*ndof+ndof;i++) {
-        for(e=edge_i[i]-findx;e<edge_i[i+1]-findx;e++) {
-            stripe[i-bandw*ndof+(index_j[e]-findx)*ndof] = nnz[e];
-        }
-    }
-    c_tcopy(bandw*ndof*ndof,stripe,1,&stripe[size_tot*ndof],1);
-    for(int iband=0;iband<bandw;iband++) {
-        for(i=iband*ndof;i<(iband+1)*ndof;i++) {
-            for(e=edge_i[i]-findx;e<edge_i[i+1]-findx;e++) {
-                nnz[e]=stripe[i-iband*ndof+(index_j[e]-findx)*ndof+ndof*ndof*(bandw-iband)];
-            }
-        }
-    }
-    init_variable(stripe,(size_tot+bandw*ndof)*ndof);
-    for(i=size_tot-bandw*ndof-ndof;i<size_tot-bandw*ndof;i++) {
-        for(e=edge_i[i]-findx;e<edge_i[i+1]-findx;e++) {
-            stripe[i-(size_tot-bandw*ndof-ndof)+(index_j[e]-findx+bandw*ndof)*ndof] = nnz[e];
-        }
-    }
-    c_tcopy(bandw*ndof*ndof,&stripe[size_tot*ndof],1,stripe,1);
-    for(int iband=0;iband<bandw;iband++) {
-        for(i=size_tot-bandw*ndof+iband*ndof;i<size_tot-bandw*ndof+(iband+1)*ndof;i++) {
-            for(e=edge_i[i]-findx;e<edge_i[i+1]-findx;e++) {
-                nnz[e]=stripe[i-(size_tot-bandw*ndof+iband*ndof)+(index_j[e]-findx)*ndof+ndof*ndof*(bandw-iband-1)];
-            }
-        }
-    }
-    delete[] stripe;
-}
-
-/************************************************************************************************/
-
-template <class T>
-void TCSR<T>::contactdensity(int ndof,int bandw,int contact,MPI_Comm my_comm)
+void TCSR<T>::contactdensity(int ndof,int bandw,int contact,int strinum,MPI_Comm my_comm)
 {
     int i,e;
     T* linefull = new T[(2*bandw+1)*ndof];
     if (contact==1) {
-        TCSR<T> *Pscut = new TCSR<T>(this,bandw*ndof,ndof,0,(2*bandw+1)*ndof);
+        TCSR<T> *Pscut = new TCSR<T>(this,strinum*ndof,ndof,0,size_tot*ndof);
         TCSR<T> *Pcell = new TCSR<T>(Pscut,my_comm);
         delete Pscut;
-        Pcell->shift_resize(bandw*ndof,ndof,0,(2*bandw+1)*ndof);
+        for (int i_elem=strinum*ndof;i_elem<(strinum+1)*ndof;i_elem++) {
+            for (e=Pcell->edge_i[i_elem]-Pcell->findx;e<Pcell->edge_i[i_elem+1]-Pcell->findx;e++) {
+                Pcell->index_j[e]=(Pcell->index_j[e]+(bandw-strinum)*ndof+size_tot)%size_tot;
+            }
+        }
+        Pcell->shift_resize(strinum*ndof,ndof,0,(2*bandw+1)*ndof);
         for (i=0;i<size;i++) {
             int i_band=(i+first_row)/ndof;
             int i_elem=(i+first_row)%ndof;
@@ -1800,16 +1766,21 @@ void TCSR<T>::contactdensity(int ndof,int bandw,int contact,MPI_Comm my_comm)
                     linefull[Pcell->index_j[e]-Pcell->findx]=Pcell->nnz[e];
                 }
                 for (e=edge_i[i]-findx;e<edge_i[i+1]-findx;e++) {
-                    nnz[e]=linefull[(index_j[e]-findx+(bandw-i_band)*ndof)%size_tot];
+                    nnz[e]=linefull[(index_j[e]-findx+(bandw-i_band)*ndof+size_tot)%size_tot];
                 }
             }
         }
         delete Pcell;
     } else if (contact==2) {
-        TCSR<T> *Pscut = new TCSR<T>(this,size_tot-(bandw+1)*ndof,ndof,size_tot-(2*bandw+1)*ndof,(2*bandw+1)*ndof);
+        TCSR<T> *Pscut = new TCSR<T>(this,size_tot-(strinum+1)*ndof,ndof,0,size_tot*ndof);
         TCSR<T> *Pcell = new TCSR<T>(Pscut,my_comm);
         delete Pscut;
-        Pcell->shift_resize(size_tot-(bandw+1)*ndof,ndof,size_tot-(2*bandw+1)*ndof,(2*bandw+1)*ndof);
+        for (int i_elem=size_tot-(strinum+1)*ndof;i_elem<size_tot-strinum*ndof;i_elem++) {
+            for (e=Pcell->edge_i[i_elem]-Pcell->findx;e<Pcell->edge_i[i_elem+1]-Pcell->findx;e++) {
+                Pcell->index_j[e]=(Pcell->index_j[e]-(bandw-strinum)*ndof+size_tot)%size_tot;
+            }
+        }
+        Pcell->shift_resize(size_tot-(strinum+1)*ndof,ndof,size_tot-(2*bandw+1)*ndof,(2*bandw+1)*ndof);
         for (i=0;i<size;i++) {
             int i_band=(i+first_row)/ndof;
             int i_elem=(i+first_row)%ndof;
@@ -2055,6 +2026,19 @@ inline void TCSR<double>::psipsidagger(CPX* psi,int nkval,CPX factor,int* atom_o
 /************************************************************************************************/
 
 template <>
+inline void TCSR<double>::psipsidagger(CPX* psi,CPX* psi2,int nkval,CPX factor,int* atom_of_bf,double* result)
+{
+    int i,e;
+    for(i=0;i<size;i++){
+        for(e=edge_i[i]-findx;e<edge_i[i+1]-findx;e++){
+            result[atom_of_bf[first_row+i]]+=nnz[e]*real(factor*c_zdotc(nkval,&psi2[index_j[e]-findx],size_tot,&psi[first_row+i],size_tot));
+        }
+    }
+}
+
+/************************************************************************************************/
+
+template <>
 inline void TCSR<double>::atomdensity(TCSR<CPX>* A,CPX factor,int* atom_of_bf,double* result)
 {
     if (size      != A->size      ) throw CSR_Exception(__LINE__,__FILE__);
@@ -2075,6 +2059,58 @@ inline void TCSR<double>::atomdensity(TCSR<CPX>* A,CPX factor,int* atom_of_bf,do
         }
     }
     delete[] linefull;
+}
+
+/************************************************************************************************/
+
+template <class T>
+void TCSR<T>::collect_density(double x_grid,double y_grid,double z_grid,double& rho_grid,double* xyz_atom,int* atom_of_bf)
+{
+    double basis_exp_C[]={3.35827350,0.76975780,0.20003810};
+    int fac[]={1, 1, 2, 6, 24, 120, 720, 5040};
+    double cp2knorm[]={1.768061,6.480152,6.480152,6.480152,0.585701,1.027739,1.027739,1.027739,0.213179,0.190691,0.190691,0.190691};
+    double br=1.0/18.8971616;
+
+    rho_grid=0.0;
+    for (int i=0;i<size;i++) {
+        for (int e=edge_i[i]-findx;e<edge_i[i+1]-findx;e++) {
+            int j=index_j[e]-findx;
+
+            int bf_wrt_at_i=i%12;
+            double exp_i=basis_exp_C[bf_wrt_at_i/4];
+            int l_of_bf_i=bf_wrt_at_i%4;
+            int lxi=0;
+            int lyi=0;
+            int lzi=0;
+            if (l_of_bf_i==1) lxi=1;
+            if (l_of_bf_i==2) lyi=1;
+            if (l_of_bf_i==3) lzi=1;
+            double xi=br*(x_grid-xyz_atom[atom_of_bf[i]]);
+            double yi=br*(y_grid-xyz_atom[atom_of_bf[i]+1]);
+            double zi=br*(z_grid-xyz_atom[atom_of_bf[i]+2]);
+//            double norm_i=1.0/sqrt( (fac[2*lxi]*fac[2*lyi]*fac[2*lzi]*pow(M_PI,1.5)) / (pow(2,2*(lxi+lyi+lzi))*fac[lxi]*fac[lyi]*fac[lzi]*pow(exp_i,lxi+lyi+lzi+1.5)) );
+            double norm_i=cp2knorm[bf_wrt_at_i];
+            double gto_i=norm_i*pow(xi,lxi)*pow(yi,lyi)*pow(zi,lzi)*exp(-exp_i*(xi*xi+yi*yi+zi*zi));
+
+            int bf_wrt_at_j=j%12;
+            double exp_j=basis_exp_C[bf_wrt_at_j/4];
+            int l_of_bf_j=bf_wrt_at_j%4;
+            int lxj=0;
+            int lyj=0;
+            int lzj=0;
+            if (l_of_bf_j==1) lxj=1;
+            if (l_of_bf_j==2) lyi=1;
+            if (l_of_bf_j==3) lzj=1;
+            double xj=br*(x_grid-xyz_atom[atom_of_bf[j]]);
+            double yj=br*(y_grid-xyz_atom[atom_of_bf[j]+1]);
+            double zj=br*(z_grid-xyz_atom[atom_of_bf[j]+2]);
+//            double norm_j=1.0/sqrt( (fac[2*lxj]*fac[2*lyj]*fac[2*lzj]*pow(M_PI,1.5)) / (pow(2,2*(lxj+lyj+lzj))*fac[lxj]*fac[lyj]*fac[lzj]*pow(exp_j,lxj+lyj+lzj+1.5)) );
+            double norm_j=cp2knorm[bf_wrt_at_j];
+            double gto_j=norm_j*pow(xj,lxj)*pow(yj,lyj)*pow(zj,lzj)*exp(-exp_j*(xj*xj+yj*yj+zj*zj));
+
+            rho_grid+=nnz[e]*gto_i*gto_j;
+        }
+    }
 }
 
 /************************************************************************************************/
