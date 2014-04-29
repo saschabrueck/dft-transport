@@ -3,6 +3,7 @@
 #include "Density.H"
 #include "GetSingularities.H"
 #include "Quadrature.H"
+#include <iterator>
 
 int energyvector(TCSR<double> *Overlap,TCSR<double> *KohnSham,int n_mu,double* muvec, int* contactvec,double* dopingvec,double* electronchargeperatom,double* derivativechargeperatom,int n_atoms,int* atom_of_bf,c_transport_type transport_params)
 {
@@ -140,10 +141,10 @@ OverlapCollect->write_CSR_bin("S_4.bin");
 MPI_Barrier(MPI_COMM_WORLD);
 exit(0);
 #endif
-// NO BIAS AVERAGE FERMI LEVEL
+//this is for no bias to make sure
 //muvec[0]=(muvec[0]+muvec[1])/2.0;muvec[1]=muvec[0];
 // IF ONLY CONDUCTION ELECTRONS
-//singularities.energy_gs=(singularities.energy_vb+singularities.energy_cb)/2.0;
+singularities.energy_gs=(singularities.energy_vb+singularities.energy_cb)/2.0;
     if (!iam) cout << "TIME FOR SINGULARITIES " << get_time(sabtime) << endl;
 // determine elements in nonequilibrium range
     double k_b=K_BOLTZMANN;
@@ -202,7 +203,7 @@ fill(methodvector.begin(),methodvector.end(),transport_methods::WF);
 */
 /*
 energyvector.resize(1);
-energyvector[0]=CPX(-9.12376,0.0);
+energyvector[0]=CPX(-3.947249951056,0.0);
 stepvector.resize(1);
 stepvector[0]=CPX(1.0,0.0);
 methodvector.resize(1);
@@ -241,6 +242,12 @@ myfile.close();
     std::vector<double> currentvector(energyvector.size(),0.0);
     double *eperatom = new double[n_atoms]();
     double *dperatom = new double[n_atoms]();
+    int ndof=Overlap->size_tot/n_cells;
+    TCSR<double> *OverlapCollectSave = new TCSR<double>(OverlapCollect);
+    KohnShamCollect->settozeropbc(transport_params.bandwidth,ndof);
+    OverlapCollect->settozeropbc(transport_params.bandwidth,ndof);
+    TCSR<double> *OverlapCollectPBC = new TCSR<double>(1.0,OverlapCollectSave,-1.0,OverlapCollect);
+    delete OverlapCollectSave;
     int matrix_id, n_mat_comm;
     MPI_Comm_size(eq_rank_matrix_comm,&n_mat_comm);
     MPI_Comm_rank(eq_rank_matrix_comm,&matrix_id);
@@ -249,23 +256,18 @@ myfile.close();
 //    for (int iseq=0;iseq<1;iseq++)
         if ( (jpos=matrix_id+iseq*n_mat_comm)<energyvector.size())
             if (abs(stepvector[jpos])>0.0)
-                if (density(KohnShamCollect,OverlapCollect,Ps,energyvector[jpos],stepvector[jpos],methodvector[jpos],n_mu,muvec,contactvec,currentvector[jpos],propagating_sizes[jpos],atom_of_bf,eperatom,dperatom,transport_params,distribute_pmat,matrix_comm))
+                if (density(KohnShamCollect,OverlapCollect,OverlapCollectPBC,Ps,energyvector[jpos],stepvector[jpos],methodvector[jpos],n_mu,muvec,contactvec,currentvector[jpos],propagating_sizes[jpos],atom_of_bf,eperatom,dperatom,transport_params,distribute_pmat,matrix_comm))
                     return (LOGCERR, EXIT_FAILURE);
     delete KohnShamCollect;
     delete OverlapCollect;
+    delete OverlapCollectPBC;
     delete[] propagating_sizes;
     MPI_Allreduce(eperatom,electronchargeperatom,n_atoms,MPI_DOUBLE,MPI_SUM,MPI_COMM_WORLD);
     MPI_Allreduce(dperatom,derivativechargeperatom,n_atoms,MPI_DOUBLE,MPI_SUM,MPI_COMM_WORLD);
     delete[] eperatom;
     delete[] dperatom;
-    for (int ibw=0;ibw<transport_params.bandwidth;ibw++) {
-        c_dcopy(n_atoms/n_cells,&electronchargeperatom[transport_params.bandwidth*n_atoms/n_cells],1,&electronchargeperatom[ibw*n_atoms/n_cells],1);
-        c_dcopy(n_atoms/n_cells,&electronchargeperatom[(n_cells-transport_params.bandwidth-1)*n_atoms/n_cells],1,&electronchargeperatom[(n_cells-ibw-1)*n_atoms/n_cells],1);
-        c_dcopy(n_atoms/n_cells,&derivativechargeperatom[transport_params.bandwidth*n_atoms/n_cells],1,&derivativechargeperatom[ibw*n_atoms/n_cells],1);
-        c_dcopy(n_atoms/n_cells,&derivativechargeperatom[(n_cells-transport_params.bandwidth-1)*n_atoms/n_cells],1,&derivativechargeperatom[(n_cells-ibw-1)*n_atoms/n_cells],1);
-    }
     if (!iam) {
-        cout << "Number of electrons per unit cell NEW ";
+        cout << "Number of electrons per unit cell";
         double e_total=0.0;
         for (int icell=0;icell<n_cells;icell++) {
             double e_per_unit_cell=0.0;
@@ -276,7 +278,7 @@ myfile.close();
             cout << " " << e_per_unit_cell;
         }
         cout << endl;
-        cout << "Total number of electrons NEW " << e_total << endl;
+        cout << "Total number of electrons " << e_total << endl;
     }
 // trPS per energy point
     ofstream myfile;
@@ -296,23 +298,18 @@ myfile.close();
         MPI_Comm_size(matrix_comm,&matrix_size);
         MPI_Comm_rank(matrix_comm,&matrix_rank);
         Ps->reduce(0,eq_rank_matrix_comm);
-        if (transport_params.method!=3) {
-            for (int i_rank=0;i_rank<matrix_size;i_rank++) {
-                Ps->scatter(Overlap,i_rank,MPI_COMM_WORLD);
-            }
+        for (int i_rank=0;i_rank<matrix_size;i_rank++) {
+            Ps->scatter(Overlap,i_rank,MPI_COMM_WORLD);
         }
     } else {
-        if (transport_params.method!=3) {
-            Ps->reducescatter(Overlap,MPI_COMM_WORLD);
-        }
+        Ps->reducescatter(Overlap,MPI_COMM_WORLD);
     }
     delete Ps;
     MPI_Comm_free(&matrix_comm);
     MPI_Comm_free(&eq_rank_matrix_comm);
 
-    int ndof=Overlap->size_tot/n_cells;
     for (int i_mu=0;i_mu<n_mu;i_mu++) {
-        Overlap->contactdensity(ndof,transport_params.bandwidth,contactvec[i_mu],MPI_COMM_WORLD);
+        Overlap->contactdensity(ndof,transport_params.bandwidth,contactvec[i_mu],transport_params.bandwidth,MPI_COMM_WORLD);
     }
 
     return 0;

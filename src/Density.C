@@ -25,7 +25,7 @@ int ldlt_free__(int *);
 int ldlt_blkselinv__(int *, int*, int*, CPX *, int*);
 }
 
-int density(TCSR<double> *KohnSham,TCSR<double> *Overlap,TCSR<double> *Ps,CPX energy,CPX weight,transport_methods::transport_method method,int n_mu,double *muvec,int *contactvec,double &current,int propnum,int *atom_of_bf,double *erhoperatom,double *drhoperatom,c_transport_type parameter_sab,int distribute_pmat,MPI_Comm matrix_comm)
+int density(TCSR<double> *KohnSham,TCSR<double> *Overlap,TCSR<double> *OverlapPBC,TCSR<double> *Ps,CPX energy,CPX weight,transport_methods::transport_method method,int n_mu,double *muvec,int *contactvec,double &current,int propnum,int *atom_of_bf,double *erhoperatom,double *drhoperatom,c_transport_type parameter_sab,int distribute_pmat,MPI_Comm matrix_comm)
 {
     double d_one=1.0;
     double d_zer=0.0;
@@ -36,6 +36,7 @@ int density(TCSR<double> *KohnSham,TCSR<double> *Overlap,TCSR<double> *Ps,CPX en
     TCSR<CPX> *HamSig;
     CPX* inj = NULL;
     int nprol, npror;
+    CPX *lambda;
     int *dist_sol;
     int *displc_sol;
     int matrix_procs,matrix_rank;
@@ -89,6 +90,9 @@ int density(TCSR<double> *KohnSham,TCSR<double> *Overlap,TCSR<double> *Ps,CPX en
         if (method==transport_methods::WF) {
             nprol=selfenergies[0].n_propagating;
             npror=selfenergies[1].n_propagating;
+            lambda = new CPX[nprol+npror];
+            c_zcopy(nprol,selfenergies[0].lambdaprol,1,lambda,1);
+            c_zcopy(npror,selfenergies[1].lambdapror,1,&lambda[nprol],1);
 if (npror!=propnum) cout << "WARNING: FOUND " << npror << " OF " << propnum << " MODES AT " << real(energy) << endl;
             if (selfenergies[0].spainjldist->n_nonzeros || selfenergies[1].spainjrdist->n_nonzeros) {
                 inj = new CPX[HamSig->size*(nprol+npror)]();
@@ -174,6 +178,7 @@ if (npror!=propnum) cout << "WARNING: FOUND " << npror << " OF " << propnum << "
                     tmprGF::sparse_invert(HamSigG,Bvec);
                     Ps->add_imag(HamSigG,+weight/M_PI);
                 }
+                if (matrix_procs==1) Overlap->atomdensity(HamSigG,+2.0*weight/M_PI,atom_of_bf,erhoperatom);
                 delete HamSigG;
             }
 #ifdef HAVE_PARDISO            
@@ -239,6 +244,8 @@ if (npror!=propnum) cout << "WARNING: FOUND " << npror << " OF " << propnum << "
         delete H1cut;
         sabtime=get_time(d_zer);
         CPX *Sol = NULL;
+        CPX *Soll = NULL;
+        CPX *Solr = NULL;
         int solver_method=0;
         if (solver_method==0) { 
             CPX *Inj = NULL;
@@ -273,6 +280,20 @@ if (npror!=propnum) cout << "WARNING: FOUND " << npror << " OF " << propnum << "
                 }
                 MPI_Bcast(Sol,displc_sol[matrix_procs]*(nprol+npror),MPI_DOUBLE_COMPLEX,0,matrix_comm);
             }
+// Create Sol+ and Sol-
+            int solsize=displc_sol[matrix_procs];
+            Soll = new CPX[solsize*(nprol+npror)]();
+            Solr = new CPX[solsize*(nprol+npror)]();
+            for (int ibw=bandwidth+1;ibw<ncells;ibw++) {
+//            for (int ibw=0;ibw<ncells;ibw++) {
+                c_zlacpy('A',ndof,nprol+npror,Sol,solsize,&Soll[ndof*ibw],solsize);
+                c_zlacpy('A',ndof,nprol+npror,&Sol[solsize-ndof],solsize,&Solr[solsize-ndof*(ibw+1)],solsize);
+                for (int ipro=0;ipro<nprol+npror;ipro++) {
+                    c_zscal(solsize,pow(lambda[ipro],-1),&Soll[ipro*solsize],1);
+                    c_zscal(solsize,pow(lambda[ipro],+1),&Solr[ipro*solsize],1);
+                }
+            }
+            delete[] lambda;
         } else if (solver_method==1) {
             if (matrix_procs != 2) {
                 printf("WARNING: SpikeSolver needs to be tested with more than two partitions\n");
@@ -317,9 +338,17 @@ if (npror!=propnum) cout << "WARNING: FOUND " << npror << " OF " << propnum << "
             Ps->psipsidagger(&Sol[Ps->size_tot*nprol],npror,+weight*fermir);
             current=Overlap->psipsidaggerdosdebug(Sol,nprol+npror);
             Overlap->psipsidagger(Sol,nprol,+2.0*weight*fermil,atom_of_bf,erhoperatom);
+            OverlapPBC->psipsidagger(Sol,Soll,nprol,+2.0*weight*fermil,atom_of_bf,erhoperatom);
+            OverlapPBC->psipsidagger(Sol,Solr,nprol,+2.0*weight*fermil,atom_of_bf,erhoperatom);
             Overlap->psipsidagger(&Sol[Ps->size_tot*nprol],npror,+2.0*weight*fermir,atom_of_bf,erhoperatom);
+            OverlapPBC->psipsidagger(&Sol[Ps->size_tot*nprol],&Soll[Ps->size_tot*nprol],npror,+2.0*weight*fermir,atom_of_bf,erhoperatom);
+            OverlapPBC->psipsidagger(&Sol[Ps->size_tot*nprol],&Solr[Ps->size_tot*nprol],npror,+2.0*weight*fermir,atom_of_bf,erhoperatom);
             Overlap->psipsidagger(Sol,nprol,-2.0*weight*dfermil,atom_of_bf,drhoperatom);
+            OverlapPBC->psipsidagger(Sol,Soll,nprol,-2.0*weight*dfermil,atom_of_bf,drhoperatom);
+            OverlapPBC->psipsidagger(Sol,Solr,nprol,-2.0*weight*dfermil,atom_of_bf,drhoperatom);
             Overlap->psipsidagger(&Sol[Ps->size_tot*nprol],npror,-2.0*weight*dfermir,atom_of_bf,drhoperatom);
+            OverlapPBC->psipsidagger(&Sol[Ps->size_tot*nprol],&Soll[Ps->size_tot*nprol],npror,-2.0*weight*dfermir,atom_of_bf,drhoperatom);
+            OverlapPBC->psipsidagger(&Sol[Ps->size_tot*nprol],&Solr[Ps->size_tot*nprol],npror,-2.0*weight*dfermir,atom_of_bf,drhoperatom);
         } else {
             if (!matrix_rank) {
                 Ps->psipsidagger(Sol,nprol,+weight*fermil);

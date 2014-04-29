@@ -369,8 +369,8 @@ int Singularities::determine_velocities(CPX *H,CPX *S,double k_in,double *energi
         for (int ii=0;ii<ndof;ii++) {
             for (int jj=0;jj<ndof;jj++) {
                 double delta_e=energies_k[jj]-energies_k[ii];
-//                if (abs(delta_e)>5.0E-2) {
-                if (abs(-conj(H_Sum_dk[jj+ndof*ii])/delta_e+H_Sum_dk[ii+ndof*jj]/delta_e+ovlmat[ii+ndof*jj])<1.0E-12) {
+                double delta_o=abs(-conj(H_Sum_dk[jj+ndof*ii])/delta_e+H_Sum_dk[ii+ndof*jj]/delta_e+ovlmat[ii+ndof*jj]);
+                if (delta_o<1.0E-12 && abs(delta_e)>1.0E-6) {
                     curvatures_k[jj]+=2.0*norm(H_Sum_dk[ii+ndof*jj])/delta_e;
                 }
             }
