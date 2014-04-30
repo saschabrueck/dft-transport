@@ -110,8 +110,9 @@ public:
     void scatter(TCSR<T>*,int,MPI_Comm);
     void reduce(int,MPI_Comm);
     void reducescatter(TCSR<T>*,MPI_Comm);
-    double psipsidaggerdosdebug(CPX*,int);
+    double psipsidagger(CPX*,int);
     void psipsidagger(CPX*,int,CPX);
+    void psipsidagger(CPX*,CPX*,CPX*,int,int,int,CPX);
     void psipsidagger(CPX*,int,CPX,int*,double*);
     void psipsidagger(CPX*,CPX*,int,CPX,int*,double*);
     void atomdensity(TCSR<CPX>*,CPX,int*,double*);
@@ -1985,7 +1986,7 @@ void TCSR<T>::reducescatter(TCSR<T>*matdist,MPI_Comm my_comm)
 /************************************************************************************************/
 
 template <>
-inline double TCSR<double>::psipsidaggerdosdebug(CPX* psi,int nkval)
+inline double TCSR<double>::psipsidagger(CPX* psi,int nkval)
 {
     int i,e;
     double result=0;
@@ -2006,6 +2007,25 @@ inline void TCSR<double>::psipsidagger(CPX* psi,int nkval,CPX factor)
     for(i=0;i<size;i++){
         for(e=edge_i[i]-findx;e<edge_i[i+1]-findx;e++){
             nnz[e]+=real(factor*c_zdotc(nkval,&psi[index_j[e]-findx],size_tot,&psi[first_row+i],size_tot));
+        }
+    }
+}
+
+/************************************************************************************************/
+
+template <>
+inline void TCSR<double>::psipsidagger(CPX* psi,CPX* psil,CPX* psir,int nkval,int ndof,int bw,CPX factor)
+{
+    int i,e;
+    for(i=0;i<size;i++) {
+        for(e=edge_i[i]-findx;e<edge_i[i+1]-findx;e++) {
+            if ( (index_j[e]-findx)/ndof - (i+first_row)/ndof > bw ) {
+                nnz[e]+=real(factor*c_zdotc(nkval,&psil[index_j[e]-findx],size_tot,&psi[first_row+i],size_tot));
+            } else if ( (index_j[e]-findx)/ndof - (i+first_row)/ndof < -bw ) {
+                nnz[e]+=real(factor*c_zdotc(nkval,&psir[index_j[e]-findx],size_tot,&psi[first_row+i],size_tot));
+            } else {
+                nnz[e]+=real(factor*c_zdotc(nkval,&psi[index_j[e]-findx],size_tot,&psi[first_row+i],size_tot));
+            }
         }
     }
 }

@@ -1,6 +1,7 @@
 #include "CSR.H"
 #include "FEMGrid.H"
 #include "Poisson.H"
+#include "GetSingularities.H"
 #include <vector>
 #include <limits>
 
@@ -9,6 +10,7 @@ extern WireGenerator* Wire;
 extern Poisson *OMEN_Poisson_Solver;
 extern FEMGrid *FEM;
 extern PARAM *parameter;
+extern VOLTAGE *voltage;
 
 int energyvector(TCSR<double>*,TCSR<double>*,int,double*,int*,double*,double*,double*,int,int*,c_transport_type);
         
@@ -24,10 +26,6 @@ int semiselfconsistent(TCSR<double> *Overlap,TCSR<double> *KohnSham,c_transport_
 
 if (!iam) cout << "N_ATOMS " << NAtom_work << endl;
 
-    double Vs=0.0;
-    double Vg=0.0589384;
-    double Vd=0.0;
-    double Temp=transport_params.extra_param3;
     double *Vbf = new double[Overlap->size_tot];
     double *rho_atom = new double[2*NAtom_work]();
     double *drho_atom_dV = new double[2*NAtom_work]();
@@ -43,26 +41,15 @@ if (!iam) cout << "N_ATOMS " << NAtom_work << endl;
     contactvec[1]=2;
     double *dopingvec = new double[n_mu]();
 
+    c_dscal(KohnSham->n_nonzeros,transport_params.evoltfactor,KohnSham->nnz,1);
+
     if (!do_semiself) {
-        int addpotential=0;
-        if (addpotential) {
-            dopingvec[0]=0.14;
-            dopingvec[1]=0.14;
-            int na=6;
-            int nb=na+8;
-            for (int ivvec=0;                                               ivvec<na*(Overlap->size_tot/transport_params.n_cells); ivvec++) Vbf[ivvec] = Vs;
-            for (int ivvec=na*(Overlap->size_tot/transport_params.n_cells); ivvec<nb*(Overlap->size_tot/transport_params.n_cells); ivvec++) Vbf[ivvec] = Vg;
-            for (int ivvec=nb*(Overlap->size_tot/transport_params.n_cells); ivvec<Overlap->size_tot; ivvec++)                               Vbf[ivvec] = Vd;
-            TCSR<double> *Pot = new TCSR<double>(Overlap,Vbf);
-            TCSR<double> *KohnShamPot = new TCSR<double>(1.0,KohnSham,1.0/transport_params.evoltfactor,Pot);
-            if (energyvector(Overlap,KohnShamPot,n_mu,muvec,contactvec,dopingvec,rho_atom,drho_atom_dV,NAtom_work,atom_of_bf,transport_params)) return (LOGCERR, EXIT_FAILURE);
-        } else {
-            if (energyvector(Overlap,KohnSham,n_mu,muvec,contactvec,dopingvec,rho_atom,drho_atom_dV,NAtom_work,atom_of_bf,transport_params)) return (LOGCERR, EXIT_FAILURE);
-        }
+        if (energyvector(Overlap,KohnSham,n_mu,muvec,contactvec,dopingvec,rho_atom,drho_atom_dV,NAtom_work,atom_of_bf,transport_params)) return (LOGCERR, EXIT_FAILURE);
         return 0;
     }
 
 //    double *rho_grid = new double[FEM->NGrid];
+    double Temp=transport_params.extra_param3;
     double *Vnew = new double[FEM->NGrid]();
     double *Vold = new double[FEM->NGrid];
     double *doping_atom = new double[FEM->NAtom];
@@ -77,6 +64,17 @@ if (!iam) cout << "N_ATOMS " << NAtom_work << endl;
     dopingvec[1]=doping_cell[transport_params.n_cells-1];
 
 if (!iam) cout << "DOPING " << dopingvec[0] << " " << dopingvec[1] << endl;
+
+    double Vs=voltage->Vsmin;
+    double Vd=voltage->Vdmin;
+    double Vg=-voltage->Vgmin[0];
+    {
+        Singularities singularities(transport_params);
+        if ( singularities.Execute(KohnSham,Overlap,n_mu,muvec,dopingvec,contactvec) ) return (LOGCERR, EXIT_FAILURE);
+        Vg+=std::accumulate(muvec,muvec+n_mu,0.0)/n_mu-singularities.energy_cb;
+    }
+
+if (!iam) cout << "GATE POTENTIAL " << Vg << endl;
 
     std::vector<double> nuclearchargeperatom(FEM->NAtom,-4.0);
 
@@ -112,11 +110,11 @@ if (!iam) cout << "DOPING " << dopingvec[0] << " " << dopingvec[1] << endl;
     double *Overlap_nnz = new double[Overlap->n_nonzeros];
     c_dcopy(Overlap->n_nonzeros,Overlap->nnz,1,Overlap_nnz,1);
 
-    double residual=INF;
-    double density_old=INF;
+    double residual=(numeric_limits<double>::max)();
+    double density_old=(numeric_limits<double>::max)();
     double density_new;
-    double density_criterion=1.0E-6;
-    int max_iter=50;
+    double density_criterion=parameter->poisson_criterion;
+    int max_iter=parameter->poisson_iteration;
     for (int i_iter=1;i_iter<=max_iter;i_iter++) {
 
         c_dcopy(Overlap->n_nonzeros,Overlap_nnz,1,Overlap->nnz,1);
@@ -127,7 +125,7 @@ if (!iam) cout << "DOPING " << dopingvec[0] << " " << dopingvec[1] << endl;
         for (int i_mu=0;i_mu<n_mu;i_mu++) {
             Pot->contactdensity(Pot->size_tot/transport_params.n_cells,transport_params.bandwidth,contactvec[i_mu],0,MPI_COMM_WORLD);
         }
-        TCSR<double> *KohnShamPot = new TCSR<double>(1.0,KohnSham,1.0/transport_params.evoltfactor,Pot);
+        TCSR<double> *KohnShamPot = new TCSR<double>(1.0,KohnSham,1.0,Pot);
         delete Pot;
 
         if (energyvector(Overlap,KohnShamPot,n_mu,muvec,contactvec,dopingvec,rho_atom,drho_atom_dV,FEM->NAtom,atom_of_bf,transport_params)) return (LOGCERR, EXIT_FAILURE);

@@ -6,6 +6,8 @@
 #define __SINGULARITIES
 
 #include "CSR.H"
+#undef min
+#undef max
 #include <vector>
 #include <valarray>
 #include "Utilities.H"

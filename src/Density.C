@@ -334,9 +334,9 @@ if (npror!=propnum) cout << "WARNING: FOUND " << npror << " OF " << propnum << "
         double dfermir=fermi(real(energy),muvec[1],Temp,2);
         sabtime=get_time(d_zer);
         if (distribute_pmat || matrix_procs==1) {
-            Ps->psipsidagger(Sol,nprol,+weight*fermil);
-            Ps->psipsidagger(&Sol[Ps->size_tot*nprol],npror,+weight*fermir);
-            current=Overlap->psipsidaggerdosdebug(Sol,nprol+npror);
+            Ps->psipsidagger(Sol,Soll,Solr,nprol,ndof,bandwidth,+weight*fermil);
+            Ps->psipsidagger(&Sol[Ps->size_tot*nprol],&Soll[Ps->size_tot*nprol],&Solr[Ps->size_tot*nprol],npror,ndof,bandwidth,+weight*fermir);
+            current=Overlap->psipsidagger(Sol,nprol+npror);
             Overlap->psipsidagger(Sol,nprol,+2.0*weight*fermil,atom_of_bf,erhoperatom);
             OverlapPBC->psipsidagger(Sol,Soll,nprol,+2.0*weight*fermil,atom_of_bf,erhoperatom);
             OverlapPBC->psipsidagger(Sol,Solr,nprol,+2.0*weight*fermil,atom_of_bf,erhoperatom);
@@ -351,9 +351,9 @@ if (npror!=propnum) cout << "WARNING: FOUND " << npror << " OF " << propnum << "
             OverlapPBC->psipsidagger(&Sol[Ps->size_tot*nprol],&Solr[Ps->size_tot*nprol],npror,-2.0*weight*dfermir,atom_of_bf,drhoperatom);
         } else {
             if (!matrix_rank) {
-                Ps->psipsidagger(Sol,nprol,+weight*fermil);
-                Ps->psipsidagger(&Sol[Ps->size_tot*nprol],npror,+weight*fermir);
-                current=Overlap->psipsidaggerdosdebug(Sol,nprol+npror);
+                Ps->psipsidagger(Sol,Soll,Solr,nprol,ndof,bandwidth,+weight*fermil);
+                Ps->psipsidagger(&Sol[Ps->size_tot*nprol],&Soll[Ps->size_tot*nprol],&Solr[Ps->size_tot*nprol],npror,ndof,bandwidth,+weight*fermir);
+                current=Overlap->psipsidagger(Sol,nprol+npror);
             }
         }
         cout << "TIME FOR CONSTRUCTION OF S-PATTERN DENSITY MATRIX " << get_time(sabtime) << endl;

@@ -38,9 +38,9 @@ int Singularities::Execute(TCSR<double> *KohnSham,TCSR<double> *Overlap,int n_mu
         energies_matrix = new double[ndof*nprocs*seq_per_cpu];
         derivatives_matrix = new double[ndof*nprocs*seq_per_cpu];
         curvatures_matrix = new double[ndof*nprocs*seq_per_cpu];
-        energy_gs= numeric_limits<double>::max();
-        energy_vb=-numeric_limits<double>::max();
-        energy_cb= numeric_limits<double>::max();
+        energy_gs= (numeric_limits<double>::max)();
+        energy_vb=-(numeric_limits<double>::max)();
+        energy_cb= (numeric_limits<double>::max)();
     }
     double *energies_local = new double[ndof*seq_per_cpu]();
     double *derivatives_local = new double[ndof*seq_per_cpu]();

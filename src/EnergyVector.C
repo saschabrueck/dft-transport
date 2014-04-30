@@ -48,7 +48,6 @@ int energyvector(TCSR<double> *Overlap,TCSR<double> *KohnSham,int n_mu,double* m
     MPI_Barrier(MPI_COMM_WORLD);
     exit(0);
 #endif
-    c_dscal(KohnSham->n_nonzeros,transport_params.evoltfactor,KohnSham->nnz,1);
 // allocate matrices to gather on every node
     sabtime=get_time(0.0);
     TCSR<double> *KohnShamCollect;
@@ -307,10 +306,6 @@ myfile.close();
     delete Ps;
     MPI_Comm_free(&matrix_comm);
     MPI_Comm_free(&eq_rank_matrix_comm);
-
-    for (int i_mu=0;i_mu<n_mu;i_mu++) {
-        Overlap->contactdensity(ndof,transport_params.bandwidth,contactvec[i_mu],transport_params.bandwidth,MPI_COMM_WORLD);
-    }
 
     return 0;
 }
