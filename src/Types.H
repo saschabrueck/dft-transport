@@ -48,14 +48,6 @@ using namespace std;
 #define max_diff_gate 4
 #endif
 
-/*
-#ifndef __MINMAX
-#define __MINMAX
-#define min(a,b) (((a)<(b))?(a):(b))
-#define max(a,b) (((a)>(b))?(a):(b))
-#endif
-*/
-
 #ifdef Add_
 #define fortran_name(x,y) (x ## _)
 #endif
