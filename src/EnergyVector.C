@@ -143,7 +143,7 @@ exit(0);
 //this is for no bias to make sure
 //muvec[0]=(muvec[0]+muvec[1])/2.0;muvec[1]=muvec[0];
 // IF ONLY CONDUCTION ELECTRONS
-singularities.energy_gs=(singularities.energy_vb+singularities.energy_cb)/2.0;
+singularities.energy_gs=singularities.energy_cb;
     if (!iam) cout << "TIME FOR SINGULARITIES " << get_time(sabtime) << endl;
 // determine elements in nonequilibrium range
     double k_b=K_BOLTZMANN;
