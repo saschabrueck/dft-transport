@@ -48,7 +48,6 @@ if (!iam) cout << "N_ATOMS " << NAtom_work << endl;
         return 0;
     }
 
-//    double *rho_grid = new double[FEM->NGrid];
     double Temp=transport_params.extra_param3;
     double *Vnew = new double[FEM->NGrid]();
     double *Vold = new double[FEM->NGrid];
@@ -139,18 +138,22 @@ sinstream << "SingularityList" << i_iter;
 rename("SingularityList",sinstream.str().c_str());
 
 /*
-//allocate density at gridpoints? first at atoms not to make it too complicated
+        double *rho_grid_tmp = new double[FEM->NGrid]();
         double* xyz_atoms = new double[3*FEM->NAtom];
+        double* xyz_grid = new double[3*FEM->NGrid];
         if (!iam) {
             c_dlacpy('A',3,FEM->NAtom,Wire->Layer_Matrix,7,xyz_atoms,3);
+            c_dcopy(3*FEM->NGrid,FEM->grid,1,xyz_grid,1);
         }
         MPI_Bcast(xyz_atoms,3*FEM->NAtom,MPI_DOUBLE,0,MPI_COMM_WORLD);
+        MPI_Bcast(xyz_grid,3*FEM->NGrid,MPI_DOUBLE,0,MPI_COMM_WORLD);
+        double sabtime=get_time(0.0);
         for (int ix=0;ix<FEM->NGrid;ix++) {
-            double x=FEM->grid[3*ix];
-            double y=FEM->grid[3*ix+1];
-            double z=FEM->grid[3*ix+2];
-            Overlap->collect_density(x,y,z,rho_grid[ix],xyz_atoms,atom_of_bf);
+            Overlap->collect_density(rho_grid_tmp[ix],&xyz_grid[3*ix],xyz_atoms,atom_of_bf);
         }
+        cout << "TIME FOR COLLECT DENSITY ON " << iam << " WITH " << Overlap->size << " ROWS IS " << get_time(sabtime) << endl;
+        double *rho_grid = new double[FEM->NGrid];
+        MPI_Allreduce(rho_grid_tmp,rho_grid,FEM->NGrid,MPI_DOUBLE,MPI_SUM,MPI_COMM_WORLD);
 
 if(!iam){
 stringstream mysstream;
@@ -172,7 +175,10 @@ rhofile.close();
 }
 
         density_new=std::accumulate(rho_atom,rho_atom+FEM->NAtom,0.0);
-        if (abs(density_new-density_old)<density_criterion && residual<parameter->poisson_inner_criterion) return 0;
+        if (abs(density_new-density_old)<density_criterion && residual<parameter->poisson_inner_criterion) {
+            if (!iam) cout << "DENSITY CONVERGED" << endl;
+            return 0;
+        }
         density_old=density_new;
 
         MPI_Comm newcomm;

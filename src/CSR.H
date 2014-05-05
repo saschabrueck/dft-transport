@@ -116,7 +116,7 @@ public:
     void psipsidagger(CPX*,int,CPX,int*,double*);
     void psipsidagger(CPX*,CPX*,int,CPX,int*,double*);
     void atomdensity(TCSR<CPX>*,CPX,int*,double*);
-    void collect_density(double,double,double,double&,double*,int*);
+    void collect_density(double&,double*,double*,int*);
     void moveawaypbc(T*,T*,int,int);
     void settozeropbc(int,int);
     void removepbc(int,int);
@@ -2084,33 +2084,30 @@ inline void TCSR<double>::atomdensity(TCSR<CPX>* A,CPX factor,int* atom_of_bf,do
 /************************************************************************************************/
 
 template <class T>
-void TCSR<T>::collect_density(double x_grid,double y_grid,double z_grid,double& rho_grid,double* xyz_atom,int* atom_of_bf)
+void TCSR<T>::collect_density(double& rho_grid,double* xyz_grid,double* xyz_atom,int* atom_of_bf)
 {
     double basis_exp_C[]={3.35827350,0.76975780,0.20003810};
-    int fac[]={1, 1, 2, 6, 24, 120, 720, 5040};
-    double cp2knorm[]={1.768061,6.480152,6.480152,6.480152,0.585701,1.027739,1.027739,1.027739,0.213179,0.190691,0.190691,0.190691};
+//    int fac[]={1, 1, 2, 6, 24, 120, 720, 5040};
     double br=1.0/18.8971616;
 
-    rho_grid=0.0;
-    for (int i=0;i<size;i++) {
-        for (int e=edge_i[i]-findx;e<edge_i[i+1]-findx;e++) {
+    for (int i=first_row;i<first_row+size;i++) {
+        double xi=br*(xyz_grid[0]-xyz_atom[atom_of_bf[i]+0]);
+        double yi=br*(xyz_grid[1]-xyz_atom[atom_of_bf[i]+1]);
+        double zi=br*(xyz_grid[2]-xyz_atom[atom_of_bf[i]+2]);
+        int bf_wrt_at_i=i%12;
+        double exp_i=basis_exp_C[bf_wrt_at_i/4];
+        int l_of_bf_i=bf_wrt_at_i%4;
+        int lxi=0;
+        int lyi=0;
+        int lzi=0;
+        if (l_of_bf_i==1) lyi=1;
+        if (l_of_bf_i==2) lzi=1;
+        if (l_of_bf_i==3) lxi=1;
+//        double norm_i=1.0/sqrt( (fac[2*lxi]*fac[2*lyi]*fac[2*lzi]*pow(M_PI,1.5)) / (pow(2,2*(lxi+lyi+lzi))*fac[lxi]*fac[lyi]*fac[lzi]*pow(exp_i,lxi+lyi+lzi+1.5)) );
+        double norm_i=pow(2,lxi+lyi+lzi)*pow(2.0/M_PI,0.75)*pow(exp_i,(lxi+lyi+lzi+3.0/2.0)/2.0);
+        double gto_i=norm_i*pow(xi,lxi)*pow(yi,lyi)*pow(zi,lzi)*exp(-exp_i*(xi*xi+yi*yi+zi*zi));
+        if (gto_i>1.0E-3) for (int e=edge_i[i-first_row]-findx;e<edge_i[i-first_row+1]-findx;e++) {
             int j=index_j[e]-findx;
-
-            int bf_wrt_at_i=i%12;
-            double exp_i=basis_exp_C[bf_wrt_at_i/4];
-            int l_of_bf_i=bf_wrt_at_i%4;
-            int lxi=0;
-            int lyi=0;
-            int lzi=0;
-            if (l_of_bf_i==1) lxi=1;
-            if (l_of_bf_i==2) lyi=1;
-            if (l_of_bf_i==3) lzi=1;
-            double xi=br*(x_grid-xyz_atom[atom_of_bf[i]]);
-            double yi=br*(y_grid-xyz_atom[atom_of_bf[i]+1]);
-            double zi=br*(z_grid-xyz_atom[atom_of_bf[i]+2]);
-//            double norm_i=1.0/sqrt( (fac[2*lxi]*fac[2*lyi]*fac[2*lzi]*pow(M_PI,1.5)) / (pow(2,2*(lxi+lyi+lzi))*fac[lxi]*fac[lyi]*fac[lzi]*pow(exp_i,lxi+lyi+lzi+1.5)) );
-            double norm_i=cp2knorm[bf_wrt_at_i];
-            double gto_i=norm_i*pow(xi,lxi)*pow(yi,lyi)*pow(zi,lzi)*exp(-exp_i*(xi*xi+yi*yi+zi*zi));
 
             int bf_wrt_at_j=j%12;
             double exp_j=basis_exp_C[bf_wrt_at_j/4];
@@ -2118,14 +2115,14 @@ void TCSR<T>::collect_density(double x_grid,double y_grid,double z_grid,double& 
             int lxj=0;
             int lyj=0;
             int lzj=0;
-            if (l_of_bf_j==1) lxj=1;
-            if (l_of_bf_j==2) lyi=1;
-            if (l_of_bf_j==3) lzj=1;
-            double xj=br*(x_grid-xyz_atom[atom_of_bf[j]]);
-            double yj=br*(y_grid-xyz_atom[atom_of_bf[j]+1]);
-            double zj=br*(z_grid-xyz_atom[atom_of_bf[j]+2]);
+            if (l_of_bf_j==1) lyj=1;
+            if (l_of_bf_j==2) lzi=1;
+            if (l_of_bf_j==3) lxj=1;
+            double xj=br*(xyz_grid[0]-xyz_atom[atom_of_bf[j]+0]);
+            double yj=br*(xyz_grid[1]-xyz_atom[atom_of_bf[j]+1]);
+            double zj=br*(xyz_grid[2]-xyz_atom[atom_of_bf[j]+2]);
 //            double norm_j=1.0/sqrt( (fac[2*lxj]*fac[2*lyj]*fac[2*lzj]*pow(M_PI,1.5)) / (pow(2,2*(lxj+lyj+lzj))*fac[lxj]*fac[lyj]*fac[lzj]*pow(exp_j,lxj+lyj+lzj+1.5)) );
-            double norm_j=cp2knorm[bf_wrt_at_j];
+            double norm_j=pow(2,lxj+lyj+lzj)*pow(2.0/M_PI,0.75)*pow(exp_j,(lxj+lyj+lzj+3.0/2.0)/2.0);
             double gto_j=norm_j*pow(xj,lxj)*pow(yj,lyj)*pow(zj,lzj)*exp(-exp_j*(xj*xj+yj*yj+zj*zj));
 
             rho_grid+=nnz[e]*gto_i*gto_j;
