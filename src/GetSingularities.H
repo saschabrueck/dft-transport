@@ -11,6 +11,7 @@
 #include <vector>
 #include <valarray>
 #include "Utilities.H"
+#include <limits>
 
 class Singularities {
 public:
