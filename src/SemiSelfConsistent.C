@@ -1,9 +1,7 @@
-#include "CSR.H"
 #include "FEMGrid.H"
 #include "Poisson.H"
 #include "GetSingularities.H"
-#include <vector>
-#include <limits>
+#include <numeric>
 
 extern WireStructure *nanowire;
 extern WireGenerator* Wire;
@@ -17,7 +15,7 @@ int energyvector(TCSR<double>*,TCSR<double>*,int,double*,int*,double*,double*,do
 int semiselfconsistent(TCSR<double> *Overlap,TCSR<double> *KohnSham,c_transport_type transport_params)
 {
     int iam;MPI_Comm_rank(MPI_COMM_WORLD,&iam);
-    int procs;MPI_Comm_rank(MPI_COMM_WORLD,&procs);
+    int procs;MPI_Comm_size(MPI_COMM_WORLD,&procs);
 
     int do_semiself=0;
     if (transport_params.method==3) do_semiself=1;
@@ -137,21 +135,20 @@ stringstream sinstream;
 sinstream << "SingularityList" << i_iter;
 rename("SingularityList",sinstream.str().c_str());
 
-/*
+///*
+        TCSR<double> *DensityCollect = new TCSR<double>(Overlap,MPI_COMM_WORLD);
         double *rho_grid_tmp = new double[FEM->NGrid]();
         double* xyz_atoms = new double[3*FEM->NAtom];
         double* xyz_grid = new double[3*FEM->NGrid];
-        if (!iam) {
-            c_dlacpy('A',3,FEM->NAtom,Wire->Layer_Matrix,7,xyz_atoms,3);
-            c_dcopy(3*FEM->NGrid,FEM->grid,1,xyz_grid,1);
-        }
-        MPI_Bcast(xyz_atoms,3*FEM->NAtom,MPI_DOUBLE,0,MPI_COMM_WORLD);
-        MPI_Bcast(xyz_grid,3*FEM->NGrid,MPI_DOUBLE,0,MPI_COMM_WORLD);
+        c_dlacpy('A',3,FEM->NAtom,Wire->Layer_Matrix,7,xyz_atoms,3);
+        c_dcopy(3*FEM->NGrid,FEM->grid,1,xyz_grid,1);
+        int ngridproc=FEM->NGrid/procs+1;
         double sabtime=get_time(0.0);
-        for (int ix=0;ix<FEM->NGrid;ix++) {
-            Overlap->collect_density(rho_grid_tmp[ix],&xyz_grid[3*ix],xyz_atoms,atom_of_bf);
+        for (int ix=iam*ngridproc;ix<min((iam+1)*ngridproc,FEM->NGrid);ix++) {
+            rho_grid_tmp[ix]=DensityCollect->collect_density(&xyz_grid[3*ix],xyz_atoms,atom_of_bf);
         }
-        cout << "TIME FOR COLLECT DENSITY ON " << iam << " WITH " << Overlap->size << " ROWS IS " << get_time(sabtime) << endl;
+        cout << "TIME FOR COLLECT DENSITY ON " << iam << " IS " << get_time(sabtime) << endl;
+        delete DensityCollect;
         double *rho_grid = new double[FEM->NGrid];
         MPI_Allreduce(rho_grid_tmp,rho_grid,FEM->NGrid,MPI_DOUBLE,MPI_SUM,MPI_COMM_WORLD);
 
@@ -162,7 +159,7 @@ ofstream rgfile(mysstream.str().c_str());
 for (int ig=0;ig<FEM->NGrid;ig++) rgfile<<rho_grid[ig]<<endl;
 rgfile.close();
 }
-*/
+//*/
 
 //        c_daxpy(FEM->NAtom,1.0,&nuclearchargeperatom[0],1,rho_atom,1);
 
