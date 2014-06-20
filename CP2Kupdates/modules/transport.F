@@ -1,15 +1,15 @@
 !-----------------------------------------------------------------------------!
 !   CP2K: A general program to perform molecular dynamics simulations         !
-!   Copyright (C) 2000 - 2013  CP2K developers group                          !
+!   Copyright (C) 2000 - 2014  CP2K developers group                          !
 !-----------------------------------------------------------------------------!
 
 ! *****************************************************************************
-!> \brief  
+!> \brief routines for the transport environment and its C-interoperable version  
 !> \par History
-!>       2013.07 created [Hossein Bani-Hashemian]
+!>       07.2013 created [Hossein Bani-Hashemian]
 !> \author Hossein Bani-Hashemian
 ! *****************************************************************************
-MODULE transport_init
+MODULE transport
 
   USE input_constants,                 ONLY: do_transport,&
                                              exper_code,&
@@ -27,13 +27,13 @@ MODULE transport_init
                                              timestop
   USE transport_types,                 ONLY: c_transport_type,&
                                              transport_type
-#include "cp_common_uses.h"
+#include "./common/cp_common_uses.f90"
 
   IMPLICIT NONE
 
   PRIVATE
 
-  CHARACTER(len=*), PARAMETER, PRIVATE :: moduleN = 'transport_init'
+  CHARACTER(len=*), PARAMETER, PRIVATE :: moduleN = 'transport'
 
   PUBLIC :: transport_env_create, c_transport_type_init
 
@@ -55,20 +55,13 @@ CONTAINS
 
     CALL timeset(routineN,handle)
 
-    ! get basic quantities from the qs_env
     CALL get_qs_env(qs_env, transport_env=transport_env, input=input, error=error)
 
     CPPostcondition(.NOT.ASSOCIATED(transport_env),cp_failure_level,routineP,error,failure)
 
     ALLOCATE(transport_env,STAT=stat)
     CPPostcondition(stat==0,cp_failure_level,routineP,error,failure)
-
-    ! copy some basic stuff
-
-    ! parse the transport section and set derived quantities
     CALL transport_init_read_input(input,transport_env,error)
-
-    ! put the ls_scf_env in qs_env
     CALL set_qs_env(qs_env,transport_env=transport_env,error=error)
 
     CALL timestop(handle)
@@ -93,8 +86,8 @@ CONTAINS
     failure=.FALSE.
 
     transport_section => section_vals_get_subs_vals(input,"DFT%TRANSPORT",error=error)
-
-    ! should come from input
+    
+    ! from input
     CALL section_vals_val_get(transport_section,"DENSITY_MATRIX_CONSTRUCTION_METHOD",i_val=transport_env%method,error=error)
     CALL section_vals_val_get(transport_section,"BANDWIDTH",i_val=transport_env%bandwidth,error=error)
     CALL section_vals_val_get(transport_section,"N_CELLS",i_val=transport_env%n_cells,error=error)
@@ -161,6 +154,6 @@ CONTAINS
  
   END SUBROUTINE c_transport_type_init
 
-END MODULE transport_init
+END MODULE transport
 
 

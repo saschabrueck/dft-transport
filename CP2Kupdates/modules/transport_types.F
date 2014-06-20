@@ -1,12 +1,12 @@
 !-----------------------------------------------------------------------------!
 !   CP2K: A general program to perform molecular dynamics simulations         !
-!   Copyright (C) 2000 - 2013  CP2K developers group                          !
+!   Copyright (C) 2000 - 2014  CP2K developers group                          !
 !-----------------------------------------------------------------------------!
 
 ! *****************************************************************************
-!> \brief Types needed for transport calculations 
+!> \brief CP2K transport environment and its C-interoperable version
 !> \par History
-!>       2013.07 created [Hossein Bani-Hashemian]
+!>       07.2013 created [Hossein Bani-Hashemian]
 !> \author Hossein Bani-Hashemian
 ! *****************************************************************************
 MODULE transport_types
@@ -16,7 +16,7 @@ MODULE transport_types
   USE kinds,                           ONLY: dp
   USE timings,                         ONLY: timeset,&
                                              timestop
-#include "cp_common_uses.h"
+#include "./common/cp_common_uses.f90"
 
   IMPLICIT NONE
 

@@ -1,15 +1,23 @@
 !-----------------------------------------------------------------------------!
 !   CP2K: A general program to perform molecular dynamics simulations         !
-!   Copyright (C) 2000 - 2013  CP2K developers group                          !
+!   Copyright (C) 2000 - 2014  CP2K developers group                          !
 !-----------------------------------------------------------------------------!
 
 ! *****************************************************************************
-!> \brief input for the transport
+!> \brief input section for transport calculations
+!>
+!> \par History
+!>       07.2013 created [Hossein Bani-Hashemian]
 !> \author Hossein Bani-Hashemian
 ! *****************************************************************************
 MODULE input_cp2k_transport
 
   USE f77_blas
+  USE input_constants,                 ONLY: do_transport,&
+                                             exper_code,&
+                                             kpoint_integration,&
+                                             misc_method,&
+                                             scalapack_diagonalization
   USE input_keyword_types,             ONLY: keyword_create,&
                                              keyword_release,&
                                              keyword_type
@@ -17,13 +25,8 @@ MODULE input_cp2k_transport
                                              section_create,&
                                              section_type
   USE kinds,                           ONLY: dp
-  USE input_constants,                 ONLY: misc_method,&
-                                             scalapack_diagonalization,&
-                                             kpoint_integration,&
-                                             exper_code,&
-                                             do_transport
   USE string_utilities,                ONLY: s2a
-#include "cp_common_uses.h"
+#include "./common/cp_common_uses.f90"
 
   IMPLICIT NONE
   PRIVATE
@@ -33,10 +36,7 @@ MODULE input_cp2k_transport
   PUBLIC :: create_transport_section
 
 CONTAINS
-! *****************************************************************************
-!> \brief creates the transport section
-!> \author Hossein Bani-Hashemian [2013-07]
-! *****************************************************************************
+
   SUBROUTINE create_transport_section(section,error)
     TYPE(section_type), POINTER              :: section
     TYPE(cp_error_type), INTENT(inout)       :: error
@@ -74,7 +74,7 @@ CONTAINS
        CALL keyword_release(keyword,error=error)
 
        CALL keyword_create(keyword, name="BANDWIDTH",&
-            description="bandwidth ... ",&
+            description="The number of neighboring unit cells that one unit cell interacts with",&
             usage="BANDWIDTH 2", default_i_val=2,error=error)
        CALL section_add_keyword(section,keyword,error=error)
        CALL keyword_release(keyword,error=error)
@@ -116,19 +116,19 @@ CONTAINS
        CALL keyword_release(keyword,error=error)
 
        CALL keyword_create(keyword, name="COLZERO_THRESHOLD",&
-            description="Threshold used for ...",&
+            description="The smallest number that is not zero in the full diagonalization part",&
             usage="COLZERO_THRESHOLD 1.0E-12", default_r_val=1.0E-12_dp,error=error)
        CALL section_add_keyword(section,keyword,error=error)
        CALL keyword_release(keyword,error=error)
 
        CALL keyword_create(keyword, name="EPS_LIMIT",&
-            description="Threshold used for ...",&
+            description="The smallest eigenvalue that is kept",&
             usage="EPS_LANCZOS 1.0E-6", default_r_val=1.0E-6_dp,error=error)
        CALL section_add_keyword(section,keyword,error=error)
        CALL keyword_release(keyword,error=error)
 
        CALL keyword_create(keyword, name="EPS_DECAY",&
-            description="Threshold used for ....",&
+            description="The smallest imaginary part that a decaying eigenvalue may have not to be considered as propagating",&
             usage="EPS_DECAY 1.0E-6", default_r_val=1.0E-6_dp,error=error)
        CALL section_add_keyword(section,keyword,error=error)
        CALL keyword_release(keyword,error=error)

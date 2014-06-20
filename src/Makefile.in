@@ -31,16 +31,16 @@ $(EXECUTABLE): $(MAIN:.cpp=.o) $(OBJECTS)
 	$(CPP) $(CXXFLAGS) $(INCLUDES) -o $@ $(MAIN:.cpp=.o) $(OBJECTS) $(LINLIN) @pardiso_so@ $(LDFLAGS) $(LIBS)
 
 .cpp.o:
-	$(CPP) $(INCLUDES) $(CXXFLAGS) -c $< -o $@ $(LDFLAGS)
+	$(CPP) $(CXXFLAGS) $(INCLUDES) $(LDFLAGS) -c $< -o $@
 
 .cc.o:
-	$(CPP) $(INCLUDES) $(CXXFLAGS) -c $< -o $@ $(LDFLAGS)
+	$(CPP) $(CXXFLAGS) $(INCLUDES) $(LDFLAGS) -c $< -o $@
 
 .C.o:
-	$(CPP) $(INCLUDES) $(CXXFLAGS) -c $< -o $@ $(LDFLAGS)
+	$(CPP) $(CXXFLAGS) $(INCLUDES) $(LDFLAGS) -c $< -o $@
 
 .c.o:
-	$(GCC) $(INCLUDES) $(CFLAGS) -c $< -o $@ $(LDFLAGS)
+	$(GCC) $(CFLAGS) $(INCLUDES) $(LDFLAGS) -c $< -o $@
 
 y.tab.c: parser.y
 	$(YACC) -d -b y $<
