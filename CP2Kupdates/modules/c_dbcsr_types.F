@@ -1,13 +1,13 @@
 !-----------------------------------------------------------------------------!
 !   CP2K: A general program to perform molecular dynamics simulations         !
-!   Copyright (C) 2000 - 2013  CP2K developers group                          !
+!   Copyright (C) 2000 - 2014  CP2K developers group                          !
 !-----------------------------------------------------------------------------!
 
 ! *****************************************************************************
-!> \brief
+!> \brief C-interoperable DBCSR matrix type
 !>
 !> \par History
-!>       2013.05 created [Hossein Bani-Hashemian]
+!>       05.2013 created [Hossein Bani-Hashemian]
 !> \author Hossein Bani-Hashemian
 ! *****************************************************************************
 MODULE c_dbcsr_types
@@ -17,7 +17,7 @@ MODULE c_dbcsr_types
 
   USE, INTRINSIC :: ISO_C_BINDING
 
-#include "cp_common_uses.h"
+#include "./common/cp_common_uses.f90"
 
   IMPLICIT NONE
 
