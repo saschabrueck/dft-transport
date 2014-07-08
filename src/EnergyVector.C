@@ -220,6 +220,7 @@ methodvector[0]=transport_methods::WF;
         }
         stepvector.push_back((energyvector[energyvector.size()-1]-energyvector[energyvector.size()-2])/2.0);
     }
+    evecfile.close();
     if (!iam) cout << "Size of Energyvector " << energyvector.size() << endl;
 // get propagating modes from bandstructure OF RIGHT CONTACT ONLY -> ONLY FOR EQUILIBRIUM OR I HAVE TO IMPLEMENT LEFT CONTACT AS WELL
     std::vector< std::vector<double> > propagating;

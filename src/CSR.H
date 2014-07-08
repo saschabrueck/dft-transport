@@ -1,6 +1,7 @@
 #ifndef __CSR
 #define __CSR
 
+#include <omp.h>
 #include <fstream>
 #include <algorithm>
 #include <complex>
@@ -81,6 +82,7 @@ public:
     void mat_vec_mult(T*,T*,int);
     void mat_vec_mult(T*,T*,int,int);
     void trans_mat_vec_mult(T*,T*,int,int);
+    void trans_mat_vec_mult_omp(T*,T*,int,int);
     void trans_mat_vec_mult(T*,T*,int,int,int);
     void spec_mat_vec_mult(T*,T*,int,int*,int*,int,int);
     void spec_mat_vec_mult(T*,T*,int,int*,int*,int,int,int*);
@@ -1193,7 +1195,7 @@ void TCSR<T>::cpu_distribute(int *Istart,int *Nlocal,int N,int msize,int mrank)
 {
     int max_rank,NCPU;
 
-    NCPU             = ceil((double)N/msize);
+    NCPU             = int(ceil((double)N/msize));
     max_rank         = N-(NCPU-1)*msize;
     *Nlocal          = NCPU-1;
 
@@ -1481,6 +1483,31 @@ inline void TCSR<CPX>::trans_mat_vec_mult(CPX *tr_in, CPX *out, int nrhs, int NR
 /*This function calculate sparse_mat*in with the help of the transpose of in tr_in (more
   efficient when blas is used)*/
 template <>
+inline void TCSR<CPX>::trans_mat_vec_mult_omp(CPX *tr_in, CPX *out, int nrhs, int NR)
+{
+    int nthr=omp_get_max_threads();
+    int i;//DECLARE J PRIVATE TO THREAD
+    CPX *vec = new CPX[nrhs*nthr];
+
+#pragma omp parallel for schedule(dynamic)
+    for(i=0;i<size;i++){
+        int ithr=omp_get_thread_num();
+        init_variable(&vec[nrhs*ithr],nrhs);
+        for(int j=edge_i[i]-findx;j<edge_i[i+1]-findx;j++){
+            c_zaxpy(nrhs,nnz[j],&tr_in[nrhs*(index_j[j]-findx)],1,&vec[nrhs*ithr],1);
+        }
+        c_zcopy(nrhs,&vec[nrhs*ithr],1,&out[i],size);
+    }
+
+    delete[] vec;
+
+}
+
+/************************************************************************************************/
+
+/*This function calculate sparse_mat*in with the help of the transpose of in tr_in (more
+  efficient when blas is used)*/
+template <>
 inline void TCSR<CPX>::trans_mat_vec_mult(CPX *tr_in, CPX *out, int nrhs, int NR,int NLine)
 {
     int i,j;
@@ -1534,6 +1561,31 @@ inline void TCSR<double>::trans_mat_vec_mult(double *tr_in, double *out, int nrh
             c_daxpy(nrhs,nnz[j],&tr_in[nrhs*(index_j[j]-findx)],1,vec,1);
         }
         c_dcopy(nrhs,vec,1,&out[i],size);
+    }
+
+    delete[] vec;
+
+}
+
+/************************************************************************************************/
+
+/*This function calculate sparse_mat*in with the help of the transpose of in tr_in (more
+  efficient when blas is used)*/
+template <>
+inline void TCSR<double>::trans_mat_vec_mult_omp(double *tr_in, double *out, int nrhs, int NR)
+{
+    int nthr=omp_get_max_threads();
+    int i;//DECLARE J PRIVATE TO THREAD
+    double *vec = new double[nrhs*nthr];
+
+#pragma omp parallel for schedule(dynamic)
+    for(i=0;i<size;i++){
+        int ithr=omp_get_thread_num();
+        init_variable(&vec[nrhs*ithr],nrhs);
+        for(int j=edge_i[i]-findx;j<edge_i[i+1]-findx;j++){
+            c_daxpy(nrhs,nnz[j],&tr_in[nrhs*(index_j[j]-findx)],1,&vec[nrhs*ithr],1);
+        }
+        c_dcopy(nrhs,&vec[nrhs*ithr],1,&out[i],size);
     }
 
     delete[] vec;
@@ -2088,13 +2140,14 @@ double TCSR<T>::collect_density(double* xyz_grid,double* xyz_atom,int* atom_of_b
 {
     double basis_exp_C[]={3.35827350,0.76975780,0.20003810};
 //    int fac[]={1, 1, 2, 6, 24, 120, 720, 5040};
+    double basis_coeff_C[]={1.768061,6.480152,6.480152,6.480152,0.585701,1.027739,1.027739,1.027739,0.213179,0.190691,0.190691,0.190691};
     double br=18.8971616;
 
     double rho_grid=0.0;
     for (int i=first_row;i<first_row+size;i++) {
-        double xi=-br*(xyz_grid[0]-xyz_atom[3*atom_of_bf[i]+0]);
-        double yi=-br*(xyz_grid[1]-xyz_atom[3*atom_of_bf[i]+1]);
-        double zi=-br*(xyz_grid[2]-xyz_atom[3*atom_of_bf[i]+2]);
+        double xi=br*(xyz_atom[3*atom_of_bf[i]+0]-xyz_grid[0]);
+        double yi=br*(xyz_atom[3*atom_of_bf[i]+1]-xyz_grid[1]);
+        double zi=br*(xyz_atom[3*atom_of_bf[i]+2]-xyz_grid[2]);
         int bf_wrt_at_i=i%12;
         double exp_i=basis_exp_C[bf_wrt_at_i/4];
         int l_of_bf_i=bf_wrt_at_i%4;
@@ -2104,8 +2157,9 @@ double TCSR<T>::collect_density(double* xyz_grid,double* xyz_atom,int* atom_of_b
         if (l_of_bf_i==1) lyi=1;
         if (l_of_bf_i==2) lzi=1;
         if (l_of_bf_i==3) lxi=1;
-//        double norm_i=1.0/sqrt( (fac[2*lxi]*fac[2*lyi]*fac[2*lzi]*pow(M_PI,1.5)) / (pow(2,2*(lxi+lyi+lzi))*fac[lxi]*fac[lyi]*fac[lzi]*pow(exp_i,lxi+lyi+lzi+1.5)) );
-        double norm_i=pow(2,lxi+lyi+lzi)*pow(2.0/M_PI,0.75)*pow(exp_i,(lxi+lyi+lzi+3.0/2.0)/2.0);
+//        double norm_i=1.0/sqrt( (fac[2*lxi]*fac[2*lyi]*fac[2*lzi]*pow(M_PI,1.5)) / (pow(2,2*(lxi+lyi+lzi))*fac[lxi]*fac[lyi]*fac[lzi]*pow(exp_i,lxi+lyi+lzi+1.5)) );//DOESNT WORK
+//        double norm_i=pow(2,lxi+lyi+lzi)*pow(2.0/M_PI,0.75)*pow(exp_i,(lxi+lyi+lzi+3.0/2.0)/2.0);//MAYBE WORKS
+        double norm_i=basis_coeff_C[bf_wrt_at_i];
         double gto_i=norm_i*pow(xi,lxi)*pow(yi,lyi)*pow(zi,lzi)*exp(-exp_i*(xi*xi+yi*yi+zi*zi));
         if (gto_i>1.0E-3) for (int e=edge_i[i-first_row]-findx;e<edge_i[i-first_row+1]-findx;e++) {
             int j=index_j[e]-findx;
@@ -2119,13 +2173,15 @@ double TCSR<T>::collect_density(double* xyz_grid,double* xyz_atom,int* atom_of_b
             if (l_of_bf_j==1) lyj=1;
             if (l_of_bf_j==2) lzj=1;
             if (l_of_bf_j==3) lxj=1;
-            double xj=-br*(xyz_grid[0]-xyz_atom[3*atom_of_bf[j]+0]);
-            double yj=-br*(xyz_grid[1]-xyz_atom[3*atom_of_bf[j]+1]);
-            double zj=-br*(xyz_grid[2]-xyz_atom[3*atom_of_bf[j]+2]);
+            double xj=br*(xyz_atom[3*atom_of_bf[j]+0]-xyz_grid[0]);
+            double yj=br*(xyz_atom[3*atom_of_bf[j]+1]-xyz_grid[1]);
+            double zj=br*(xyz_atom[3*atom_of_bf[j]+2]-xyz_grid[2]);
 //            double norm_j=1.0/sqrt( (fac[2*lxj]*fac[2*lyj]*fac[2*lzj]*pow(M_PI,1.5)) / (pow(2,2*(lxj+lyj+lzj))*fac[lxj]*fac[lyj]*fac[lzj]*pow(exp_j,lxj+lyj+lzj+1.5)) );
-            double norm_j=pow(2,lxj+lyj+lzj)*pow(2.0/M_PI,0.75)*pow(exp_j,(lxj+lyj+lzj+3.0/2.0)/2.0);
+//            double norm_j=pow(2,lxj+lyj+lzj)*pow(2.0/M_PI,0.75)*pow(exp_j,(lxj+lyj+lzj+3.0/2.0)/2.0);
+            double norm_j=basis_coeff_C[bf_wrt_at_j];
             double gto_j=norm_j*pow(xj,lxj)*pow(yj,lyj)*pow(zj,lzj)*exp(-exp_j*(xj*xj+yj*yj+zj*zj));
 
+//            if (lxi+lyi+lzi+lyj+lzj+lxj==0)
             rho_grid+=nnz[e]*gto_i*gto_j;
         }
     }
