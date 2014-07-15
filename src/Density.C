@@ -91,8 +91,8 @@ int density(TCSR<double> *KohnSham,TCSR<double> *Overlap,TCSR<double> *OverlapPB
             nprol=selfenergies[0].n_propagating;
             npror=selfenergies[1].n_propagating;
             lambda = new CPX[nprol+npror];
-            c_zcopy(nprol,selfenergies[0].lambdaprol,1,lambda,1);
-            c_zcopy(npror,selfenergies[1].lambdapror,1,&lambda[nprol],1);
+            c_zcopy(nprol,selfenergies[0].lambdapro,1,lambda,1);
+            c_zcopy(npror,selfenergies[1].lambdapro,1,&lambda[nprol],1);
 if (npror!=propnum) cout << "WARNING: FOUND " << npror << " OF " << propnum << " MODES AT " << real(energy) << endl;
             if (selfenergies[0].spainjdist->n_nonzeros || selfenergies[1].spainjdist->n_nonzeros) {
                 inj = new CPX[HamSig->size*(nprol+npror)]();
