@@ -17,8 +17,7 @@ BoundarySelfEnergy::BoundarySelfEnergy()
     sigma = NULL;
     spsigmadist = NULL;
     inj = NULL;
-    lambdaprol = NULL;
-    lambdapror = NULL;
+    lambdapro = NULL;
     n_propagating=-1;
 
     master_rank=-1;
@@ -50,8 +49,7 @@ BoundarySelfEnergy::~BoundarySelfEnergy()
 
     if (do_delete_inj) {
         delete[] inj;
-        delete[] lambdaprol;
-        delete[] lambdapror;
+        delete[] lambdapro;
     }
 
     if (do_delete_spsigdist) {
@@ -60,8 +58,7 @@ BoundarySelfEnergy::~BoundarySelfEnergy()
 
     if (do_delete_spainjdist) {
         delete spainjdist;
-        delete[] lambdaprol;
-        delete[] lambdapror;
+        delete[] lambdapro;
     }
 
     if (do_delete_H) {
@@ -186,11 +183,9 @@ void BoundarySelfEnergy::Distribute(TCSR<CPX> *SumHamC,MPI_Comm matrix_comm)
     if (compute_inj) {
         MPI_Bcast(&n_propagating,1,MPI_INT,master_rank,matrix_comm);
         if (iam!=master_rank) {
-            lambdaprol=new CPX[n_propagating];
-            lambdapror=new CPX[n_propagating];
+            lambdapro=new CPX[n_propagating];
         }
-        MPI_Bcast(&lambdaprol,n_propagating,MPI_DOUBLE_COMPLEX,master_rank,matrix_comm);
-        MPI_Bcast(&lambdapror,n_propagating,MPI_DOUBLE_COMPLEX,master_rank,matrix_comm);
+        MPI_Bcast(&lambdapro,n_propagating,MPI_DOUBLE_COMPLEX,master_rank,matrix_comm);
         TCSR<CPX> *spainj = NULL;
         if (iam==master_rank) {
             if (contact==1) {
@@ -235,11 +230,8 @@ int BoundarySelfEnergy::GetSigma(MPI_Comm boundary_comm)
 // global for this class
     CPX *Vtra=new CPX[2*ntriblock*2*ntriblock];
     CPX *Vref=new CPX[2*ntriblock*2*ntriblock];
-    CPX *lambdavec=new CPX[2*ntriblock];
-    int *dectravec=new int[2*ntriblock];
-    int *decrefvec=new int[2*ntriblock];
-    int *protravec=new int[2*ntriblock];
-    int *prorefvec=new int[2*ntriblock];
+    CPX *lambdatra=new CPX[2*ntriblock];
+    CPX *lambdaref=new CPX[2*ntriblock];
     double *veltra=new double[2*ntriblock];
     double *velref=new double[2*ntriblock];
     int ndectra=0;
@@ -254,12 +246,6 @@ int BoundarySelfEnergy::GetSigma(MPI_Comm boundary_comm)
         H0->sparse_to_full(&KScpx[bandwidth*ndofsq],ndof,bandwidth*ndof);
         H1->sparse_to_full(&KScpx[2*bandwidth*ndofsq],ndof,ndof);
     }
-TCSR<CPX> *Hch;
-if (contact==1){
-Hch=H1;
-H1=H1t;
-H1t=Hch;
-}
 // after i tested if it makes a difference how i assemble the tridiagonalblocks i will remove everything there
 // and build the full kscpx, which i need for my old method, by sparse_to_full out of the h0 and h1, and i build
 // the sparse amat and bmat for feast out of h0 and h1 like i do below
@@ -305,8 +291,8 @@ int feast=0;
 // FEAST
 if (feast) {
     InjectionFeast<CPX> *k_inj = new InjectionFeast<CPX>(4,10);
-    int neigfeast=200;
-//    k_inj->initialize(2*ntriblock,neigfeast);
+    int neigfeast=45;
+    k_inj->initialize(2*ntriblock,2*ntriblock,neigfeast);
     CPX* eigvalcpx=new CPX[neigfeast];
     CPX* eigvec=new CPX[2*ntriblock*neigfeast];
 /*
@@ -370,23 +356,48 @@ if (feast) {
         spA->get_diag_pos();
     }
     sabtime=get_time(d_zer);
-    int neigval;
-//    k_inj->calc_kphase(spA,spB,2*ntriblock,eigvalcpx,eigvec,&neigval,boundary_comm,&iinfo);
+    int Ntr,Nref;
+    int *ind_Ntr  = new int[2*ntriblock];
+    int *ind_Nref = new int[2*ntriblock];
+    double *vel_f = new double[2*ntriblock];
+    k_inj->calc_kphase(spA,spB,H1,2*ntriblock,2*ntriblock,eigvalcpx,eigvec,vel_f,&Ntr,ind_Ntr,&Nref,ind_Nref,inj_sign,1,1,boundary_comm,&iinfo);
     cout << "TIME FOR FEAST " << get_time(sabtime) << endl;
     delete spA;
     delete spB;
     delete k_inj;
-    CPX *eigvecc=new CPX[ndof*neigval];//IST NEIGVAL AUCH RICHTIG? SIND DIE AUCH IN EIGVEC RICHTIG ANGEORDNET
+/*
+    for(IV=0;IV<N;IV++){
+        c_zcopy(inc,&Vin[ind[IV]*inc],1,&Vout[IV*inc],1);
+    }
+    for(IV=0;IV<N;IV++){
+        c_zcopy(inc,&Vin[ind[IV]*inc],1,&Vout[IV*inc],1);
+    }
+*/
+//oh no we dont know the number of propagating or do we? we have to fill out npro/tra/ref/dec and V and lambda and vel? and stuff
+////the we can later also compare if it is worse if we use tra like in omen
+    int neigval=Ntr+Nref;
+    CPX *eigvecc=new CPX[ndof*neigval];//IST NEIGVAL AUCH RICHTIG? SIND DIE AUCH IN EIGVEC RICHTIG ANGEORDNET //ID O NOT NEED THSI HERE BECAUSE I PUT ON VEL DIRECTLY
     c_zlacpy('A',ndof,neigval,eigvec,2*ntriblock,eigvecc,ndof);
+    delete[] ind_Ntr;
+    delete[] ind_Nref;
+    delete[] vel_f;
     delete[] eigvec;
 } else {
     InjectionIEV inj_iev;
-    inj_iev.Compute(KScpx,Vtra,Vref,lambdavec,dectravec,decrefvec,protravec,prorefvec,ndectra,ndecref,nprotra,nproref,veltra,velref,ndof,bandwidth,inj_sign,complexenergypoint,colzerothr,eps_limit,eps_decay,energyp,boundary_comm);
+    inj_iev.Compute(KScpx,Vtra,Vref,lambdatra,lambdaref,ndectra,ndecref,nprotra,nproref,veltra,velref,ndof,bandwidth,inj_sign,complexenergypoint,colzerothr,eps_limit,eps_decay,energyp,boundary_comm);
 }
     do_delete_sigma=1;
+TCSR<CPX> *Hch;
+if (contact==1){
+Hch=H1;
+H1=H1t;
+H1t=Hch;
+}
 if (!boundary_rank) {
     delete[] KScpx;
 // inverse g snake WARNING THE pow OF lambda IS DONE HERE
+    if (nprotra!=nproref) return (LOGCERR, EXIT_FAILURE);
+    if (ndectra!=ndecref) ndectra=min(ndectra,ndecref);
     int neigbas=nprotra+ndectra;
     CPX *VT=new CPX[neigbas*ntriblock];
     CPX *matcpx=new CPX[ntriblock*neigbas];
@@ -399,10 +410,8 @@ if (!boundary_rank) {
     full_transpose(neigbas,ntriblock,Vtra,VT);
     H1t->trans_mat_vec_mult(VT,matcpx,neigbas,1);
     c_zgemm('C','N',neigbas,neigbas,ntriblock,z_one,Vtra,ntriblock,matcpx,ntriblock,z_zer,invgls,neigbas);
-    for (int ieigbas=0;ieigbas<nprotra;ieigbas++)
-        c_zscal(neigbas,pow(lambdavec[protravec[ieigbas]],+bandwidth),&invgls[ieigbas*neigbas],1);
-    for (int ieigbas=nprotra;ieigbas<neigbas;ieigbas++)
-        c_zscal(neigbas,pow(lambdavec[dectravec[ieigbas-nprotra]],+bandwidth),&invgls[ieigbas*neigbas],1);
+    for (int ieigbas=0;ieigbas<neigbas;ieigbas++)
+        c_zscal(neigbas,pow(lambdatra[ieigbas],+bandwidth),&invgls[ieigbas*neigbas],1);
 //    c_zgemm('N','N',ntriblock,neigbas,ntriblock,z_one,H0cpx,ntriblock,Vtra,ntriblock,z_zer,matcpx,ntriblock);
     H0->trans_mat_vec_mult(VT,matcpx,neigbas,1);
     c_zgemm('C','N',neigbas,neigbas,ntriblock,z_one,Vtra,ntriblock,matcpx,ntriblock,z_one,invgls,neigbas);
@@ -411,10 +420,8 @@ if (!boundary_rank) {
     full_transpose(neigbas,ntriblock,Vref,VT);
     H1->trans_mat_vec_mult(VT,matcpx,neigbas,1);
     c_zgemm('C','N',neigbas,neigbas,ntriblock,z_one,Vref,ntriblock,matcpx,ntriblock,z_zer,invgrs,neigbas);
-    for (int ieigbas=0;ieigbas<nprotra;ieigbas++)
-        c_zscal(neigbas,pow(lambdavec[prorefvec[ieigbas]],-bandwidth),&invgrs[ieigbas*neigbas],1);
-    for (int ieigbas=nprotra;ieigbas<neigbas;ieigbas++)
-        c_zscal(neigbas,pow(lambdavec[decrefvec[ieigbas-nprotra]],-bandwidth),&invgrs[ieigbas*neigbas],1);
+    for (int ieigbas=0;ieigbas<neigbas;ieigbas++)
+        c_zscal(neigbas,pow(lambdaref[ieigbas],-bandwidth),&invgrs[ieigbas*neigbas],1);
 //    c_zgemm('N','N',ntriblock,neigbas,ntriblock,z_one,H0cpx,ntriblock,Vref,ntriblock,z_zer,matcpx,ntriblock);
     H0->trans_mat_vec_mult(VT,matcpx,neigbas,1);
     c_zgemm('C','N',neigbas,neigbas,ntriblock,z_one,Vref,ntriblock,matcpx,ntriblock,z_one,invgrs,neigbas);
@@ -542,11 +549,11 @@ if (!boundary_rank) {
         c_dscal(nprotra*ntriblock,-d_one,((double*)Vref)+1,2);
         CPX *injl=new CPX[ntriblock*nprotra];
         CPX *injr=new CPX[ntriblock*nprotra];
-        lambdaprol=new CPX[nprotra];
-        lambdapror=new CPX[nprotra];
+        CPX *lambdaprol=new CPX[nprotra];
+        CPX *lambdapror=new CPX[nprotra];
         for (int ipro=0;ipro<nprotra;ipro++) {
-            lambdaprol[ipro]=pow(lambdavec[protravec[ipro]],-inj_sign);
-            lambdapror[ipro]=pow(lambdavec[prorefvec[ipro]],-inj_sign);
+            lambdaprol[ipro]=pow(lambdatra[ipro],-inj_sign);
+            lambdapror[ipro]=pow(lambdaref[ipro],-inj_sign);
         }
         H1t->mat_vec_mult(Vtra,injl,nprotra);
         H1->mat_vec_mult(Vref,injr,nprotra);
@@ -555,10 +562,8 @@ if (!boundary_rank) {
         c_zcopy(ntriblock*nprotra,injl,1,injl1,1);
         c_zcopy(ntriblock*nprotra,injr,1,injr1,1);
         for (int ipro=0;ipro<nprotra;ipro++) {
-//            c_zscal(ntriblock,pow(lambdavec[protravec[ipro]],-bandwidth),&injl1[ipro*ntriblock],1);
-//            c_zscal(ntriblock,pow(lambdavec[prorefvec[ipro]],+bandwidth),&injr1[ipro*ntriblock],1);
-            c_zscal(ntriblock,pow(lambdavec[protravec[ipro]],+inj_sign*bandwidth),&injl1[ipro*ntriblock],1);
-            c_zscal(ntriblock,pow(lambdavec[prorefvec[ipro]],-inj_sign*bandwidth),&injr1[ipro*ntriblock],1);
+            c_zscal(ntriblock,pow(lambdatra[ipro],+inj_sign*bandwidth),&injl1[ipro*ntriblock],1);
+            c_zscal(ntriblock,pow(lambdaref[ipro],-inj_sign*bandwidth),&injr1[ipro*ntriblock],1);
         }
         H0->mat_vec_mult_add(Vtra,injl1,nprotra,z_one);
         H0->mat_vec_mult_add(Vref,injr1,nprotra,z_one);
@@ -572,6 +577,8 @@ if (!boundary_rank) {
         cout << "MATRIX MATRIX MULTIPLICATIONS FOR INJECTION " << get_time(sabtime) << endl;
         delete[] injl1;
         delete[] injr1;
+        lambdapro=lambdapror;
+        delete[] lambdaprol;
         inj=injr;
         delete[] injl;
         do_delete_inj=1;
@@ -583,11 +590,6 @@ if (!boundary_rank) {
     delete[] Vtra;
     delete[] Vref;
 // lil arrays that do not take much memory
-    delete[] lambdavec;
-    delete[] dectravec;
-    delete[] decrefvec;
-    delete[] protravec;
-    delete[] prorefvec;
     delete[] veltra;
     delete[] velref;
 }//end if !boundary_rank

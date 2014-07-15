@@ -15,7 +15,7 @@ class InjectionIEV {
 public:
 InjectionIEV();
 ~InjectionIEV();
-int Compute(CPX*,CPX*,CPX*,CPX*,int*,int*,int*,int*,int&,int&,int&,int&,double*,double*,int,int,int,int,double,double,double,CPX,MPI_Comm);
+int Compute(CPX*,CPX*,CPX*,CPX*,CPX*,int&,int&,int&,int&,double*,double*,int,int,int,int,double,double,double,CPX,MPI_Comm);
 private:
 int Pascal(int,int);
 };
@@ -37,11 +37,11 @@ int InjectionIEV::Pascal(int r,int n)
     return Pascal( r - 1, n - 1 ) + Pascal( r, n - 1 );
 }
 
-int InjectionIEV::Compute(CPX* KScpx,CPX* Vtra,CPX* Vref,CPX* lambdavec,int* dectravec,int* decrefvec,int* protravec,int* prorefvec,int& ndectra,int& ndecref,int& nprotra,int& nproref,double* veltra,double* velref,int ndof,int bandwidth,int inj_sign,int complexenergypoint,double colzerothr,double eps_limit,double eps_decay,CPX energyp,MPI_Comm boundary_comm)
+int InjectionIEV::Compute(CPX* KScpx,CPX* Vtra,CPX* Vref,CPX* lambdatra,CPX* lambdaref,int& ndectra,int& ndecref,int& nprotra,int& nproref,double* veltra,double* velref,int ndof,int bandwidth,int inj_sign,int complexenergypoint,double colzerothr,double eps_limit,double eps_decay,CPX energyp,MPI_Comm boundary_comm)
 {
-int worldrank; MPI_Comm_rank(MPI_COMM_WORLD,&worldrank);
-    int boundary_rank;
+    int boundary_rank,boundary_size;
     MPI_Comm_rank(boundary_comm,&boundary_rank);
+    MPI_Comm_size(boundary_comm,&boundary_size);
 if (!boundary_rank) {
     double d_one=1.0;
     double d_zer=0.0;
@@ -53,11 +53,6 @@ if (!boundary_rank) {
     int ndofsq=ndof*ndof;
     int nblocksband=2*bandwidth+1;
     int ntriblock=bandwidth*ndof;
-    int triblocksize=ntriblock*ntriblock;
-// global for this class
-    CPX *eigvalcpx;
-    CPX *eigvecc;
-    int neigval;
     CPX *mats=new CPX[ndofsq];
     c_zcopy(ndofsq,KScpx,1,mats,1);
     for (int ibandwidth=1;ibandwidth<nblocksband;ibandwidth++)
@@ -151,7 +146,7 @@ if (!boundary_rank) {
     }
     if (blockbwpos<0 || blockbwpoe<0) return (LOGCERR, EXIT_FAILURE);
 // get eigenvalues and eigenvectors
-    eigvalcpx=new CPX[nindnzcoln];
+    CPX *eigvalcpx=new CPX[nindnzcoln];
     CPX *eigveccfull=new CPX[nindnzcoln*nindnzcoln];
     if (complexenergypoint) {
         CPX cdummy;
@@ -210,7 +205,7 @@ if (!boundary_rank) {
         delete[] eigvalimag;
     }
     delete[] matmn;
-    eigvecc=new CPX[ndof*nindnzcoln];
+    CPX *eigvecc=new CPX[ndof*nindnzcoln];
     if (blockbwpoe-blockbwpos==ndof-1) {
         c_zlacpy('A',ndof,nindnzcoln,&eigveccfull[blockbwpos],nindnzcoln,eigvecc,ndof);
     } else {
@@ -231,8 +226,13 @@ if (!boundary_rank) {
     delete[] indrzcolvecn;
     delete[] eigveccfull;
     delete[] matmr;
-    neigval=nindnzcoln;
+    int neigval=nindnzcoln;
 // DETERMINE TYPE OF EIGENVALUE/VECTOR
+    CPX *lambdavec=new CPX[neigval];
+    int *dectravec=new int[neigval];
+    int *decrefvec=new int[neigval];
+    int *protravec=new int[neigval];
+    int *prorefvec=new int[neigval];
     CPX *matcdof=new CPX[ndofsq];
     CPX *vecout=new CPX[ndof];
     for (int iindnzcoln=0;iindnzcoln<neigval;iindnzcoln++) {
@@ -260,14 +260,14 @@ if (!boundary_rank) {
                    prorefvec[nproref++]=iindnzcoln;
                 } else return (LOGCERR, EXIT_FAILURE);
            } // END IF decaying or propagating
-//           lambdavec[iindnzcoln]=pow(lambda,-inj_sign);UNTEN DAS ERZEUGT EIN SYMMETRISCHERES SIGMA
            lambdavec[iindnzcoln]=lambda;
         } // END IF k not infinite
     } // END FOR
     delete[] eigvalcpx; 
     delete[] matcdof;
     delete[] vecout;
-if (nprotra) { cout<<worldrank<<" AT "<<real(energyp)<<" NPROTRA "<<nprotra<<" NPROREF "<<nproref<<" NDECTRA "<<ndectra<<" NDECREF "<<ndecref<<endl; } else cout<<worldrank<<" FAILED ! ! ! ! !"<<endl;
+int worldrank; MPI_Comm_rank(MPI_COMM_WORLD,&worldrank);
+if (nprotra) { cout<<worldrank<<" AT "<<real(energyp)<<" NPROTRA "<<nprotra<<" NPROREF "<<nproref<<" NDECTRA "<<ndectra<<" NDECREF "<<ndecref<<endl; } else cout<<worldrank<<" FOUND NONE"<<endl;
 for (int iout=0;iout<nprotra;iout++) cout<<worldrank<<" VALUE "<<lambdavec[protravec[iout]]<<endl;
 #ifdef _ALLEIGVALS_WRITEOUT
 ofstream myfile;
@@ -279,52 +279,54 @@ for (int iele=0;iele<neigval;iele++)
     myfile << real(lambdavec[iele]) << " " << imag(lambdavec[iele]) << endl;
 myfile.close();
 #endif
-//if (!nprotra) {
-//arpack=0;
-//}
-//MPI_Barrier(MPI_COMM_WORLD);
-    if (nprotra!=nproref) return (LOGCERR, EXIT_FAILURE);
-    if (ndectra!=ndecref) ndectra=min(ndectra,ndecref);//return (LOGCERR, EXIT_FAILURE);
-// FOR ABOVE CASE I NEED TO IMPLEMENT SORTING OF LAMBDA? OR JUST THROW AWAY SOME VECS OF THE LIST SETTING NDEC TO MIN OF PRO AND REF?
-// ONCE I REMOVE ONE OF THE DIRECTIONS I WILL ALSO REMOVE THE LINE ABOVE
-    int neigbas=nprotra+ndectra;
+    CPX normy;
     for (int ipro=0;ipro<nprotra;ipro++) {
+        lambdatra[ipro]=lambdavec[protravec[ipro]];
         c_zcopy(ndof,&eigvecc[ndof*protravec[ipro]],1,&Vtra[ndof*bandwidth*ipro+ndof*(bandwidth-1)],1);
         for (int ibandw=2;ibandw<=bandwidth;ibandw++) {
             c_zcopy(ndof,&Vtra[ndof*bandwidth*ipro+ndof*(bandwidth+1-ibandw)],1,&Vtra[ndof*bandwidth*ipro+ndof*(bandwidth-ibandw)],1);
             c_zscal(ndof,lambdavec[protravec[ipro]],&Vtra[ndof*bandwidth*ipro+ndof*(bandwidth-ibandw)],1);
         }
+        normy=CPX(d_one/c_dznrm2(bandwidth*ndof,&Vtra[ipro*bandwidth*ndof],1),d_zer);
+        c_zscal(bandwidth*ndof,normy,&Vtra[ipro*bandwidth*ndof],1);
+        veltra[ipro]*=real(normy)*real(normy);
     }
     for (int idec=0;idec<ndectra;idec++) {
+        lambdatra[idec+nprotra]=lambdavec[dectravec[idec]];
         c_zcopy(ndof,&eigvecc[ndof*dectravec[idec]],1,&Vtra[ndof*bandwidth*(idec+nprotra)+ndof*(bandwidth-1)],1);
         for (int ibandw=2;ibandw<=bandwidth;ibandw++) {
             c_zcopy(ndof,&Vtra[ndof*bandwidth*(idec+nprotra)+ndof*(bandwidth+1-ibandw)],1,&Vtra[ndof*bandwidth*(idec+nprotra)+ndof*(bandwidth-ibandw)],1);
             c_zscal(ndof,lambdavec[dectravec[idec]],&Vtra[ndof*bandwidth*(idec+nprotra)+ndof*(bandwidth-ibandw)],1);
         }
+        normy=CPX(d_one/c_dznrm2(bandwidth*ndof,&Vtra[idec*bandwidth*ndof],1),d_zer);
+        c_zscal(bandwidth*ndof,normy,&Vtra[idec*bandwidth*ndof],1);
     }
-    for (int ipro=0;ipro<nprotra;ipro++) {
+    for (int ipro=0;ipro<nproref;ipro++) {
+        lambdaref[ipro]=lambdavec[prorefvec[ipro]];
         c_zcopy(ndof,&eigvecc[ndof*prorefvec[ipro]],1,&Vref[ndof*bandwidth*ipro+ndof*(bandwidth-1)],1);
         for (int ibandw=2;ibandw<=bandwidth;ibandw++) {
             c_zcopy(ndof,&Vref[ndof*bandwidth*ipro+ndof*(bandwidth+1-ibandw)],1,&Vref[ndof*bandwidth*ipro+ndof*(bandwidth-ibandw)],1);
             c_zscal(ndof,lambdavec[prorefvec[ipro]],&Vref[ndof*bandwidth*ipro+ndof*(bandwidth-ibandw)],1);
         }
+        normy=CPX(d_one/c_dznrm2(bandwidth*ndof,&Vref[ipro*bandwidth*ndof],1),d_zer);
+        c_zscal(bandwidth*ndof,normy,&Vref[ipro*bandwidth*ndof],1);
+        velref[ipro]*=real(normy)*real(normy);
     }
-    for (int idec=0;idec<ndectra;idec++) {
-        c_zcopy(ndof,&eigvecc[ndof*decrefvec[idec]],1,&Vref[ndof*bandwidth*(idec+nprotra)+ndof*(bandwidth-1)],1);
+    for (int idec=0;idec<ndecref;idec++) {
+        lambdaref[idec+nproref]=lambdavec[decrefvec[idec]];
+        c_zcopy(ndof,&eigvecc[ndof*decrefvec[idec]],1,&Vref[ndof*bandwidth*(idec+nproref)+ndof*(bandwidth-1)],1);
         for (int ibandw=2;ibandw<=bandwidth;ibandw++) {
-            c_zcopy(ndof,&Vref[ndof*bandwidth*(idec+nprotra)+ndof*(bandwidth+1-ibandw)],1,&Vref[ndof*bandwidth*(idec+nprotra)+ndof*(bandwidth-ibandw)],1);
-            c_zscal(ndof,lambdavec[decrefvec[idec]],&Vref[ndof*bandwidth*(idec+nprotra)+ndof*(bandwidth-ibandw)],1);
+            c_zcopy(ndof,&Vref[ndof*bandwidth*(idec+nproref)+ndof*(bandwidth+1-ibandw)],1,&Vref[ndof*bandwidth*(idec+nproref)+ndof*(bandwidth-ibandw)],1);
+            c_zscal(ndof,lambdavec[decrefvec[idec]],&Vref[ndof*bandwidth*(idec+nproref)+ndof*(bandwidth-ibandw)],1);
         }
+        normy=CPX(d_one/c_dznrm2(bandwidth*ndof,&Vref[idec*bandwidth*ndof],1),d_zer);
+        c_zscal(bandwidth*ndof,normy,&Vref[idec*bandwidth*ndof],1);
     }
-    CPX normy;
-    for (int ivec=0;ivec<neigbas;ivec++) {
-        normy=CPX(d_one/c_dznrm2(bandwidth*ndof,&Vtra[ivec*bandwidth*ndof],1),d_zer);
-        c_zscal(bandwidth*ndof,normy,&Vtra[ivec*bandwidth*ndof],1);
-        veltra[ivec]*=real(normy)*real(normy);
-        velref[ivec]*=real(normy)*real(normy);
-        normy=CPX(d_one/c_dznrm2(bandwidth*ndof,&Vref[ivec*bandwidth*ndof],1),d_zer);
-        c_zscal(bandwidth*ndof,normy,&Vref[ivec*bandwidth*ndof],1);
-    }
+    delete[] lambdavec;
+    delete[] dectravec;
+    delete[] decrefvec;
+    delete[] protravec;
+    delete[] prorefvec;
     delete[] eigvecc;
     return 0;
 }
