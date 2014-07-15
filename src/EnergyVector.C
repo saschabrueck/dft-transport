@@ -213,12 +213,18 @@ methodvector[0]=transport_methods::WF;
         energyvector.clear();
         istream_iterator<double> start_evec(evecfile), end_evec;
         energyvector.assign(start_evec,end_evec);
-        methodvector.resize(energyvector.size(),transport_methods::WF);
-        stepvector.resize(1,(energyvector[1]-energyvector[0])/2.0);
-        for (uint istep=1;istep<energyvector.size()-1;istep++) {
-            stepvector.push_back((energyvector[istep+1]-energyvector[istep-1])/2.0);
+        methodvector.clear();
+        methodvector.assign(energyvector.size(),transport_methods::WF);
+        if (energyvector.size()==1) {
+            stepvector.clear();
+            stepvector.assign(1,CPX(1.0,0.0));
+        } else {
+            stepvector.resize(1,(energyvector[1]-energyvector[0])/2.0);
+            for (uint istep=1;istep<energyvector.size()-1;istep++) {
+                stepvector.push_back((energyvector[istep+1]-energyvector[istep-1])/2.0);
+            }
+            stepvector.push_back((energyvector[energyvector.size()-1]-energyvector[energyvector.size()-2])/2.0);
         }
-        stepvector.push_back((energyvector[energyvector.size()-1]-energyvector[energyvector.size()-2])/2.0);
     }
     evecfile.close();
     if (!iam) cout << "Size of Energyvector " << energyvector.size() << endl;
