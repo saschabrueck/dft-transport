@@ -18,21 +18,13 @@ void Distribute(TCSR<CPX>*,MPI_Comm);
 int GetSigma(MPI_Comm);
 
 /// Self Energy
-CPX *sigmal;
-/// Self Energy
-CPX *sigmar;
+CPX *sigma;
 /// Distributed Self Energy
-TCSR<CPX> *spsigmaldist;
-/// Distributed Self Energy
-TCSR<CPX> *spsigmardist;
+TCSR<CPX> *spsigmadist;
 /// Injection
-CPX *injl;
+CPX *inj;
 /// Injection
-CPX *injr;
-/// Injection
-TCSR<CPX> *spainjldist;
-/// Injection
-TCSR<CPX> *spainjrdist;
+TCSR<CPX> *spainjdist;
 /// Number of Propagating States
 int n_propagating;
 /// Propagating phase factors
@@ -58,6 +50,8 @@ int compute_inj;
 
 int n_cells;
 
+int contact;
+
 int bandwidth;
 double colzerothr;
 double eps_limit;
@@ -66,8 +60,6 @@ double eps_decay;
 TCSR<CPX> *H0;
 TCSR<CPX> *H1;
 TCSR<CPX> *H1t;
-
-int Pascal(int,int);
 
 };
 

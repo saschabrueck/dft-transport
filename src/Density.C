@@ -83,10 +83,10 @@ int density(TCSR<double> *KohnSham,TCSR<double> *Overlap,TCSR<double> *OverlapPB
         }
         MPI_Comm_free(&boundary_comm);
 //add sigma to sumhamc
-        TCSR<CPX> *SumHamCplusSigmal = new TCSR<CPX>(z_one,SumHamC,-z_one,selfenergies[0].spsigmaldist);
+        TCSR<CPX> *SumHamCplusSigma = new TCSR<CPX>(z_one,SumHamC,-z_one,selfenergies[0].spsigmadist);
         delete SumHamC;
-        HamSig = new TCSR<CPX>(z_one,SumHamCplusSigmal,-z_one,selfenergies[1].spsigmardist);
-        delete SumHamCplusSigmal;
+        HamSig = new TCSR<CPX>(z_one,SumHamCplusSigma,-z_one,selfenergies[1].spsigmadist);
+        delete SumHamCplusSigma;
         if (method==transport_methods::WF) {
             nprol=selfenergies[0].n_propagating;
             npror=selfenergies[1].n_propagating;
@@ -94,14 +94,14 @@ int density(TCSR<double> *KohnSham,TCSR<double> *Overlap,TCSR<double> *OverlapPB
             c_zcopy(nprol,selfenergies[0].lambdaprol,1,lambda,1);
             c_zcopy(npror,selfenergies[1].lambdapror,1,&lambda[nprol],1);
 if (npror!=propnum) cout << "WARNING: FOUND " << npror << " OF " << propnum << " MODES AT " << real(energy) << endl;
-            if (selfenergies[0].spainjldist->n_nonzeros || selfenergies[1].spainjrdist->n_nonzeros) {
+            if (selfenergies[0].spainjdist->n_nonzeros || selfenergies[1].spainjdist->n_nonzeros) {
                 inj = new CPX[HamSig->size*(nprol+npror)]();
             }
-            if (selfenergies[0].spainjldist->n_nonzeros) {
-                selfenergies[0].spainjldist->sparse_to_full(inj,HamSig->size,nprol);
+            if (selfenergies[0].spainjdist->n_nonzeros) {
+                selfenergies[0].spainjdist->sparse_to_full(inj,HamSig->size,nprol);
             }
-            if (selfenergies[1].spainjrdist->n_nonzeros) {
-                selfenergies[1].spainjrdist->sparse_to_full(&inj[HamSig->size*nprol],HamSig->size,npror);
+            if (selfenergies[1].spainjdist->n_nonzeros) {
+                selfenergies[1].spainjdist->sparse_to_full(&inj[HamSig->size*nprol],HamSig->size,npror);
             }
             dist_sol=new int[matrix_procs];
             MPI_Allgather(&HamSig->size,1,MPI_INT,dist_sol,1,MPI_INT,matrix_comm);
