@@ -228,12 +228,12 @@ int BoundarySelfEnergy::GetSigma(MPI_Comm boundary_comm)
     int boundary_rank;
     MPI_Comm_rank(boundary_comm,&boundary_rank);
 // global for this class
-    CPX *Vtra=new CPX[2*ntriblock*2*ntriblock];
-    CPX *Vref=new CPX[2*ntriblock*2*ntriblock];
-    CPX *lambdatra=new CPX[2*ntriblock];
-    CPX *lambdaref=new CPX[2*ntriblock];
-    double *veltra=new double[2*ntriblock];
-    double *velref=new double[2*ntriblock];
+    CPX *Vtra=new CPX[ntriblock*ntriblock];
+    CPX *Vref=new CPX[ntriblock*ntriblock];
+    CPX *lambdatra=new CPX[ntriblock];
+    CPX *lambdaref=new CPX[ntriblock];
+    double *veltra=new double[ntriblock];
+    double *velref=new double[ntriblock];
     int ndectra=0;
     int ndecref=0;
     int nprotra=0;
@@ -287,10 +287,9 @@ int BoundarySelfEnergy::GetSigma(MPI_Comm boundary_comm)
     }
 */
 int worldrank; MPI_Comm_rank(MPI_COMM_WORLD,&worldrank);
-int feast=0;
 // FEAST
-if (feast) {
-    InjectionFeast<CPX> *k_inj = new InjectionFeast<CPX>(4,10);
+if (!complexenergypoint) {
+    InjectionFeast<CPX> *k_inj = new InjectionFeast<CPX>(complexenergypoint,2*bandwidth,10);
     int neigfeast=45;
     k_inj->initialize(2*ntriblock,2*ntriblock,neigfeast);
     CPX* eigvalcpx=new CPX[neigfeast];
@@ -359,29 +358,45 @@ if (feast) {
     int Ntr,Nref;
     int *ind_Ntr  = new int[2*ntriblock];
     int *ind_Nref = new int[2*ntriblock];
-    double *vel_f = new double[2*ntriblock];
-    k_inj->calc_kphase(spA,spB,H1,2*ntriblock,2*ntriblock,eigvalcpx,eigvec,vel_f,&Ntr,ind_Ntr,&Nref,ind_Nref,inj_sign,1,1,boundary_comm,&iinfo);
+    k_inj->calc_kphase(spA,spB,H1,2*ntriblock,2*ntriblock,eigvalcpx,eigvec,velref,&Ntr,ind_Ntr,&Nref,ind_Nref,inj_sign,1,1,boundary_comm,&iinfo);
     cout << "TIME FOR FEAST " << get_time(sabtime) << endl;
     delete spA;
     delete spB;
     delete k_inj;
-/*
-    for(IV=0;IV<N;IV++){
-        c_zcopy(inc,&Vin[ind[IV]*inc],1,&Vout[IV*inc],1);
+    nprotra=Ntr;
+    nproref=Ntr;
+    ndectra=Nref-Ntr;
+    ndecref=Nref-Ntr;
+    for (int IV=0;IV<Nref;IV++) {
+        c_zcopy(ntriblock,&eigvec[ind_Nref[IV]*ntriblock],1,&Vtra[IV*ntriblock],1);
     }
-    for(IV=0;IV<N;IV++){
-        c_zcopy(inc,&Vin[ind[IV]*inc],1,&Vout[IV*inc],1);
+    for(int IV=0;IV<Nref;IV++){
+        CPX lambdatmp;
+        c_zcopy(1,&eigvalcpx[ind_Nref[IV]],1,&lambdatmp,1);
+        lambdatra[IV]=exp(CPX(0.0,-1.0)*lambdatmp);
     }
-*/
-//oh no we dont know the number of propagating or do we? we have to fill out npro/tra/ref/dec and V and lambda and vel? and stuff
-////the we can later also compare if it is worse if we use tra like in omen
-    int neigval=Ntr+Nref;
-    CPX *eigvecc=new CPX[ndof*neigval];//IST NEIGVAL AUCH RICHTIG? SIND DIE AUCH IN EIGVEC RICHTIG ANGEORDNET //ID O NOT NEED THSI HERE BECAUSE I PUT ON VEL DIRECTLY
-    c_zlacpy('A',ndof,neigval,eigvec,2*ntriblock,eigvecc,ndof);
+    if (inj_sign==-1) {
+        c_zcopy(Nref*ntriblock,Vtra,1,Vref,1);
+        c_zcopy(Nref,lambdatra,1,lambdaref,1);
+    } else {
+        c_zcopy(Ntr*ntriblock,&Vtra[(Nref-Ntr)*ntriblock],1,Vref,1);
+        c_zcopy((Nref-Ntr)*ntriblock,Vtra,1,&Vref[Ntr*ntriblock],1);
+        c_zcopy(Ntr,&lambdatra[Nref-Ntr],1,lambdaref,1);
+        c_zcopy(Nref-Ntr,lambdatra,1,&lambdaref[Ntr],1);
+    }
+    for (int IV=0;IV<Ntr;IV++) {
+        c_zcopy(ntriblock,&eigvec[ind_Ntr[IV]*ntriblock],1,&Vtra[IV*ntriblock],1);
+    }
+    for(int IV=0;IV<Nref;IV++){
+        CPX lambdatmp;
+        c_zcopy(1,&eigvalcpx[ind_Ntr[IV]],1,&lambdatmp,1);
+        lambdatra[IV]=exp(CPX(0.0,-1.0)*lambdatmp);
+    }
+    c_dcopy(Ntr,velref,1,veltra,1);
     delete[] ind_Ntr;
     delete[] ind_Nref;
-    delete[] vel_f;
     delete[] eigvec;
+    delete[] eigvalcpx;
 } else {
     InjectionIEV inj_iev;
     inj_iev.Compute(KScpx,Vtra,Vref,lambdatra,lambdaref,ndectra,ndecref,nprotra,nproref,veltra,velref,ndof,bandwidth,inj_sign,complexenergypoint,colzerothr,eps_limit,eps_decay,energyp,boundary_comm);

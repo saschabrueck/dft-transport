@@ -20,7 +20,7 @@ template<class T>
 class InjectionFeast : public Injection<T>{
 public:
     
-    InjectionFeast(int,double);
+    InjectionFeast(int,int,double);
 
     virtual ~InjectionFeast();
 
@@ -85,7 +85,7 @@ private:
 };
 
 template<class T>
-InjectionFeast<T>::InjectionFeast(int pslab_per_bc,double pfeast_radius)
+InjectionFeast<T>::InjectionFeast(int cpxpoint,int pslab_per_bc,double pfeast_radius)
 {
     error_criterion = 1.0e-3;
     imag_limit      = 5.0e-5;
@@ -93,7 +93,7 @@ InjectionFeast<T>::InjectionFeast(int pslab_per_bc,double pfeast_radius)
     max_iteration   = 2;
     NQDR            = 16;
     factor_lwork    = 20;
-    contour_factor  = 2;
+    contour_factor  = 2-cpxpoint;
     init_f_matrix   = 0;
 
     slab_per_bc     = pslab_per_bc;
