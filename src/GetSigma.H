@@ -36,12 +36,6 @@ int ndof;
 
 int master_rank;
 
-int do_delete_H;
-int do_delete_sigma;
-int do_delete_spsigdist;
-int do_delete_inj;
-int do_delete_spainjdist;
-
 CPX energyp;//ONLY DEBUGGING
 int complexenergypoint;
 int compute_inj;

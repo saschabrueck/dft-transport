@@ -298,8 +298,8 @@ myfile.close();
             c_zcopy(ndof,&Vtra[ndof*bandwidth*(idec+nprotra)+ndof*(bandwidth+1-ibandw)],1,&Vtra[ndof*bandwidth*(idec+nprotra)+ndof*(bandwidth-ibandw)],1);
             c_zscal(ndof,lambdavec[dectravec[idec]],&Vtra[ndof*bandwidth*(idec+nprotra)+ndof*(bandwidth-ibandw)],1);
         }
-        normy=CPX(d_one/c_dznrm2(bandwidth*ndof,&Vtra[idec*bandwidth*ndof],1),d_zer);
-        c_zscal(bandwidth*ndof,normy,&Vtra[idec*bandwidth*ndof],1);
+        normy=CPX(d_one/c_dznrm2(bandwidth*ndof,&Vtra[(idec+nprotra)*bandwidth*ndof],1),d_zer);
+        c_zscal(bandwidth*ndof,normy,&Vtra[(idec+nprotra)*bandwidth*ndof],1);
     }
     for (int ipro=0;ipro<nproref;ipro++) {
         lambdaref[ipro]=lambdavec[prorefvec[ipro]];
@@ -319,8 +319,8 @@ myfile.close();
             c_zcopy(ndof,&Vref[ndof*bandwidth*(idec+nproref)+ndof*(bandwidth+1-ibandw)],1,&Vref[ndof*bandwidth*(idec+nproref)+ndof*(bandwidth-ibandw)],1);
             c_zscal(ndof,lambdavec[decrefvec[idec]],&Vref[ndof*bandwidth*(idec+nproref)+ndof*(bandwidth-ibandw)],1);
         }
-        normy=CPX(d_one/c_dznrm2(bandwidth*ndof,&Vref[idec*bandwidth*ndof],1),d_zer);
-        c_zscal(bandwidth*ndof,normy,&Vref[idec*bandwidth*ndof],1);
+        normy=CPX(d_one/c_dznrm2(bandwidth*ndof,&Vref[(idec+nproref)*bandwidth*ndof],1),d_zer);
+        c_zscal(bandwidth*ndof,normy,&Vref[(idec+nproref)*bandwidth*ndof],1);
     }
     delete[] lambdavec;
     delete[] dectravec;
@@ -328,6 +328,6 @@ myfile.close();
     delete[] protravec;
     delete[] prorefvec;
     delete[] eigvecc;
-    return 0;
 }
+    return 0;
 }
