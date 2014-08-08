@@ -25,8 +25,10 @@ int semiselfconsistent(TCSR<double> *Overlap,TCSR<double> *KohnSham,c_transport_
 if (!iam) cout << "N_ATOMS " << NAtom_work << endl;
 
     double *Vbf = new double[Overlap->size_tot];
-    double *rho_atom = new double[2*NAtom_work]();
+    double *rho_atom = new double[2*NAtom_work]();//ZERO IN THE SECOND COMPONENT
+    double *rho_atom_previous = new double[2*NAtom_work];
     double *drho_atom_dV = new double[2*NAtom_work]();
+    double *drho_atom_dV_previous = new double[2*NAtom_work];
     int *atom_of_bf = new int[Overlap->size_tot];
     for (int ibf=0;ibf<Overlap->size_tot;ibf++) {
         atom_of_bf[ibf]=ibf/(Overlap->size_tot/NAtom_work);
@@ -167,9 +169,18 @@ if(!iam){
 stringstream mysstream;
 mysstream << "rhofile" << i_iter;
 ofstream rhofile(mysstream.str().c_str());
-for (int ig=0;ig<FEM->NAtom;ig++) rhofile<<rho_atom[ig]<<endl;
+for (int ig=0;ig<2*FEM->NAtom;ig++) rhofile<<rho_atom[ig]<<endl;
 rhofile.close();
 }
+/*
+if(!iam){
+stringstream mysstream;
+mysstream << "drhofile" << i_iter;
+ofstream rhofile(mysstream.str().c_str());
+for (int ig=0;ig<2*FEM->NAtom;ig++) rhofile<<drho_atom_dV[ig]<<endl;
+rhofile.close();
+}
+*/
 
         density_new=std::accumulate(rho_atom,rho_atom+FEM->NAtom,0.0);
         if (abs(density_new-density_old)<density_criterion && residual<parameter->poisson_inner_criterion) {
@@ -180,7 +191,38 @@ rhofile.close();
 
         MPI_Comm newcomm;
         MPI_Comm_split(MPI_COMM_WORLD,iam,iam,&newcomm);
-        OMEN_Poisson_Solver->solve(Vnew,Vold,rho_atom,drho_atom_dV,1,NULL,FEM,Wire,Temp,&Vg,Vs,Vs,Vd,&residual,parameter->poisson_inner_criterion,parameter->poisson_inner_iteration,1,1,newcomm,MPI_COMM_WORLD,1,MPI_COMM_WORLD,0);
+
+        double mixing_parameter = 0.8;
+        if (i_iter==1) {
+            c_dcopy(2*NAtom_work,rho_atom,1,rho_atom_previous,1);
+            c_dcopy(2*NAtom_work,drho_atom_dV,1,drho_atom_dV_previous,1);
+        }
+        c_dscal(2*NAtom_work,1.0-mixing_parameter,rho_atom_previous,1);
+        c_dscal(2*NAtom_work,1.0-mixing_parameter,drho_atom_dV_previous,1);
+        c_daxpy(2*NAtom_work,mixing_parameter,rho_atom,1,rho_atom_previous,1);
+        c_daxpy(2*NAtom_work,mixing_parameter,drho_atom_dV,1,drho_atom_dV_previous,1);
+
+
+/*
+if(!iam){
+stringstream mysstream;
+mysstream << "rhofilemixed" << i_iter;
+ofstream rhofile(mysstream.str().c_str());
+for (int ig=0;ig<2*FEM->NAtom;ig++) rhofile<<rho_atom_previous[ig]<<endl;
+rhofile.close();
+}
+if(!iam){
+stringstream mysstream;
+mysstream << "drhofilemixed" << i_iter;
+ofstream rhofile(mysstream.str().c_str());
+for (int ig=0;ig<2*FEM->NAtom;ig++) rhofile<<drho_atom_dV_previous[ig]<<endl;
+rhofile.close();
+}
+*/
+
+        OMEN_Poisson_Solver->solve(Vnew,Vold,rho_atom_previous,drho_atom_dV_previous,1,NULL,FEM,Wire,Temp,&Vg,Vs,Vs,Vd,&residual,parameter->poisson_inner_criterion,parameter->poisson_inner_iteration,1,1,newcomm,MPI_COMM_WORLD,1,MPI_COMM_WORLD,0);
+//        OMEN_Poisson_Solver->solve(Vnew,Vold,rho_atom,drho_atom_dV,1,NULL,FEM,Wire,Temp,&Vg,Vs,Vs,Vd,&residual,parameter->poisson_inner_criterion,parameter->poisson_inner_iteration,1,1,newcomm,MPI_COMM_WORLD,1,MPI_COMM_WORLD,0);
+
 
 if(!iam){
 stringstream mysstream;

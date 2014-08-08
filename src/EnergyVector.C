@@ -142,16 +142,19 @@ exit(0);
 #endif
 //this is for no bias to make sure
 //muvec[0]=(muvec[0]+muvec[1])/2.0;muvec[1]=muvec[0];
-// IF ONLY CONDUCTION ELECTRONS
-singularities.energy_gs=singularities.energy_cb;
     if (!iam) cout << "TIME FOR SINGULARITIES " << get_time(sabtime) << endl;
 // determine elements in nonequilibrium range
     double k_b=K_BOLTZMANN;
-    double nonequi_start=muvec[0]-35.0*k_b*Temp;
-int integral_over_real_axis=transport_params.extra_int_param2;
+    double nonequi_start=min(muvec[0],muvec[n_mu-1])-35.0*k_b*Temp;
+// IF ONLY CONDUCTION ELECTRONS
+if (singularities.energy_cb<singularities.energy_vb) return (LOGCERR, EXIT_FAILURE);
+singularities.energy_gs=singularities.energy_cb-0.000001;
+nonequi_start=max(nonequi_start,singularities.energy_gs);
+// REAL AXIS
+int integral_over_real_axis=0;
 if (!iam) if (integral_over_real_axis) cout << "Integral over real axis" << endl;
 if (integral_over_real_axis) nonequi_start=singularities.energy_gs;
-    double nonequi_end=muvec[n_mu-1]+35.0*k_b*Temp;
+    double nonequi_end=max(muvec[0],muvec[n_mu-1])+35.0*k_b*Temp;
     std::vector<double> energylist;
     energylist.push_back(nonequi_start);
     for (uint i_energies=0;i_energies<singularities.energies.size();i_energies++)
@@ -298,6 +301,7 @@ myfile.close();
                 myfile << real(energyvector[iele]) << " " << real(stepvector[iele]) << " " << currentvector2[iele] << endl;
         myfile.close();
     }
+    if (!iam) cout << "CURRENT IS " << c_ddot(energyvector.size(),&currentvector2[0],1,(double*)&stepvector[0],2) << endl;
 
     if (tasks_per_point > 1) {
         int matrix_rank, matrix_size;

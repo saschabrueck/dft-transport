@@ -13,7 +13,15 @@ using namespace std;
 
 // k in [eV/K]
 #ifndef K_BOLTZMANN
-#define K_BOLTZMANN 8.617332478e-5;
+#define K_BOLTZMANN 8.617332478e-5
+#endif
+
+#ifndef E_ELECTRON
+#define E_ELECTRON 1.6022e-19
+#endif
+
+#ifndef H_BAR
+#define H_BAR 1.0546e-34
 #endif
 
 #ifndef ROWBLOCK
