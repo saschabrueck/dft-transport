@@ -187,6 +187,7 @@ void InjectionFeast<T>::sort_eig(CPX *kphase,CPX *Vsurf,double *dEk_dk,int *Ntr,
 
 	    kphase[IP] = CPX(0.0,1.0)*log(lambdaR[IM]);
 
+ /*
 	    for(iter=0;iter<floor(slab_per_bc/2.0);iter++){
                 kphase[IP] = 2.0*kphase[IP];
                 if(real(kphase[IP])>PI){
@@ -196,6 +197,12 @@ void InjectionFeast<T>::sort_eig(CPX *kphase,CPX *Vsurf,double *dEk_dk,int *Ntr,
                     kphase[IP] = kphase[IP]+CPX(2.0*PI,0.0);
                 }
             }
+ */
+
+// /*
+            CPX normy=CPX(1.0/c_dznrm2(ND/2,&Vsurf[IP*ND],1),0.0);
+            c_zscal(ND,normy,&Vsurf[IP*ND],1);
+// */
 	  
 	    type = get_type(T01,&Vsurf[IP*ND],kphase[IP],&dEk_dk[(*Ntr)],index_to_keep[IM],\
 			    sign);
@@ -283,19 +290,22 @@ void InjectionFeast<T>::calc_kphase(TCSR<T> *D,TCSR<T> *P,TCSR<CPX> *T01,int ND,
 
     if(loc_size>1){
 
+        int Dfindx;
         if(loc_rank==root_rank){
 	    m_size       = AF->size;
 	    n_nonzeros_A = AF->n_nonzeros;
 	    n_nonzeros_B = BF->n_nonzeros;
+            Dfindx       = D->findx;
 	}
 
 	MPI_Bcast(&m_size,1,MPI_INT,root_rank,comm);
 	MPI_Bcast(&n_nonzeros_A,1,MPI_INT,root_rank,comm);
 	MPI_Bcast(&n_nonzeros_B,1,MPI_INT,root_rank,comm);
+	MPI_Bcast(&Dfindx,1,MPI_INT,root_rank,comm);
 
 	if(loc_rank!=root_rank){
-	    AF        = new TCSR<CPX>(m_size,n_nonzeros_A,D->findx);
-	    BF        = new TCSR<CPX>(m_size,n_nonzeros_B,D->findx);
+	    AF        = new TCSR<CPX>(m_size,n_nonzeros_A,Dfindx);
+	    BF        = new TCSR<CPX>(m_size,n_nonzeros_B,Dfindx);
 	    map_index = new int[n_nonzeros_B];
 	}
        
@@ -359,7 +369,7 @@ void InjectionFeast<T>::calc_kphase(TCSR<T> *D,TCSR<T> *P,TCSR<CPX> *T01,int ND,
 
 	    }
 
-	    transpose(TrQF,CR,ND,NM);
+/*	    transpose(TrQF,CR,ND,NM);
 
 	    AF->trans_mat_vec_mult_omp(TrQF,QF,NM,ND);
 //	    c_zgemm('C','N',NM,NM,ND,CPX(1.0,0.0),CR,ND,QF,ND,CPX(0.0,0.0),AR,NM);
@@ -372,14 +382,22 @@ void InjectionFeast<T>::calc_kphase(TCSR<T> *D,TCSR<T> *P,TCSR<CPX> *T01,int ND,
             for(IM=0;IM<NM;IM++){
                 BR[IM*(1+NM)]=c_zdotc(ND,&CR[IM*ND],1,&QF[IM*ND],1);
             }
+*/
 
             omp_set_num_threads(omp_get_max_threads()/loc_size);
 
 	    for(IM=0;IM<NM;IM++){
 
 		if((abs(lambdaR[IM])>=LBound)&&(abs(lambdaR[IM])<=UBound)){
+
+                    std::vector<double> qvec;
+                    for(IN=0;IN<ND/2;IN++){
+                        qvec.push_back(abs(pow(CR[IM*ND+IN]/CR[IM*ND+ND/2+IN],1.0/(slab_per_bc/2.0))));
+                    }
+                    std::sort(qvec.begin(),qvec.end());
+                    if(abs(qvec[ND/4]-abs(lambdaR[IM]))/abs(lambdaR[IM])<error_criterion){ 
 		  
-		    if(abs(AR[IM*(1+NM)]/BR[IM*(1+NM)]-lambdaR[IM])/abs(lambdaR[IM])*100<error_criterion){
+//		    if(abs(AR[IM*(1+NM)]/BR[IM*(1+NM)]-lambdaR[IM])/abs(lambdaR[IM])*100<error_criterion){
 
 		        if(abs(lambdaR[IM]*conj(lambdaR[IM])-CPX(1.0,0.0))<error_criterion){
 			    index_to_keep[IM]   = 2;
@@ -518,11 +536,13 @@ void InjectionFeast<T>::calc_kphase(TCSR<T> *D,TCSR<T> *P,TCSR<CPX> *T01,int ND,
         sort_eig(kphase,Vsurf,dEk_dk,Ntr,ind_Ntr,Nref,ind_Nref,T01,ND,no_search,sign);
     }
 
-    if(!mpi_rank || mpi_rank==2*loc_size-1){
+/*
+    if(mpi_rank==1999){
       for(int i=0;i<*Nref;i++){
 	cout<<"Result: "<<i<<" "<<kphase[ind_Nref[i]]<<" with sign "<<sign<<endl;
       }
     }
+*/
 
     delete[] reord_index;
     delete[] map_index;
@@ -968,8 +988,7 @@ double InjectionFeast<T>::calc_derivative(TCSR<CPX> *T01,CPX* Vin,CPX kin)
     CPX *Vout = new CPX[T01->size];
     
     T01->mat_vec_mult(Vin,Vout,1);
-    //no minus sign in dEk_dk because T01=-H01 used instead of H01
-    dEk_dk = 2.0*imag(c_zdotc(T01->size,Vin,1,Vout,1)*exp(CPX(0.0,1.0)*kin)); 
+    dEk_dk = -2.0*imag(c_zdotc(T01->size,Vin,1,Vout,1)*exp(CPX(0.0,1.0)*kin*double(slab_per_bc)/2.0)); 
 
     delete[] Vout;
     
