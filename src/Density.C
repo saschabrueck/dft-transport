@@ -358,23 +358,25 @@ if (npror!=propnum) cout << "WARNING: FOUND " << npror << " OF " << propnum << "
         }
         cout << "TIME FOR CONSTRUCTION OF S-PATTERN DENSITY MATRIX " << get_time(sabtime) << endl;
 // transmission
-        double transml=d_zer;
-        CPX *vecoutdof=new CPX[ntriblock];
         if (!matrix_rank) {
+            double transml=d_zer;
+            CPX *vecoutdof=new CPX[ntriblock];
             H1->shift_resize(0,ntriblock,ntriblock,ntriblock);
             for (int ipro=0;ipro<nprol;ipro++) {
                 H1->mat_vec_mult(&Sol[Ps->size_tot*ipro+ntriblock],vecoutdof,1);
                 transml+=4*M_PI*imag(c_zdotc(ntriblock,&Sol[Ps->size_tot*ipro],1,vecoutdof,1));
             }
+int worldrank; MPI_Comm_rank(MPI_COMM_WORLD,&worldrank);
+cout << worldrank << " Energy " << energy << " Transmission " << transml << endl;
+            delete[] vecoutdof;
             delete[] Sol;
+//            current=E_ELECTRON*E_ELECTRON/(2.0*M_PI*H_BAR)*(fermil-fermir)*transml;
+//            current=transml;
         }
         if (matrix_rank && distribute_pmat) {
             delete[] Sol;
         }
         delete H1;
-        delete[] vecoutdof;
-int worldrank; MPI_Comm_rank(MPI_COMM_WORLD,&worldrank);
-if (!matrix_rank) cout << worldrank << " Energy " << energy << " Transmission " << transml << endl;
     } else return (LOGCERR, EXIT_FAILURE);
 
     return 0;

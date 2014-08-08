@@ -74,9 +74,6 @@ Quadrature::Quadrature(quadrature_types::quadrature_type type, double start,
   if (start < end) {
     band_start = start;
     band_end = end;
-  } else if (start > end) {
-    band_start = end;
-    band_end = start;
   } else {
     my_type = quadrature_types::NONE;
   }
@@ -365,8 +362,8 @@ Quadrature::Quadrature(quadrature_types::quadrature_type type, double start,
       }
       for (uint n = 1; n <= num_abscissae; ++n) {
         double abscissa = (cos(M_PI * (2 * n - 1.0) / (2.0 * num_abscissae)) *
-                        (band_end - band_start) / 2.0 +
-                        (band_end + band_start) / 2.0);
+                        (band_start - band_end) / 2.0 +
+                        (band_start + band_end) / 2.0);
         abscissae.push_back(abscissa);
         weights.push_back(sqrt((abscissa - band_start) * (band_end - abscissa)) *
                           M_PI / num_abscissae);
