@@ -27,13 +27,10 @@ BoundarySelfEnergy::BoundarySelfEnergy()
     H1 = NULL;
     H1t = NULL;
 
-    complexenergypoint=0;
-    compute_inj=0;
+    spA = NULL;
+    spB = NULL;
 
-    bandwidth=2;
-    colzerothr=1.0E-12;
-    eps_limit=1.0E-8;
-    eps_decay=1.0E-4;
+    compute_inj=0;
 }
 
 BoundarySelfEnergy::~BoundarySelfEnergy()
@@ -75,18 +72,25 @@ int BoundarySelfEnergy::Set_master(MPI_Comm matrix_comm,MPI_Comm boundary_comm)
     return 0;
 }
 
-int BoundarySelfEnergy::Cutout(TCSR<CPX> *SumHamC,int pcontact,CPX energy,transport_methods::transport_method method,c_transport_type parameter_sab,MPI_Comm matrix_comm)
+int BoundarySelfEnergy::Cutout(TCSR<CPX> *SumHamC,int pcontact,CPX penergy,transport_methods::transport_method method,c_transport_type parameter_sab,MPI_Comm matrix_comm)
 {
-    energyp=energy;
-    if (imag(energy)) complexenergypoint=1;
+    energy=penergy;
     if (method==transport_methods::WF) compute_inj=1;
-    if (complexenergypoint && compute_inj) return (LOGCERR, EXIT_FAILURE);
+    if (imag(energy) && compute_inj) return (LOGCERR, EXIT_FAILURE);
+
+    contact=pcontact;
+    if (contact==1) {
+        inj_sign=+1;
+    } else if (contact==2) {
+        inj_sign=-1;
+    }
 
     n_cells=parameter_sab.n_cells;
     ndof=SumHamC->size_tot/n_cells;
+    bandwidth=parameter_sab.bandwidth;
+    int ndofsq=ndof*ndof;
     int ntriblock=bandwidth*ndof;
 
-    bandwidth=parameter_sab.bandwidth;
     colzerothr=parameter_sab.colzero_threshold;
     eps_limit=parameter_sab.eps_limit;
     eps_decay=parameter_sab.eps_decay;
@@ -104,33 +108,76 @@ int BoundarySelfEnergy::Cutout(TCSR<CPX> *SumHamC,int pcontact,CPX energy,transp
     }
     delete[] gathered_master_ranks;
 
-    contact=pcontact;
+    int i0,j0,i1,j1;
     if (contact==1) {
-        TCSR<CPX> *H0cut = new TCSR<CPX>(SumHamC,0,ntriblock,0,ntriblock);
-        TCSR<CPX> *H1cut = new TCSR<CPX>(SumHamC,0,ntriblock,ntriblock,ntriblock);
-        H0 = new TCSR<CPX>(H0cut,master_rank,matrix_comm);
-        H1 = new TCSR<CPX>(H1cut,master_rank,matrix_comm);
-        delete H0cut;
-        delete H1cut;
-        if (iam==master_rank) {
-            H0->shift_resize(0,ntriblock,0,ntriblock);
-            H1->shift_resize(0,ntriblock,ntriblock,ntriblock);
-            H1t = new TCSR<CPX>(H1->size,H1->n_nonzeros,H1->findx);
-            H1t->sparse_transpose(H1);
-        }
+        i0=0;
+        j0=i0;
+        i1=i0;
+        j1=j0+ntriblock;
     } else if (contact==2) {
-        TCSR<CPX> *H0cut = new TCSR<CPX>(SumHamC,SumHamC->size_tot-ntriblock,ntriblock,SumHamC->size_tot-ntriblock,ntriblock);
-        TCSR<CPX> *H1tcut = new TCSR<CPX>(SumHamC,SumHamC->size_tot-ntriblock,ntriblock,SumHamC->size_tot-ntriblock-ntriblock,ntriblock);
-        H0 = new TCSR<CPX>(H0cut,master_rank,matrix_comm);
-        H1t = new TCSR<CPX>(H1tcut,master_rank,matrix_comm);
-        delete H0cut;
-        delete H1tcut;
-        if (iam==master_rank) {
-            H0->shift_resize(SumHamC->size_tot-ntriblock,ntriblock,SumHamC->size_tot-ntriblock,ntriblock);
-            H1t->shift_resize(SumHamC->size_tot-ntriblock,ntriblock,SumHamC->size_tot-ntriblock-ntriblock,ntriblock);
-            H1 = new TCSR<CPX>(H1t->size,H1t->n_nonzeros,H1t->findx);
-            H1->sparse_transpose(H1t);
+        i0=SumHamC->size_tot-ntriblock;
+        j0=i0;
+        i1=i0;
+        j1=j0-ntriblock;
+    }
+    TCSR<CPX> *H0cut = new TCSR<CPX>(SumHamC,i0,ntriblock,j0,ntriblock);
+    TCSR<CPX> *H1cut = new TCSR<CPX>(SumHamC,i1,ntriblock,j1,ntriblock);
+    H0 = new TCSR<CPX>(H0cut,master_rank,matrix_comm);
+    H1 = new TCSR<CPX>(H1cut,master_rank,matrix_comm);
+    delete H0cut;
+    delete H1cut;
+    if (iam==master_rank) {
+        H0->shift_resize(i0,ntriblock,j0,ntriblock);
+        H1->shift_resize(i1,ntriblock,j1,ntriblock);
+        H1t = new TCSR<CPX>(H1->size,H1->n_nonzeros,H1->findx);
+        H1t->sparse_transpose(H1);
+        CPX *H = new CPX[ndofsq*(2*bandwidth+1)];
+        if (contact==1) {
+            H0->sparse_to_full(&H[bandwidth*ndofsq],ndof,ntriblock,0,0);
+            H1->sparse_to_full(&H[2*bandwidth*ndofsq],ndof,ndof,0,0);
+            for (int ibw=1;ibw<=bandwidth;ibw++)
+                full_transpose(ndof,ndof,&H[(bandwidth+ibw)*ndofsq],&H[(bandwidth-ibw)*ndofsq]);
+        } else if (contact==2) {
+            H0->sparse_to_full(&H[ndofsq],ndof,ntriblock,ntriblock-ndof,0);
+            H1->sparse_to_full(&H[0],ndof,ndof,ntriblock-ndof,ntriblock-ndof);
+            for (int ibw=1;ibw<=bandwidth;ibw++)
+                full_transpose(ndof,ndof,&H[(bandwidth-ibw)*ndofsq],&H[(bandwidth+ibw)*ndofsq]);
         }
+        TCSR<CPX> *spAu = new TCSR<CPX>(2*ntriblock,2*bandwidth*ndofsq,SumHamC->findx);
+        spAu->full_to_sparse(&H[ndofsq],ndof,2*bandwidth*ndof,0,0);
+        TCSR<CPX> *spBu = new TCSR<CPX>(2*ntriblock,ndofsq,SumHamC->findx);
+        spBu->full_to_sparse(H,ndof,ndof,0,0);
+        delete[] H;
+        spA = new TCSR<CPX>(2*ntriblock,spAu->n_nonzeros+2*ntriblock-ndof,spAu->findx);
+        c_zcopy(spAu->n_nonzeros,spAu->nnz,1,spA->nnz,1);
+        c_icopy(spAu->n_nonzeros,spAu->index_j,1,spA->index_j,1);
+        c_icopy(ndof,spAu->index_i,1,spA->index_i,1);
+        for (int i_ele=0;i_ele<2*ntriblock-ndof;i_ele++) {
+            spA->nnz[spAu->n_nonzeros+i_ele]=CPX(1.0,0.0);
+            spA->index_j[spAu->n_nonzeros+i_ele]=i_ele+spA->findx;
+            spA->index_i[ndof+i_ele]=1;
+        }
+        delete spAu;
+        spA->get_row_edge();
+        spA->get_diag_pos();
+        c_zscal(spBu->n_nonzeros,-CPX(1.0,0.0),spBu->nnz,1);
+        spB = new TCSR<CPX>(2*ntriblock,spBu->n_nonzeros+2*ntriblock-ndof,spBu->findx);
+        c_zcopy(spBu->n_nonzeros,spBu->nnz,1,spB->nnz,1);
+        c_icopy(spBu->n_nonzeros,spBu->index_j,1,spB->index_j,1);
+        c_icopy(ndof,spBu->index_i,1,spB->index_i,1);
+        for (int i_ele=0;i_ele<2*ntriblock-ndof;i_ele++) {
+            spB->nnz[spBu->n_nonzeros+i_ele]=CPX(1.0,0.0);
+            spB->index_j[spBu->n_nonzeros+i_ele]=i_ele+ndof+spB->findx;
+            spB->index_i[ndof+i_ele]=1;
+        }
+        delete spBu;
+        spB->get_row_edge();
+        spB->get_diag_pos();
+    } else {
+        delete H0;
+        delete H1;
+        H0 = NULL;
+        H1 = NULL;
     }
     return 0;
 }
@@ -155,9 +202,6 @@ void BoundarySelfEnergy::Distribute(TCSR<CPX> *SumHamC,MPI_Comm matrix_comm)
     spsigmadist = new TCSR<CPX>(SumHamC,spsigma,master_rank,matrix_comm);
     if (iam==master_rank) {
         delete spsigma;
-        delete H0;
-        delete H1;
-        delete H1t;
     }
 
     if (compute_inj) {
@@ -191,14 +235,9 @@ int BoundarySelfEnergy::GetSigma(MPI_Comm boundary_comm)
     CPX z_zer=CPX(d_zer,d_zer);
     double sabtime;
     int iinfo=0;
-// inj_sign
-    int inj_sign;
-    if (contact==1) {
-        inj_sign=+1;
-    } else if (contact==2) {
-        inj_sign=-1;
-    }
 // set parameters
+    int complexenergypoint=0;
+    if (imag(energy)) complexenergypoint=1;
     int ndofsq=ndof*ndof;
     int nblocksband=2*bandwidth+1;
     int ntriblock=bandwidth*ndof;
@@ -224,13 +263,11 @@ int BoundarySelfEnergy::GetSigma(MPI_Comm boundary_comm)
         velref=new double[ntriblock];
     }
 // FEAST
-//    if (!complexenergypoint) {
-    if (0) {
+    int do_feast=0;
+    if (do_feast) {
         InjectionFeast<CPX> *k_inj = new InjectionFeast<CPX>(complexenergypoint,2*bandwidth,10);
         int neigfeast=45;
         k_inj->initialize(2*ntriblock,2*ntriblock,neigfeast);
-        TCSR<CPX> *spA = NULL;
-        TCSR<CPX> *spB = NULL;
         int Ntr;
         int Nref;
         int *ind_Ntr;
@@ -238,60 +275,19 @@ int BoundarySelfEnergy::GetSigma(MPI_Comm boundary_comm)
         CPX* eigvalcpx;
         CPX* eigvec;
         if (!boundary_rank) {
-            TCSR<CPX> *H1u = new TCSR<CPX>(H1t,0,ndof,0,ndof);
-            c_zscal(H1u->n_nonzeros,-z_one,H1u->nnz,1);
-            spB = new TCSR<CPX>(2*ntriblock,H1u->n_nonzeros+2*ntriblock-ndof,H1u->findx);
-            c_zcopy(H1u->n_nonzeros,H1u->nnz,1,spB->nnz,1);
-            c_icopy(H1u->n_nonzeros,H1u->index_j,1,spB->index_j,1);
-            c_icopy(ndof,H1u->index_i,1,spB->index_i,1);
-            for (int i_ele=0;i_ele<2*ntriblock-ndof;i_ele++) {
-                spB->nnz[H1u->n_nonzeros+i_ele]=z_one;
-                spB->index_j[H1u->n_nonzeros+i_ele]=i_ele+ndof+spB->findx;
-                spB->index_i[ndof+i_ele]=1;
-            }
-            delete H1u;
-            spB->get_row_edge();
-            spB->get_diag_pos();
-            TCSR<CPX> *H1tu = new TCSR<CPX>(H1t,0,ndof,ndof,ntriblock-ndof);
-            for (int e=0;e<H1tu->n_nonzeros;e++) {
-                H1tu->index_j[e]-=ndof;
-            }
-            H1tu->size_tot=2*ntriblock;
-            TCSR<CPX> *H0u = new TCSR<CPX>(H0,0,ndof,0,ntriblock);
-            for (int e=0;e<H0u->n_nonzeros;e++) {
-                H0u->index_j[e]+=ntriblock-ndof;
-            }
-            H0u->size_tot=2*ntriblock;
-            TCSR<CPX> *Hsu = new TCSR<CPX>(z_one,H1tu,z_one,H0u);
-            delete H1tu;
-            delete H0u;
-            TCSR<CPX> *H1su = new TCSR<CPX>(H1,0,ndof,0,ndof);
-            for (int e=0;e<H1su->n_nonzeros;e++) {
-                H1su->index_j[e]+=2*ntriblock-ndof;
-            }
-            H1su->size_tot=2*ntriblock;
-            TCSR<CPX> *Hu = new TCSR<CPX>(z_one,Hsu,z_one,H1su);
-            delete Hsu;
-            delete H1su;
-            spA = new TCSR<CPX>(2*ntriblock,Hu->n_nonzeros+2*ntriblock-ndof,Hu->findx);
-            c_zcopy(Hu->n_nonzeros,Hu->nnz,1,spA->nnz,1);
-            c_icopy(Hu->n_nonzeros,Hu->index_j,1,spA->index_j,1);
-            c_icopy(ndof,Hu->index_i,1,spA->index_i,1);
-            for (int i_ele=0;i_ele<2*ntriblock-ndof;i_ele++) {
-                spA->nnz[Hu->n_nonzeros+i_ele]=z_one;
-                spA->index_j[Hu->n_nonzeros+i_ele]=i_ele+spA->findx;
-                spA->index_i[ndof+i_ele]=1;
-            }
-            delete Hu;
-            spA->get_row_edge();
-            spA->get_diag_pos();
             ind_Ntr   = new int[ntriblock];
             ind_Nref  = new int[ntriblock];
             eigvec    = new CPX[2*ntriblock*ntriblock];
             eigvalcpx = new CPX[ntriblock];
         }
         sabtime=get_time(d_zer);
-        k_inj->calc_kphase(spA,spB,H1,2*ntriblock,2*ntriblock,eigvalcpx,eigvec,velref,&Ntr,ind_Ntr,&Nref,ind_Nref,inj_sign,1,1,boundary_comm,&iinfo);
+        TCSR<CPX> *H1v; //DO I NEED THIS AT ALL OR IS IT THE SAME AND I CAN JUST CHANGE DERIVATIVE SO THAT THERE THE INJ_SIGN IS INCLUDED
+        if (inj_sign==1) {
+            H1v=H1;
+        } else if (inj_sign==-1) {
+            H1v=H1t;
+        }
+        k_inj->calc_kphase(spA,spB,H1v,2*ntriblock,2*ntriblock,eigvalcpx,eigvec,velref,&Ntr,ind_Ntr,&Nref,ind_Nref,inj_sign,1,1,boundary_comm,&iinfo);
         cout << "TIME FOR FEAST " << get_time(sabtime) << endl;
         delete k_inj;
         if (!boundary_rank) {
@@ -335,27 +331,36 @@ int BoundarySelfEnergy::GetSigma(MPI_Comm boundary_comm)
     } else {
         CPX* KScpx;
         if (!boundary_rank) {
-            KScpx=new CPX[ndofsq*nblocksband];
-            H1t->sparse_to_full(KScpx,ndof,bandwidth*ndof);
-            H0->sparse_to_full(&KScpx[bandwidth*ndofsq],ndof,bandwidth*ndof);
-            H1->sparse_to_full(&KScpx[2*bandwidth*ndofsq],ndof,ndof);
+            KScpx = new CPX[ndofsq*nblocksband];
+            spA->sparse_to_full(&KScpx[ndofsq],ndof,2*bandwidth*ndof);
+            spB->sparse_to_full(KScpx,ndof,ndof);
+            c_zscal(ndofsq,-z_one,KScpx,1);
+            delete spA;
+            delete spB;
         }
         InjectionIEV inj_iev;
-        inj_iev.Compute(KScpx,Vtra,Vref,lambdatra,lambdaref,ndectra,ndecref,nprotra,nproref,veltra,velref,ndof,bandwidth,inj_sign,complexenergypoint,colzerothr,eps_limit,eps_decay,energyp,boundary_comm);
+        inj_iev.Compute(KScpx,Vtra,Vref,lambdatra,lambdaref,ndectra,ndecref,nprotra,nproref,veltra,velref,ndof,bandwidth,inj_sign,complexenergypoint,colzerothr,eps_limit,eps_decay,boundary_comm);
         if (!boundary_rank) {
             delete[] KScpx;
         }
     }
-TCSR<CPX> *Hch;
-if (contact==1){
-Hch=H1;
-H1=H1t;
-H1t=Hch;
+int worldrank; MPI_Comm_rank(MPI_COMM_WORLD,&worldrank);
+if (!boundary_rank) cout<<worldrank<<" AT "<<real(energy)<<" NPROTRA "<<nprotra<<" NPROREF "<<nproref<<" NDECTRA "<<ndectra<<" NDECREF "<<ndecref<<" SIGN "<<inj_sign<<endl;
+if (!boundary_rank) {
+int worldrank; MPI_Comm_rank(MPI_COMM_WORLD,&worldrank);
+ofstream myfile;
+stringstream mysstream;
+mysstream << "AllEigvals" << worldrank << "_" << inj_sign;
+myfile.open(mysstream.str().c_str());
+myfile.precision(15);
+for (int iele=0;iele<nproref+ndecref;iele++)
+    myfile << real(lambdaref[iele]) << " " << imag(lambdaref[iele]) << endl;
+myfile.close();
 }
 if (!boundary_rank) {
     if (nprotra!=nproref) return (LOGCERR, EXIT_FAILURE);
-    if (ndectra!=ndecref) ndectra=min(ndectra,ndecref);
-    int neigbas=nprotra+ndectra;
+    if (ndectra!=ndecref) ndecref=min(ndectra,ndecref);//NEEDED?
+    int neigbas=nproref+ndecref;
     CPX *VT=new CPX[neigbas*ntriblock];
     CPX *matcpx=new CPX[ntriblock*neigbas];
     CPX *invgrs=new CPX[neigbas*neigbas];
@@ -363,7 +368,7 @@ if (!boundary_rank) {
     int dotheh0ph1 = 1;
     if (dotheh0ph1) {
         full_transpose(neigbas,ntriblock,Vref,VT);
-        H1->trans_mat_vec_mult(VT,matcpx,neigbas,1);
+        H1t->trans_mat_vec_mult(VT,matcpx,neigbas,1);
         c_zgemm('T','N',neigbas,neigbas,ntriblock,z_one,Vref,ntriblock,matcpx,ntriblock,z_zer,invgrs,neigbas);
         for (int ieigbas=0;ieigbas<neigbas;ieigbas++)
             c_zscal(neigbas,pow(lambdaref[ieigbas],+inj_sign*bandwidth),&invgrs[ieigbas*neigbas],1);
@@ -371,7 +376,7 @@ if (!boundary_rank) {
         c_zgemm('T','N',neigbas,neigbas,ntriblock,z_one,Vref,ntriblock,matcpx,ntriblock,z_one,invgrs,neigbas);
     } else {
         full_transpose(neigbas,ntriblock,Vref,VT);
-        H1t->trans_mat_vec_mult(VT,matcpx,neigbas,1);
+        H1->trans_mat_vec_mult(VT,matcpx,neigbas,1);
         c_zgemm('T','N',neigbas,neigbas,ntriblock,-z_one,Vref,ntriblock,matcpx,ntriblock,z_zer,invgrs,neigbas);
         for (int ieigbas=0;ieigbas<neigbas;ieigbas++)
             c_zscal(neigbas,pow(lambdaref[ieigbas],-inj_sign*bandwidth),&invgrs[ieigbas*neigbas],1);
@@ -406,12 +411,12 @@ if (!boundary_rank) {
         c_zgemm('N','N',ntriblock,ntriblock,neigbas,z_one,Vref,ntriblock,RCOR,neigbas,z_zer,sigma,ntriblock);
 // i wouldnt need all the transpose if g00R, which is contained in sigma, was symmetric
         full_transpose(ntriblock,ntriblock,sigma,matctri);
-        H1->trans_mat_vec_mult(matctri,presigma,ntriblock,1);
-        H1->trans_mat_vec_mult(presigma,matctri,ntriblock,1);
+        H1t->trans_mat_vec_mult(matctri,presigma,ntriblock,1);
+        H1t->trans_mat_vec_mult(presigma,matctri,ntriblock,1);
         full_transpose(ntriblock,ntriblock,matctri,sigma);
     } else {
         CPX* LCOR = new CPX[ntriblock*neigbas];
-        H1->mat_vec_mult(Vref,LCOR,neigbas);
+        H1t->mat_vec_mult(Vref,LCOR,neigbas);
         full_transpose(neigbas,ntriblock,LCOR,RCOR);
         c_zgetrs('N',neigbas,ntriblock,invgrs,neigbas,pivarrayg,RCOR,neigbas,&iinfo);
         if (iinfo) return (LOGCERR, EXIT_FAILURE);
@@ -442,20 +447,20 @@ if (!boundary_rank) {
         delete[] works;
         delete[] pivarrays;
         full_transpose(ntriblock,ntriblock,matctri,sigma);
-        H1->trans_mat_vec_mult(sigma,presigma,ntriblock,1);
-        H1->trans_mat_vec_mult(presigma,matctri,ntriblock,1);
+        H1t->trans_mat_vec_mult(sigma,presigma,ntriblock,1);
+        H1t->trans_mat_vec_mult(presigma,matctri,ntriblock,1);
         full_transpose(ntriblock,ntriblock,matctri,sigma);
     } else {
         H0->sparse_to_full(matctri,ntriblock,ntriblock);
         c_zaxpy(triblocksize,-z_one,sigma,1,matctri,1);
         c_zgetrf(ntriblock,ntriblock,matctri,ntriblock,pivarrays,&iinfo);
         if (iinfo) return (LOGCERR, EXIT_FAILURE);
-        H1t->sparse_to_full(sigma,ntriblock,ntriblock);
+        H1->sparse_to_full(sigma,ntriblock,ntriblock);
         c_zgetrs('T',ntriblock,ntriblock,matctri,ntriblock,pivarrays,sigma,ntriblock,&iinfo);
         if (iinfo) return (LOGCERR, EXIT_FAILURE);
         delete[] pivarrays;
         full_transpose(ntriblock,ntriblock,sigma,presigma);
-        H1->trans_mat_vec_mult(presigma,matctri,ntriblock,1);
+        H1t->trans_mat_vec_mult(presigma,matctri,ntriblock,1);
         full_transpose(ntriblock,ntriblock,matctri,sigma);
     }
     cout << "TIME FOR SYMMETRIZATION " << get_time(sabtime) << endl;
@@ -471,9 +476,8 @@ if (!boundary_rank) {
         lambdapro = new CPX[nprotra];
         for (int ipro=0;ipro<nprotra;ipro++) {
             lambdapro[ipro]=pow(lambdaref[ipro],-inj_sign);
-//it seems to be exactly the same no matter what sign i use here
         }
-        H1->mat_vec_mult(Vref,inj,nprotra);
+        H1t->mat_vec_mult(Vref,inj,nprotra);
         CPX *injr1=new CPX[ntriblock*nprotra];
         c_zcopy(ntriblock*nprotra,inj,1,injr1,1);
         for (int ipro=0;ipro<nprotra;ipro++) {
@@ -495,6 +499,9 @@ if (!boundary_rank) {
     delete[] lambdaref;
     delete[] veltra;
     delete[] velref;
+    delete H0;
+    delete H1;
+    delete H1t;
 }//end if !boundary_rank
     return 0;
 }

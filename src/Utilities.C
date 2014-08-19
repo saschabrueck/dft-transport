@@ -527,7 +527,7 @@ double fermi(double E,double mu,double temp,int mode)
             return log(1.0+exp(-(E-mu)/(k_b*temp)));
         }
     } else if (mode==2) {
-        if (temp<=0.0) {
+        if (temp<=0.0 || abs(E-mu)>10.0) { // CHECK WHY -nan FOR >10.0
             return 0.0;
         } else {
             return exp((E-mu)/(k_b*temp))/(k_b*temp)/pow(1.0+exp((E-mu)/(k_b*temp)),2);

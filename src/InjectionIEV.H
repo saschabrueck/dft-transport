@@ -15,7 +15,7 @@ class InjectionIEV {
 public:
 InjectionIEV();
 ~InjectionIEV();
-int Compute(CPX*,CPX*,CPX*,CPX*,CPX*,int&,int&,int&,int&,double*,double*,int,int,int,int,double,double,double,CPX,MPI_Comm);
+int Compute(CPX*,CPX*,CPX*,CPX*,CPX*,int&,int&,int&,int&,double*,double*,int,int,int,int,double,double,double,MPI_Comm);
 private:
 int Pascal(int,int);
 };
@@ -37,7 +37,7 @@ int InjectionIEV::Pascal(int r,int n)
     return Pascal( r - 1, n - 1 ) + Pascal( r, n - 1 );
 }
 
-int InjectionIEV::Compute(CPX* KScpx,CPX* Vtra,CPX* Vref,CPX* lambdatra,CPX* lambdaref,int& ndectra,int& ndecref,int& nprotra,int& nproref,double* veltra,double* velref,int ndof,int bandwidth,int inj_sign,int complexenergypoint,double colzerothr,double eps_limit,double eps_decay,CPX energyp,MPI_Comm boundary_comm)
+int InjectionIEV::Compute(CPX* KScpx,CPX* Vtra,CPX* Vref,CPX* lambdatra,CPX* lambdaref,int& ndectra,int& ndecref,int& nprotra,int& nproref,double* veltra,double* velref,int ndof,int bandwidth,int inj_sign,int complexenergypoint,double colzerothr,double eps_limit,double eps_decay,MPI_Comm boundary_comm)
 {
     int boundary_rank,boundary_size;
     MPI_Comm_rank(boundary_comm,&boundary_rank);
@@ -266,19 +266,6 @@ if (!boundary_rank) {
     delete[] eigvalcpx; 
     delete[] matcdof;
     delete[] vecout;
-int worldrank; MPI_Comm_rank(MPI_COMM_WORLD,&worldrank);
-if (nprotra) { cout<<worldrank<<" AT "<<real(energyp)<<" NPROTRA "<<nprotra<<" NPROREF "<<nproref<<" NDECTRA "<<ndectra<<" NDECREF "<<ndecref<<endl; } else cout<<worldrank<<" FOUND NONE"<<endl;
-for (int iout=0;iout<nprotra;iout++) cout<<worldrank<<" VALUE "<<lambdavec[protravec[iout]]<<endl;
-#ifdef _ALLEIGVALS_WRITEOUT
-ofstream myfile;
-stringstream mysstream;
-mysstream << "AllEigvals" << worldrank;
-myfile.open(mysstream.str().c_str());
-myfile.precision(15);
-for (int iele=0;iele<neigval;iele++)
-    myfile << real(lambdavec[iele]) << " " << imag(lambdavec[iele]) << endl;
-myfile.close();
-#endif
     CPX normy;
     for (int ipro=0;ipro<nprotra;ipro++) {
         lambdatra[ipro]=lambdavec[protravec[ipro]];
