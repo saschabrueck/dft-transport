@@ -246,9 +246,20 @@ if (!iam) {
 ofstream myfile("Propagating");
 for (uint ii=0;ii<energyvector.size();ii++) myfile << real(energyvector[ii]) << " " << propagating[ii].size() << endl;
 myfile.close();
+for (uint ii=0;ii<energyvector.size();ii++) {
+stringstream mysstream;
+mysstream << "PropEigval" << ii;
+myfile.open(mysstream.str().c_str());
+for (uint jj=0;jj<propagating[ii].size();jj++) {
+myfile << real(propagating[ii][jj]) << " " << imag(propagating[ii][jj]) << endl;
+}
+myfile.close();
+}
 }
 // run distributed
     std::vector<double> currentvector(energyvector.size(),0.0);
+    std::vector<double> transmission(energyvector.size(),0.0);
+    std::vector<double> dos_profile(energyvector.size(),0.0);
     double *eperatom = new double[n_atoms]();
     double *dperatom = new double[n_atoms]();
     int ndof=Overlap->size_tot/n_cells;
@@ -265,7 +276,7 @@ myfile.close();
 //    for (int iseq=0;iseq<1;iseq++)
         if ( (jpos=matrix_id+iseq*n_mat_comm)<energyvector.size())
             if (abs(stepvector[jpos])>0.0)
-                if (density(KohnShamCollect,OverlapCollect,OverlapCollectPBC,Ps,energyvector[jpos],stepvector[jpos],methodvector[jpos],n_mu,muvec,contactvec,currentvector[jpos],propagating_sizes[jpos],atom_of_bf,eperatom,dperatom,transport_params,distribute_pmat,matrix_comm))
+                if (density(KohnShamCollect,OverlapCollect,OverlapCollectPBC,Ps,energyvector[jpos],stepvector[jpos],methodvector[jpos],n_mu,muvec,contactvec,currentvector[jpos],transmission[jpos],dos_profile[jpos],propagating_sizes[jpos],atom_of_bf,eperatom,dperatom,transport_params,distribute_pmat,matrix_comm))
                     return (LOGCERR, EXIT_FAILURE);
     delete KohnShamCollect;
     delete OverlapCollect;
@@ -292,13 +303,25 @@ myfile.close();
 // trPS per energy point
     ofstream myfile;
     std::vector<double> currentvector2(energyvector.size(),0.0);
+    std::vector<double> transmission2(energyvector.size(),0.0);
+    std::vector<double> dos_profile2(energyvector.size(),0.0);
     MPI_Allreduce(&currentvector[0],&currentvector2[0],energyvector.size(),MPI_DOUBLE,MPI_SUM,MPI_COMM_WORLD);
+    MPI_Allreduce(&transmission[0],&transmission2[0],energyvector.size(),MPI_DOUBLE,MPI_SUM,MPI_COMM_WORLD);
+    MPI_Allreduce(&dos_profile[0],&dos_profile2[0],energyvector.size(),MPI_DOUBLE,MPI_SUM,MPI_COMM_WORLD);
     if (!iam) {
         myfile.open("DOS_Profile");
         myfile.precision(15);
         for (uint iele=0;iele<energyvector.size();iele++)
             if (abs(stepvector[iele])>0.0)
-                myfile << real(energyvector[iele]) << " " << real(stepvector[iele]) << " " << currentvector2[iele] << endl;
+                myfile << real(energyvector[iele]) << " " << real(stepvector[iele]) << " " << dos_profile2[iele] << endl;
+        myfile.close();
+    }
+    if (!iam) {
+        myfile.open("Transmission");
+        myfile.precision(15);
+        for (uint iele=0;iele<energyvector.size();iele++)
+            if (abs(stepvector[iele])>0.0)
+                myfile << real(energyvector[iele]) << " " << real(stepvector[iele]) << " " << transmission2[iele] << endl;
         myfile.close();
     }
     if (!iam) cout << "CURRENT IS " << c_ddot(energyvector.size(),&currentvector2[0],1,(double*)&stepvector[0],2) << endl;

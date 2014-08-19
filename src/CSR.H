@@ -127,6 +127,7 @@ public:
     void sparse_transpose(TCSR<T> *mat);
     void extract_lower_triangle(TCSR<T>*);
     void extract_upper_triangle(TCSR<T>*);
+    void sparse_to_full(T*,int,int,int,int);
 // sab end
     void set_nnz(int,T*);
     void set_index_i(int,int*);
@@ -1717,6 +1718,24 @@ void TCSR<T>::sparse_to_full(T *B,int nrow,int ncol)
         for(e=edge_i[i]-findx;e<edge_i[i+1]-findx;e++){
             if ((j=index_j[e]-findx)<ncol){
                 B[i+j*nrow] = nnz[e];
+            }
+        }
+    }
+}
+
+/*SAB********************************************************************************************/
+
+template <class T>
+void TCSR<T>::sparse_to_full(T *B,int nrow,int ncol,int ipos, int jpos)
+{
+    int i,j,e;
+
+    init_variable(B,nrow*ncol);
+    for(i=ipos;i<min(ipos+nrow,size);i++){
+        for(e=edge_i[i]-findx;e<edge_i[i+1]-findx;e++){
+            j=index_j[e]-findx-jpos;
+            if (j>=0 && j<ncol){
+                B[i-ipos+j*nrow] = nnz[e];
             }
         }
     }

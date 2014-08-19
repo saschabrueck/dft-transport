@@ -46,7 +46,7 @@ double *curvatures_matrix;
 
 double min_parabola(int,double*,double*,int,double&);
 int determine_velocities(CPX*,CPX*,double,double*,double*,double*);
-void determine_fermi(double&,double,double);
+double determine_fermi(double,double);
 int eigen(CPX*,CPX*,CPX*,CPX*,CPX,double*);
 void write_bandstructure(int);
 void follow_band();

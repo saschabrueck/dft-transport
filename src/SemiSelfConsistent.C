@@ -2,6 +2,7 @@
 #include "Poisson.H"
 #include "GetSingularities.H"
 #include <numeric>
+#include <iterator>
 
 extern WireStructure *nanowire;
 extern WireGenerator* Wire;
@@ -104,6 +105,14 @@ if (!iam) cout << "GATE POTENTIAL " << Vg << endl;
             Vnew[IX] = -Vd+dV;
         }
     }
+/*
+{
+ifstream evecfile("OMENpotfilebefore0");
+istream_iterator<double> start_evec(evecfile), end_evec;
+std::copy(start_evec,end_evec,Vnew);
+evecfile.close();
+}
+*/
     c_dcopy(FEM->NGrid,Vnew,1,Vold,1);
 
     double *Overlap_nnz = new double[Overlap->n_nonzeros];
@@ -116,6 +125,7 @@ if (!iam) cout << "GATE POTENTIAL " << Vg << endl;
     int max_iter=parameter->poisson_iteration;
     for (int i_iter=1;i_iter<=max_iter;i_iter++) {
 
+        double sabtime=get_time(0.0);
         c_dcopy(Overlap->n_nonzeros,Overlap_nnz,1,Overlap->nnz,1);
         for (int ibf=0;ibf<Overlap->size_tot;ibf++) {
             Vbf[ibf]=Vnew[FEM->real_at_index[atom_of_bf[ibf]]];
@@ -130,14 +140,20 @@ if (!iam) cout << "GATE POTENTIAL " << Vg << endl;
         if (energyvector(Overlap,KohnShamPot,n_mu,muvec,contactvec,dopingvec,rho_atom,drho_atom_dV,FEM->NAtom,atom_of_bf,transport_params)) return (LOGCERR, EXIT_FAILURE);
         delete KohnShamPot;
 
+        if (!iam) cout << "TIME FOR SCHROEDINGER " << get_time(sabtime) << endl;
+
 stringstream dosstream;
 dosstream << "DOS_Profile" << i_iter;
 rename("DOS_Profile",dosstream.str().c_str());
 stringstream sinstream;
 sinstream << "SingularityList" << i_iter;
 rename("SingularityList",sinstream.str().c_str());
+stringstream trastream;
+trastream << "Transmission" << i_iter;
+rename("Transmission",trastream.str().c_str());
 
 ///*
+        sabtime=get_time(0.0);
         TCSR<double> *DensityCollect = new TCSR<double>(Overlap,MPI_COMM_WORLD);
         double *rho_grid_tmp = new double[FEM->NGrid]();
         double* xyz_atoms = new double[3*FEM->NAtom];
@@ -145,14 +161,13 @@ rename("SingularityList",sinstream.str().c_str());
         c_dlacpy('A',3,FEM->NAtom,Wire->Layer_Matrix,7,xyz_atoms,3);
         c_dcopy(3*FEM->NGrid,FEM->grid,1,xyz_grid,1);
         int ngridproc=FEM->NGrid/procs+1;
-        double sabtime=get_time(0.0);
         for (int ix=iam*ngridproc;ix<min((iam+1)*ngridproc,FEM->NGrid);ix++) {
             rho_grid_tmp[ix]=DensityCollect->collect_density(&xyz_grid[3*ix],xyz_atoms,atom_of_bf);
         }
-        cout << "TIME FOR COLLECT DENSITY ON " << iam << " IS " << get_time(sabtime) << endl;
         delete DensityCollect;
         double *rho_grid = new double[FEM->NGrid];
         MPI_Allreduce(rho_grid_tmp,rho_grid,FEM->NGrid,MPI_DOUBLE,MPI_SUM,MPI_COMM_WORLD);
+        if (!iam) cout << "TIME FOR COLLECT DENSITY " << get_time(sabtime) << endl;
 
 if(!iam){
 stringstream mysstream;

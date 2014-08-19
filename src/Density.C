@@ -12,6 +12,7 @@ using namespace std;
 #include "LinearSolver.H"
 #include "Umfpack.H"
 #include "MUMPS.H"
+#include "SuperLU.H"
 #include "Pardiso.H"
 #include "tmprGF.H"
 #include "GetSigma.H"
@@ -25,7 +26,7 @@ int ldlt_free__(int *);
 int ldlt_blkselinv__(int *, int*, int*, CPX *, int*);
 }
 
-int density(TCSR<double> *KohnSham,TCSR<double> *Overlap,TCSR<double> *OverlapPBC,TCSR<double> *Ps,CPX energy,CPX weight,transport_methods::transport_method method,int n_mu,double *muvec,int *contactvec,double &current,int propnum,int *atom_of_bf,double *erhoperatom,double *drhoperatom,c_transport_type parameter_sab,int distribute_pmat,MPI_Comm matrix_comm)
+int density(TCSR<double> *KohnSham,TCSR<double> *Overlap,TCSR<double> *OverlapPBC,TCSR<double> *Ps,CPX energy,CPX weight,transport_methods::transport_method method,int n_mu,double *muvec,int *contactvec,double &current,double &transml,double &dos,int propnum,int *atom_of_bf,double *erhoperatom,double *drhoperatom,c_transport_type parameter_sab,int distribute_pmat,MPI_Comm matrix_comm)
 {
     double d_one=1.0;
     double d_zer=0.0;
@@ -239,7 +240,8 @@ if (npror!=propnum) cout << "WARNING: FOUND " << npror << " OF " << propnum << "
         } else return (LOGCERR, EXIT_FAILURE);
         cout << "TIME FOR SPARSE INVERSION " << get_time(sabtime) << endl;
     } else if (method==transport_methods::WF) {
-        TCSR<CPX> *H1cut = new TCSR<CPX>(HamSig,0,ntriblock,ntriblock,ntriblock);
+        int tra_block=0;
+        TCSR<CPX> *H1cut = new TCSR<CPX>(HamSig,tra_block*ntriblock,ntriblock,(tra_block+1)*ntriblock,ntriblock);
         TCSR<CPX> *H1 = new TCSR<CPX>(H1cut,0,matrix_comm);
         delete H1cut;
         sabtime=get_time(d_zer);
@@ -259,8 +261,11 @@ if (npror!=propnum) cout << "WARNING: FOUND " << npror << " OF " << propnum << "
             delete[] inj;
             LinearSolver<CPX>* solver;
             int do_umfpack=0;
+            int do_superlu=0;
             if (matrix_procs==1 && do_umfpack==1) {
                 solver = new Umfpack<CPX>(HamSig,matrix_comm);
+            } else if (do_superlu==1) {
+                solver = new SuperLU<CPX>(HamSig,matrix_comm);
             } else {
                 solver = new MUMPS<CPX>(HamSig,matrix_comm,2);
             }
@@ -336,7 +341,7 @@ if (npror!=propnum) cout << "WARNING: FOUND " << npror << " OF " << propnum << "
         if (distribute_pmat || matrix_procs==1) {
             Ps->psipsidagger(Sol,Soll,Solr,nprol,ndof,bandwidth,+weight*fermil);
             Ps->psipsidagger(&Sol[Ps->size_tot*nprol],&Soll[Ps->size_tot*nprol],&Solr[Ps->size_tot*nprol],npror,ndof,bandwidth,+weight*fermir);
-            current=Overlap->psipsidagger(Sol,nprol+npror);
+            dos=Overlap->psipsidagger(Sol,nprol+npror);
             Overlap->psipsidagger(Sol,nprol,+2.0*weight*fermil,atom_of_bf,erhoperatom);
             OverlapPBC->psipsidagger(Sol,Soll,nprol,+2.0*weight*fermil,atom_of_bf,erhoperatom);
             OverlapPBC->psipsidagger(Sol,Solr,nprol,+2.0*weight*fermil,atom_of_bf,erhoperatom);
@@ -353,25 +358,22 @@ if (npror!=propnum) cout << "WARNING: FOUND " << npror << " OF " << propnum << "
             if (!matrix_rank) {
                 Ps->psipsidagger(Sol,Soll,Solr,nprol,ndof,bandwidth,+weight*fermil);
                 Ps->psipsidagger(&Sol[Ps->size_tot*nprol],&Soll[Ps->size_tot*nprol],&Solr[Ps->size_tot*nprol],npror,ndof,bandwidth,+weight*fermir);
-                current=Overlap->psipsidagger(Sol,nprol+npror);
+                dos=Overlap->psipsidagger(Sol,nprol+npror);
             }
         }
         cout << "TIME FOR CONSTRUCTION OF S-PATTERN DENSITY MATRIX " << get_time(sabtime) << endl;
 // transmission
         if (!matrix_rank) {
-            double transml=d_zer;
+            transml=d_zer;
             CPX *vecoutdof=new CPX[ntriblock];
-            H1->shift_resize(0,ntriblock,ntriblock,ntriblock);
+            H1->shift_resize(tra_block*ntriblock,ntriblock,(tra_block+1)*ntriblock,ntriblock);
             for (int ipro=0;ipro<nprol;ipro++) {
-                H1->mat_vec_mult(&Sol[Ps->size_tot*ipro+ntriblock],vecoutdof,1);
-                transml+=4*M_PI*imag(c_zdotc(ntriblock,&Sol[Ps->size_tot*ipro],1,vecoutdof,1));
+                H1->mat_vec_mult(&Sol[Ps->size_tot*ipro+(tra_block+1)*ntriblock],vecoutdof,1);
+                transml+=4*M_PI*imag(c_zdotc(ntriblock,&Sol[Ps->size_tot*ipro+tra_block*ntriblock],1,vecoutdof,1));
             }
-int worldrank; MPI_Comm_rank(MPI_COMM_WORLD,&worldrank);
-cout << worldrank << " Energy " << energy << " Transmission " << transml << endl;
             delete[] vecoutdof;
             delete[] Sol;
-//            current=E_ELECTRON*E_ELECTRON/(2.0*M_PI*H_BAR)*(fermil-fermir)*transml;
-//            current=transml;
+            current=2.0*E_ELECTRON*E_ELECTRON/(2.0*M_PI*H_BAR)*(fermil-fermir)*transml;
         }
         if (matrix_rank && distribute_pmat) {
             delete[] Sol;

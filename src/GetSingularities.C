@@ -100,7 +100,7 @@ int Singularities::Execute(TCSR<double> *KohnSham,TCSR<double> *Overlap,int n_mu
         MPI_Gather(derivatives_local,ndof*seq_per_cpu,MPI_DOUBLE,derivatives_matrix,ndof*seq_per_cpu,MPI_DOUBLE,0,MPI_COMM_WORLD);
         MPI_Gather(curvatures_local,ndof*seq_per_cpu,MPI_DOUBLE,curvatures_matrix,ndof*seq_per_cpu,MPI_DOUBLE,0,MPI_COMM_WORLD);
         if (!iam) {
-            determine_fermi(muvec[i_mu],dopingvec[i_mu],Temp);
+            muvec[i_mu]=determine_fermi(dopingvec[i_mu],Temp);
             follow_band();
             write_bandstructure(i_mu);
             for (int i=0;i<ndof;i++) {
@@ -189,31 +189,35 @@ void Singularities::delete_matrices()
     }
 }
 
-void Singularities::determine_fermi(double &mu,double doping,double Temp)
+double Singularities::determine_fermi(double doping,double Temp)
 {
-    mu=(energies_matrix[noccunitcell-1]+energies_matrix[noccunitcell])/2;
-    cout << "Starting Fermi Level " << mu << endl;
+    double nocctol=1.0E-2/n_k;
+    cout << "Fermi Level / Number of Electrons with precision " << nocctol << endl;
+    double mu=(energies_matrix[noccunitcell-1]+energies_matrix[noccunitcell])/2;
     double nocciter = 0.0;
     for (int j=0;j<n_k;j++) {
         for (int i=0;i<ndof;i++) {
-            nocciter+=2.0*fermi(energies_matrix[i+j*ndof],mu,Temp,0);
+            nocciter+=2.0/n_k*fermi(energies_matrix[i+j*ndof],mu,Temp,0);
         }
     }
-    nocciter /= (double) n_k;
-    cout << "Starting Number of Electrons " << nocciter << endl;
-    double nocctol=1.0/n_k;
-    while (nocciter<2.0*noccunitcell+doping-nocctol || nocciter>2.0*noccunitcell+doping+nocctol) {
-        mu+=(2.0*noccunitcell+doping-nocciter)/10.0;
-        cout << "New Fermi Level " << mu << endl;
+    cout << mu << " / " << nocciter << endl;
+    while (abs(2.0*noccunitcell+doping-nocciter)/doping>nocctol) {
+        double dfermi=0.0;
+        for (int j=0;j<n_k;j++) {
+            for (int i=0;i<ndof;i++) {
+                dfermi+=fermi(energies_matrix[i+j*ndof],mu,Temp,2);
+            }
+        }
+        mu+=(2.0*noccunitcell+doping-nocciter)/n_k;
         nocciter=0.0;
         for (int j=0;j<n_k;j++) {
             for (int i=0;i<ndof;i++) {
-                nocciter+=2.0*fermi(energies_matrix[i+j*ndof],mu,Temp,0);
+                nocciter+=2.0/n_k*fermi(energies_matrix[i+j*ndof],mu,Temp,0);
             }
         }
-        nocciter /= (double) n_k;
-        cout << "New Number of Electrons " << nocciter << endl;
+        cout << mu << " / " << nocciter << endl;
     }
+    return mu;
 }
 
 void Singularities::follow_band()

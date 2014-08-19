@@ -36,9 +36,11 @@ int ndof;
 
 int master_rank;
 
-CPX energyp;//ONLY DEBUGGING
-int complexenergypoint;
+CPX energy;
+
 int compute_inj;
+
+int inj_sign;
 
 int n_cells;
 
@@ -52,6 +54,9 @@ double eps_decay;
 TCSR<CPX> *H0;
 TCSR<CPX> *H1;
 TCSR<CPX> *H1t;
+
+TCSR<CPX> *spA;
+TCSR<CPX> *spB;
 
 };
 
