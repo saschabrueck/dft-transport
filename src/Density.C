@@ -26,7 +26,7 @@ int ldlt_free__(int *);
 int ldlt_blkselinv__(int *, int*, int*, CPX *, int*);
 }
 
-int density(TCSR<double> *KohnSham,TCSR<double> *Overlap,TCSR<double> *OverlapPBC,TCSR<double> *Ps,CPX energy,CPX weight,transport_methods::transport_method method,int n_mu,double *muvec,int *contactvec,double &current,double &transml,double &dos,int propnum,int *atom_of_bf,double *erhoperatom,double *drhoperatom,c_transport_type parameter_sab,int distribute_pmat,MPI_Comm matrix_comm)
+int density(TCSR<double> *KohnSham,TCSR<double> *Overlap,TCSR<double> *OverlapPBC,TCSR<double> *Ps,CPX energy,CPX weight,transport_methods::transport_method method,int n_mu,double *muvec,int *contactvec,double &current,double &transm,double &dos,int propnum,int *atom_of_bf,double *erhoperatom,double *drhoperatom,c_transport_type parameter_sab,int distribute_pmat,MPI_Comm matrix_comm)
 {
     double d_one=1.0;
     double d_zer=0.0;
@@ -364,16 +364,23 @@ if (npror!=propnum) cout << "WARNING: FOUND " << npror << " OF " << propnum << "
         cout << "TIME FOR CONSTRUCTION OF S-PATTERN DENSITY MATRIX " << get_time(sabtime) << endl;
 // transmission
         if (!matrix_rank) {
-            transml=d_zer;
             CPX *vecoutdof=new CPX[ntriblock];
             H1->shift_resize(tra_block*ntriblock,ntriblock,(tra_block+1)*ntriblock,ntriblock);
+            double transml=d_zer;
             for (int ipro=0;ipro<nprol;ipro++) {
                 H1->mat_vec_mult(&Sol[Ps->size_tot*ipro+(tra_block+1)*ntriblock],vecoutdof,1);
                 transml+=4*M_PI*imag(c_zdotc(ntriblock,&Sol[Ps->size_tot*ipro+tra_block*ntriblock],1,vecoutdof,1));
             }
+            double transmr=d_zer;
+            for (int ipro=nprol;ipro<nprol+npror;ipro++) {
+                H1->mat_vec_mult(&Sol[Ps->size_tot*ipro+(tra_block+1)*ntriblock],vecoutdof,1);
+                transmr+=4*M_PI*imag(c_zdotc(ntriblock,&Sol[Ps->size_tot*ipro+tra_block*ntriblock],1,vecoutdof,1));
+            }
             delete[] vecoutdof;
             delete[] Sol;
-            current=2.0*E_ELECTRON*E_ELECTRON/(2.0*M_PI*H_BAR)*(fermil-fermir)*transml;
+            if (abs(abs(transml)-abs(transmr))>0.1) return (LOGCERR, EXIT_FAILURE);
+            transm=transml;
+            current=2.0*E_ELECTRON*E_ELECTRON/(2.0*M_PI*H_BAR)*(fermil-fermir)*transm;
         }
         if (matrix_rank && distribute_pmat) {
             delete[] Sol;
