@@ -105,14 +105,6 @@ if (!iam) cout << "GATE POTENTIAL " << Vg << endl;
             Vnew[IX] = -Vd+dV;
         }
     }
-/*
-{
-ifstream evecfile("OMENpotfilebefore0");
-istream_iterator<double> start_evec(evecfile), end_evec;
-std::copy(start_evec,end_evec,Vnew);
-evecfile.close();
-}
-*/
     c_dcopy(FEM->NGrid,Vnew,1,Vold,1);
 
     double *Overlap_nnz = new double[Overlap->n_nonzeros];
@@ -131,9 +123,6 @@ evecfile.close();
             Vbf[ibf]=Vnew[FEM->real_at_index[atom_of_bf[ibf]]];
         }
         TCSR<double> *Pot = new TCSR<double>(Overlap,Vbf);
-        for (int i_mu=0;i_mu<n_mu;i_mu++) {
-            Pot->contactdensity(Pot->size_tot/transport_params.n_cells,transport_params.bandwidth,contactvec[i_mu],0,MPI_COMM_WORLD);
-        }
         TCSR<double> *KohnShamPot = new TCSR<double>(1.0,KohnSham,1.0,Pot);
         delete Pot;
 
@@ -187,15 +176,6 @@ ofstream rhofile(mysstream.str().c_str());
 for (int ig=0;ig<2*FEM->NAtom;ig++) rhofile<<rho_atom[ig]<<endl;
 rhofile.close();
 }
-/*
-if(!iam){
-stringstream mysstream;
-mysstream << "drhofile" << i_iter;
-ofstream rhofile(mysstream.str().c_str());
-for (int ig=0;ig<2*FEM->NAtom;ig++) rhofile<<drho_atom_dV[ig]<<endl;
-rhofile.close();
-}
-*/
 
         density_new=std::accumulate(rho_atom,rho_atom+FEM->NAtom,0.0);
         if (abs(density_new-density_old)<density_criterion && residual<parameter->poisson_inner_criterion) {
@@ -216,24 +196,6 @@ rhofile.close();
         c_dscal(2*NAtom_work,1.0-mixing_parameter,drho_atom_dV_previous,1);
         c_daxpy(2*NAtom_work,mixing_parameter,rho_atom,1,rho_atom_previous,1);
         c_daxpy(2*NAtom_work,mixing_parameter,drho_atom_dV,1,drho_atom_dV_previous,1);
-
-
-/*
-if(!iam){
-stringstream mysstream;
-mysstream << "rhofilemixed" << i_iter;
-ofstream rhofile(mysstream.str().c_str());
-for (int ig=0;ig<2*FEM->NAtom;ig++) rhofile<<rho_atom_previous[ig]<<endl;
-rhofile.close();
-}
-if(!iam){
-stringstream mysstream;
-mysstream << "drhofilemixed" << i_iter;
-ofstream rhofile(mysstream.str().c_str());
-for (int ig=0;ig<2*FEM->NAtom;ig++) rhofile<<drho_atom_dV_previous[ig]<<endl;
-rhofile.close();
-}
-*/
 
         OMEN_Poisson_Solver->solve(Vnew,Vold,rho_atom_previous,drho_atom_dV_previous,1,NULL,FEM,Wire,Temp,&Vg,Vs,Vs,Vd,&residual,parameter->poisson_inner_criterion,parameter->poisson_inner_iteration,1,1,newcomm,MPI_COMM_WORLD,1,MPI_COMM_WORLD,0);
 //        OMEN_Poisson_Solver->solve(Vnew,Vold,rho_atom,drho_atom_dV,1,NULL,FEM,Wire,Temp,&Vg,Vs,Vs,Vd,&residual,parameter->poisson_inner_criterion,parameter->poisson_inner_iteration,1,1,newcomm,MPI_COMM_WORLD,1,MPI_COMM_WORLD,0);
