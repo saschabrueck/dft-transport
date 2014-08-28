@@ -43,6 +43,7 @@ int density(TCSR<double> *KohnSham,TCSR<double> *Overlap,TCSR<double> *OverlapPB
     int matrix_procs,matrix_rank;
     MPI_Comm_size(matrix_comm,&matrix_procs);
     MPI_Comm_rank(matrix_comm,&matrix_rank);
+int worldrank; MPI_Comm_rank(MPI_COMM_WORLD,&worldrank);
 // get parameters
     int ncells=parameter_sab.n_cells;
     int bandwidth=parameter_sab.bandwidth;
@@ -95,18 +96,16 @@ int density(TCSR<double> *KohnSham,TCSR<double> *Overlap,TCSR<double> *OverlapPB
             c_zcopy(nprol,selfenergies[0].lambdapro,1,lambda,1);
             c_zcopy(npror,selfenergies[1].lambdapro,1,&lambda[nprol],1);
 if (npror!=propnum) cout << "WARNING: FOUND " << npror << " OF " << propnum << " MODES AT " << real(energy) << endl;
-            if (selfenergies[0].spainjdist->n_nonzeros || selfenergies[1].spainjdist->n_nonzeros) {
-                inj = new CPX[HamSig->size*(nprol+npror)]();
-            }
+            inj = new CPX[HamSig->size*(nprol+npror)]();
             if (selfenergies[0].spainjdist->n_nonzeros) {
                 selfenergies[0].spainjdist->sparse_to_full(inj,HamSig->size,nprol);
             }
             if (selfenergies[1].spainjdist->n_nonzeros) {
                 selfenergies[1].spainjdist->sparse_to_full(&inj[HamSig->size*nprol],HamSig->size,npror);
             }
-            dist_sol=new int[matrix_procs];
+            dist_sol = new int[matrix_procs];
             MPI_Allgather(&HamSig->size,1,MPI_INT,dist_sol,1,MPI_INT,matrix_comm);
-            displc_sol=new int[matrix_procs+1]();
+            displc_sol = new int[matrix_procs+1]();
             for (int iii=1;iii<matrix_procs+1;iii++) {
                 displc_sol[iii]=displc_sol[iii-1]+dist_sol[iii-1];
             }
@@ -130,7 +129,6 @@ if (npror!=propnum) cout << "WARNING: FOUND " << npror << " OF " << propnum << "
         CPX *workyd=new CPX[lworkyd];
         c_zgetri(ntriblock,H0cpx,ntriblock,pivarrayd,workyd,lworkyd,&iinfo);
         if (iinfo) return (LOGCERR, EXIT_FAILURE);
-        cout << "TIME FOR G INVERSION " << get_time(sabtime) << endl;
         delete[] pivarrayd;
         delete[] workyd;
 //transm=-trace((sigmar-sigmar')*G*(sigmal-sigmal')*G'); i think its better not to use imag() because of symmetry error
@@ -152,7 +150,6 @@ if (npror!=propnum) cout << "WARNING: FOUND " << npror << " OF " << propnum << "
         for (int jtri=0;jtri<ntriblock;jtri++)
             for (int itri=0;itri<ntriblock;itri++)
                 trace+=-sigmar[itri*ntriblock+jtri]*sigmal[jtri*ntriblock+itri];
-        cout << "MATRIX MATRIX MULTIPLICATIONS AND TRACE FOR TRANSMISSION " << get_time(sabtime) << endl;
         cout << "Energy " << energy << " Transmission " << real(trace) << endl;
     } else if (method==transport_methods::NEGF) {
         TCSR<CPX> *HamSigG = new TCSR<CPX>(HamSig,0,matrix_comm);
@@ -238,100 +235,51 @@ if (npror!=propnum) cout << "WARNING: FOUND " << npror << " OF " << propnum << "
             }
 #endif
         } else return (LOGCERR, EXIT_FAILURE);
-        cout << "TIME FOR SPARSE INVERSION " << get_time(sabtime) << endl;
+if (!worldrank) cout << "TIME FOR SPARSE INVERSION " << get_time(sabtime) << endl;
     } else if (method==transport_methods::WF) {
         int tra_block=0;
         TCSR<CPX> *H1cut = new TCSR<CPX>(HamSig,tra_block*ntriblock,ntriblock,(tra_block+1)*ntriblock,ntriblock);
         TCSR<CPX> *H1 = new TCSR<CPX>(H1cut,0,matrix_comm);
         delete H1cut;
         sabtime=get_time(d_zer);
-        CPX *Sol = NULL;
-        CPX *Soll = NULL;
-        CPX *Solr = NULL;
+        LinearSolver<CPX>* solver;
         int solver_method=0;
-        if (solver_method==0) { 
-            CPX *Inj = NULL;
-            if (!matrix_rank) {
-                Inj = new CPX[displc_sol[matrix_procs]*(nprol+npror)];
-            }
-            if (inj==NULL) inj = new CPX[dist_sol[matrix_rank]*(nprol+npror)](); 
-            for (int icol=0;icol<nprol+npror;icol++) {
-                MPI_Gatherv(&inj[dist_sol[matrix_rank]*icol],dist_sol[matrix_rank],MPI_DOUBLE_COMPLEX,&Inj[displc_sol[matrix_procs]*icol],dist_sol,displc_sol,MPI_DOUBLE_COMPLEX,0,matrix_comm);
-            }
-            delete[] inj;
-            LinearSolver<CPX>* solver;
-            int do_umfpack=0;
-            int do_superlu=0;
-            if (matrix_procs==1 && do_umfpack==1) {
-                solver = new Umfpack<CPX>(HamSig,matrix_comm);
-            } else if (do_superlu==1) {
-                solver = new SuperLU<CPX>(HamSig,matrix_comm);
-            } else {
-                solver = new MUMPS<CPX>(HamSig,matrix_comm,2);
-            }
-            delete HamSig;
-            solver->prepare();
-            if (!matrix_rank) {
-                Sol = new CPX[displc_sol[matrix_procs]*(nprol+npror)];
-            }
-            solver->solve_equation(Sol,Inj,nprol+npror);
-            delete solver;
-            if (!matrix_rank) {
-                delete[] Inj;
-            }
-            if (distribute_pmat && matrix_procs>1) {
-                if (matrix_rank) {
-                    Sol = new CPX[displc_sol[matrix_procs]*(nprol+npror)];
-                }
-                MPI_Bcast(Sol,displc_sol[matrix_procs]*(nprol+npror),MPI_DOUBLE_COMPLEX,0,matrix_comm);
-            }
-// Create Sol+ and Sol-
-            int solsize=displc_sol[matrix_procs];
-            Soll = new CPX[solsize*(nprol+npror)]();
-            Solr = new CPX[solsize*(nprol+npror)]();
-            for (int ibw=bandwidth+1;ibw<ncells;ibw++) {
-//            for (int ibw=0;ibw<ncells;ibw++) {
-                c_zlacpy('A',ndof,nprol+npror,Sol,solsize,&Soll[ndof*ibw],solsize);
-                c_zlacpy('A',ndof,nprol+npror,&Sol[solsize-ndof],solsize,&Solr[solsize-ndof*(ibw+1)],solsize);
-                for (int ipro=0;ipro<nprol+npror;ipro++) {
-                    c_zscal(solsize,pow(lambda[ipro],-1),&Soll[ipro*solsize],1);
-                    c_zscal(solsize,pow(lambda[ipro],+1),&Solr[ipro*solsize],1);
-                }
-            }
-            delete[] lambda;
+        if (solver_method==0) {
+            solver = new SuperLU<CPX>(HamSig,matrix_comm);
         } else if (solver_method==1) {
-            if (matrix_procs != 2) {
-                printf("WARNING: SpikeSolver needs to be tested with more than two partitions\n");
-            }
-            LinearSolver<CPX>* solver;
+            solver = new MUMPS<CPX>(HamSig,matrix_comm,0);
+        } else if (solver_method==2) {
             solver = new SpikeSolver<CPX>(HamSig,matrix_comm);
-            std::vector<int> p_lines(matrix_procs+1);
-            for (int i = 0; i < matrix_procs + 1; ++i) {
-              p_lines[i] = displc_sol[i];
-            }
-            solver->prepare();
-            CPX* sol = new CPX[dist_sol[matrix_rank]*(nprol+npror)]();
-            solver->solve_equation(sol, inj, nprol+npror);
-            delete[] inj;
-            delete solver;
-            delete HamSig;
-            if (!matrix_rank) {
-                Sol = new CPX[displc_sol[matrix_procs]*(nprol+npror)];
-            }
-            for (int icol=0;icol<nprol+npror;icol++) {
-                MPI_Gatherv(&sol[dist_sol[matrix_rank]*icol],dist_sol[matrix_rank],MPI_DOUBLE_COMPLEX,&Sol[displc_sol[matrix_procs]*icol],dist_sol,displc_sol,MPI_DOUBLE_COMPLEX,0,matrix_comm);
-            }
-            delete[] sol;
-            if (distribute_pmat && matrix_procs>1) {
-                if (matrix_rank) {
-                    Sol = new CPX[displc_sol[matrix_procs]*(nprol+npror)];
-                }
-                MPI_Bcast(Sol,displc_sol[matrix_procs]*(nprol+npror),MPI_DOUBLE_COMPLEX,0,matrix_comm);
-            }
+        } else if (solver_method==3 && matrix_procs==1) {
+            solver = new Umfpack<CPX>(HamSig,matrix_comm);
         } else return (LOGCERR, EXIT_FAILURE);
-        cout << "TIME FOR WAVEFUNCTION SPARSE SOLVER WITH "<< ncells <<" UNIT CELLS " << get_time(sabtime) << endl;
+        solver->prepare();
+        CPX* sol = new CPX[dist_sol[matrix_rank]*(nprol+npror)]();
+        solver->solve_equation(sol, inj, nprol+npror);
+        delete[] inj;
+        delete solver;
+        delete HamSig;
+if (!worldrank) cout << "TIME FOR WAVEFUNCTION SPARSE SOLVER WITH "<< ncells <<" UNIT CELLS " << get_time(sabtime) << endl;
+        int solsize=displc_sol[matrix_procs];
+        CPX* Sol = new CPX[solsize*(nprol+npror)];
+        for (int icol=0;icol<nprol+npror;icol++) {
+            MPI_Allgatherv(&sol[dist_sol[matrix_rank]*icol],dist_sol[matrix_rank],MPI_DOUBLE_COMPLEX,&Sol[solsize*icol],dist_sol,displc_sol,MPI_DOUBLE_COMPLEX,matrix_comm);
+        }
+        delete[] sol;
         delete[] dist_sol;
         delete[] displc_sol;
+        CPX* Soll = new CPX[solsize*(nprol+npror)]();
+        CPX* Solr = new CPX[solsize*(nprol+npror)]();
+        for (int ibw=bandwidth+1;ibw<ncells;ibw++) {
+//        for (int ibw=0;ibw<ncells;ibw++) {
+            c_zlacpy('A',ndof,nprol+npror,Sol,solsize,&Soll[ndof*ibw],solsize);
+            c_zlacpy('A',ndof,nprol+npror,&Sol[solsize-ndof],solsize,&Solr[solsize-ndof*(ibw+1)],solsize);
+            for (int ipro=0;ipro<nprol+npror;ipro++) {
+                c_zscal(solsize,pow(lambda[ipro],-1),&Soll[ipro*solsize],1);
+                c_zscal(solsize,pow(lambda[ipro],+1),&Solr[ipro*solsize],1);
+            }
+        }
+        delete[] lambda;
         double Temp=parameter_sab.extra_param3;
         double fermil=fermi(real(energy),muvec[0],Temp,0);
         double fermir=fermi(real(energy),muvec[1],Temp,0);
@@ -361,7 +309,9 @@ if (npror!=propnum) cout << "WARNING: FOUND " << npror << " OF " << propnum << "
                 dos=Overlap->psipsidagger(Sol,nprol+npror);
             }
         }
-        cout << "TIME FOR CONSTRUCTION OF S-PATTERN DENSITY MATRIX " << get_time(sabtime) << endl;
+        delete[] Soll;
+        delete[] Solr;
+if (!worldrank) cout << "TIME FOR CONSTRUCTION OF S-PATTERN DENSITY MATRIX " << get_time(sabtime) << endl;
 // transmission
         if (!matrix_rank) {
             CPX *vecoutdof=new CPX[ntriblock];
@@ -377,14 +327,11 @@ if (npror!=propnum) cout << "WARNING: FOUND " << npror << " OF " << propnum << "
                 transmr+=4*M_PI*imag(c_zdotc(ntriblock,&Sol[Ps->size_tot*ipro+tra_block*ntriblock],1,vecoutdof,1));
             }
             delete[] vecoutdof;
-            delete[] Sol;
             if (abs(abs(transml)-abs(transmr))>0.1) return (LOGCERR, EXIT_FAILURE);
             transm=transml;
             current=2.0*E_ELECTRON*E_ELECTRON/(2.0*M_PI*H_BAR)*(fermil-fermir)*transm;
         }
-        if (matrix_rank && distribute_pmat) {
-            delete[] Sol;
-        }
+        delete[] Sol;
         delete H1;
     } else return (LOGCERR, EXIT_FAILURE);
 
