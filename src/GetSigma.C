@@ -244,6 +244,7 @@ int BoundarySelfEnergy::GetSigma(MPI_Comm boundary_comm)
     int triblocksize=ntriblock*ntriblock;
     int boundary_rank;
     MPI_Comm_rank(boundary_comm,&boundary_rank);
+int worldrank; MPI_Comm_rank(MPI_COMM_WORLD,&worldrank);
     CPX *Vtra;
     CPX *Vref;
     CPX *lambdatra;
@@ -262,6 +263,7 @@ int BoundarySelfEnergy::GetSigma(MPI_Comm boundary_comm)
         veltra=new double[ntriblock];
         velref=new double[ntriblock];
     }
+    sabtime=get_time(d_zer);
 // FEAST
     int do_feast=0;
     if (do_feast) {
@@ -280,7 +282,6 @@ int BoundarySelfEnergy::GetSigma(MPI_Comm boundary_comm)
             eigvec    = new CPX[2*ntriblock*ntriblock];
             eigvalcpx = new CPX[ntriblock];
         }
-        sabtime=get_time(d_zer);
         TCSR<CPX> *H1v; //DO I NEED THIS AT ALL OR IS IT THE SAME AND I CAN JUST CHANGE DERIVATIVE SO THAT THERE THE INJ_SIGN IS INCLUDED
         if (inj_sign==1) {
             H1v=H1;
@@ -288,7 +289,6 @@ int BoundarySelfEnergy::GetSigma(MPI_Comm boundary_comm)
             H1v=H1t;
         }
         k_inj->calc_kphase(spA,spB,H1v,2*ntriblock,2*ntriblock,eigvalcpx,eigvec,velref,&Ntr,ind_Ntr,&Nref,ind_Nref,inj_sign,1,1,boundary_comm,&iinfo);
-        cout << "TIME FOR FEAST " << get_time(sabtime) << endl;
         delete k_inj;
         if (!boundary_rank) {
             delete spA;
@@ -344,11 +344,10 @@ int BoundarySelfEnergy::GetSigma(MPI_Comm boundary_comm)
             delete[] KScpx;
         }
     }
+if (!worldrank) cout << "TIME FOR EIGENVALUE SOLVER " << get_time(sabtime) << endl;
 /*
-int worldrank; MPI_Comm_rank(MPI_COMM_WORLD,&worldrank);
 if (!boundary_rank) cout<<worldrank<<" AT "<<real(energy)<<" NPROTRA "<<nprotra<<" NPROREF "<<nproref<<" NDECTRA "<<ndectra<<" NDECREF "<<ndecref<<" SIGN "<<inj_sign<<endl;
 if (!boundary_rank) {
-int worldrank; MPI_Comm_rank(MPI_COMM_WORLD,&worldrank);
 stringstream mysstream;
 mysstream << "AllEigvals" << worldrank << "_" << inj_sign;
 ofstream myfile(mysstream.str().c_str());
@@ -384,7 +383,7 @@ if (!boundary_rank) {
     }
     delete[] VT;
     delete[] matcpx;
-    cout << "TIME FOR MATRIX MATRIX MULTIPLICATIONS FOR INVERSE OF G" << get_time(sabtime) << endl;
+if (!worldrank) cout << "TIME FOR MATRIX MATRIX MULTIPLICATIONS FOR INVERSE OF G " << get_time(sabtime) << endl;
     sigma         = new CPX[triblocksize];
     CPX *presigma = new CPX[triblocksize];
     CPX *matctri  = new CPX[triblocksize];
@@ -431,7 +430,7 @@ if (!boundary_rank) {
     delete[] pivarrayg;
     delete[] RCOR;
     delete[] invgrs;
-    cout << "TIME FOR INVERSION AND MATRIX MATRIX MULTIPLICATIONS FOR SIGMA " << get_time(sabtime) << endl;
+if (!worldrank) cout << "TIME FOR INVERSION AND MATRIX MATRIX MULTIPLICATIONS FOR SIGMA " << get_time(sabtime) << endl;
 
     sabtime=get_time(d_zer);
     int inversion_with_sparse_mult_symm=0;
@@ -468,7 +467,7 @@ if (!boundary_rank) {
         H1t->trans_mat_vec_mult(presigma,matctri,ntriblock,1);
         full_transpose(ntriblock,ntriblock,matctri,sigma);
     }
-    cout << "TIME FOR SYMMETRIZATION " << get_time(sabtime) << endl;
+if (!worldrank) cout << "TIME FOR SYMMETRIZATION " << get_time(sabtime) << endl;
 
     delete[] matctri;
 
@@ -479,7 +478,7 @@ if (!boundary_rank) {
         inj = new CPX[ntriblock*nprotra];
         lambdapro = new CPX[nprotra];
         for (int ipro=0;ipro<nprotra;ipro++) {
-            lambdapro[ipro]=pow(lambdaref[ipro],-inj_sign);
+            lambdapro[ipro]=pow(lambdaref[ipro],+inj_sign);
         }
         int dotheh0ph1inj=0;
         if (dotheh0ph1inj) {
@@ -506,7 +505,7 @@ if (!boundary_rank) {
             c_zscal(ntriblock,CPX(d_one/sqrt(2*M_PI*velref[ipro]),d_zer),&inj[ipro*ntriblock],1);
 //            c_zscal(ntriblock,CPX(d_one/sqrt(2*M_PI*veltra[ipro]),d_zer),&inj[ipro*ntriblock],1);
         }
-        cout << "MATRIX MATRIX MULTIPLICATIONS FOR INJECTION " << get_time(sabtime) << endl;
+if (!worldrank) cout << "MATRIX MATRIX MULTIPLICATIONS FOR INJECTION " << get_time(sabtime) << endl;
     }
     delete[] presigma;
     delete[] Vtra;

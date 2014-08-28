@@ -242,6 +242,7 @@ methodvector[0]=transport_methods::WF;
         }
     }
     MPI_Bcast(propagating_sizes,energyvector.size(),MPI_INT,0,MPI_COMM_WORLD);
+/*
 if (!iam) {
 ofstream myfile("Propagating");
 for (uint ii=0;ii<energyvector.size();ii++) myfile << real(energyvector[ii]) << " " << propagating[ii].size() << endl;
@@ -256,6 +257,7 @@ myfile << real(propagating[ii][jj]) << " " << imag(propagating[ii][jj]) << endl;
 myfile.close();
 }
 }
+*/
 // run distributed
     std::vector<double> currentvector(energyvector.size(),0.0);
     std::vector<double> transmission(energyvector.size(),0.0);

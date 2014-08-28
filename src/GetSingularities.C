@@ -189,7 +189,7 @@ void Singularities::delete_matrices()
     }
 }
 
-double Singularities::determine_fermi(double doping,double Temp)
+double Singularities::determine_fermi(double doping,double Temp) //slightly differs from OMEN
 {
     double nocctol=1.0E-2/n_k;
     cout << "Fermi Level / Number of Electrons with precision " << nocctol << endl;
@@ -215,8 +215,8 @@ double Singularities::determine_fermi(double doping,double Temp)
                 nocciter+=2.0/n_k*fermi(energies_matrix[i+j*ndof],mu,Temp,0);
             }
         }
-        cout << mu << " / " << nocciter << endl;
     }
+    cout << mu << " / " << nocciter << endl;
     return mu;
 }
 
@@ -336,7 +336,8 @@ int Singularities::determine_velocities(CPX *H,CPX *S,double k_in,double *energi
 
     double sabtime=get_time(0.0);
     if (eigen(eigvec,ovlmat,H,S,kval,energies_k)) return (LOGCERR, EXIT_FAILURE);
-    cout << "TIME FOR SINGULARITY DIAGONALIZATION " << get_time(sabtime) << endl;
+int worldrank; MPI_Comm_rank(MPI_COMM_WORLD,&worldrank);
+if (!worldrank) cout << "TIME FOR SINGULARITY DIAGONALIZATION " << get_time(sabtime) << endl;
 
     CPX *H_Sum_dk = new CPX[ndofsq]();
     CPX *S_Sum_dk = new CPX[ndofsq]();

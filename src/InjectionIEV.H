@@ -76,7 +76,7 @@ if (!boundary_rank) {
         if (iinfo) return (LOGCERR, EXIT_FAILURE);
         c_zgetrs('N',ndof,ndof*2*bandwidth,mats,ndof,pivarrayn,matb,ndof,&iinfo);
         if (iinfo) return (LOGCERR, EXIT_FAILURE);
-        cout << "TIME FOR CPX INVERSION " << get_time(sabtime) << endl;
+//        cout << "TIME FOR CPX INVERSION " << get_time(sabtime) << endl;
     } else {
         sabtime=get_time(d_zer);
         double *matsreal=new double[ndofsq];
@@ -92,7 +92,7 @@ if (!boundary_rank) {
         delete[] matsreal;
         for (int imat=0;imat<2*bandwidth*ndofsq;imat++) matb[imat]=CPX(matbreal[imat],d_zer);
         delete[] matbreal;
-        cout << "TIME FOR REAL INVERSION " << get_time(sabtime) << endl;
+//        cout << "TIME FOR REAL INVERSION " << get_time(sabtime) << endl;
     }
     delete[] pivarrayn;
     delete[] mats;
@@ -157,7 +157,7 @@ if (!boundary_rank) {
         CPX *workyc=new CPX[lworkyc];
         c_zgeev('N','V',nindnzcoln,matmn,nindnzcoln,eigvalcpx,&cdummy,1,eigveccfull,nindnzcoln,workyc,lworkyc,workdouble,&iinfo);
         if (iinfo) return (LOGCERR, EXIT_FAILURE);
-        cout << "TIME FOR CPX DIAGONALIZATION " << get_time(sabtime) << endl;
+//        cout << "TIME FOR CPX DIAGONALIZATION " << get_time(sabtime) << endl;
         delete[] workdouble;
         delete[] workyc;
 //        sabtime=get_time(d_zer);
@@ -178,7 +178,7 @@ if (!boundary_rank) {
         double *worky=new double[lworky];
         c_dgeev('N','V',nindnzcoln,matmnreal,nindnzcoln,eigvalreal,eigvalimag,&dddummy,1,eigvec,nindnzcoln,worky,lworky,&iinfo);
         if (iinfo) return (LOGCERR, EXIT_FAILURE);
-        cout << "TIME FOR REAL DIAGONALIZATION " << get_time(sabtime) << endl;
+//        cout << "TIME FOR REAL DIAGONALIZATION " << get_time(sabtime) << endl;
         delete[] worky;
         delete[] matmnreal;
         int iwhile=0;
@@ -220,7 +220,7 @@ if (!boundary_rank) {
         for (int iind=0;iind<nindrzcoln;iind++)
             c_zcopy(nindnzcoln,&eigveccrec[iind],nindrzcoln,&eigvecc[indrzcolvecn[iind]-bandwidth*ndof],ndof);
         delete[] eigveccrec;
-        cout << "TIME FOR RECONSTRUCTION " << get_time(sabtime) << endl;
+//        cout << "TIME FOR RECONSTRUCTION " << get_time(sabtime) << endl;
     }
     delete[] indnzcolvecn;
     delete[] indrzcolvecn;
