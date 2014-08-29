@@ -69,8 +69,8 @@ if (!iam) cout << "DOPING " << dopingvec[0] << " " << dopingvec[1] << endl;
     double Vd=voltage->Vdmin;
     double Vg=-voltage->Vgmin[0];
     {
-        Singularities singularities(transport_params);
-        if ( singularities.Execute(KohnSham,Overlap,n_mu,muvec,dopingvec,contactvec) ) return (LOGCERR, EXIT_FAILURE);
+        Singularities singularities(transport_params,n_mu);
+        if ( singularities.Execute(KohnSham,Overlap,muvec,dopingvec,contactvec) ) return (LOGCERR, EXIT_FAILURE);
         Vg+=std::accumulate(muvec,muvec+n_mu,0.0)/n_mu-singularities.energy_cb;
     }
 

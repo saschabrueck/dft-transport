@@ -120,8 +120,8 @@ exit(0);
 // determine singularity stuff
     double Temp=transport_params.extra_param3;
     sabtime=get_time(0.0);
-    Singularities singularities(transport_params);
-    if ( singularities.Execute(KohnSham,Overlap,n_mu,muvec,dopingvec,contactvec) ) return (LOGCERR, EXIT_FAILURE);
+    Singularities singularities(transport_params,n_mu);
+    if ( singularities.Execute(KohnSham,Overlap,muvec,dopingvec,contactvec) ) return (LOGCERR, EXIT_FAILURE);
 #ifdef _OMEN_WRITEOUT
 if (!iam) {
 int ndof=Overlap->size_tot/n_cells;
@@ -143,6 +143,7 @@ exit(0);
 //this is for no bias to make sure
 //muvec[0]=(muvec[0]+muvec[1])/2.0;muvec[1]=muvec[0];
     if (!iam) cout << "TIME FOR SINGULARITIES " << get_time(sabtime) << endl;
+if (!iam) for (int i_mu=0;i_mu<n_mu;i_mu++) singularities.write_bandstructure(i_mu);
 // determine elements in nonequilibrium range
     double k_b=K_BOLTZMANN;
     double nonequi_start=min(muvec[0],muvec[n_mu-1])-35.0*k_b*Temp;
@@ -231,34 +232,22 @@ methodvector[0]=transport_methods::WF;
     }
     evecfile.close();
     if (!iam) cout << "Size of Energyvector " << energyvector.size() << endl;
-// get propagating modes from bandstructure OF RIGHT CONTACT ONLY -> ONLY FOR EQUILIBRIUM OR I HAVE TO IMPLEMENT LEFT CONTACT AS WELL
-    std::vector< std::vector<double> > propagating;
-    if (!iam) singularities.get_propagating(propagating,energyvector);
-    singularities.delete_matrices();
-    int *propagating_sizes = new int[energyvector.size()];
+// get propagating modes from bandstructure
+    int *propagating_sizes_left = new int[energyvector.size()];
+    int *propagating_sizes_right = new int[energyvector.size()];
     if (!iam) {
+        std::vector< std::vector<double> > propagating_left;
+        std::vector< std::vector<double> > propagating_right;
+        singularities.get_propagating(propagating_left,energyvector,0);
+        singularities.get_propagating(propagating_right,energyvector,1);
         for (uint ie=0;ie<energyvector.size();ie++) {
-            propagating_sizes[ie]=propagating[ie].size();
+            propagating_sizes_left[ie]=propagating_left[ie].size();
+            propagating_sizes_right[ie]=propagating_right[ie].size();
         }
     }
-    MPI_Bcast(propagating_sizes,energyvector.size(),MPI_INT,0,MPI_COMM_WORLD);
-/*
-if (!iam) {
-ofstream myfile("Propagating");
-for (uint ii=0;ii<energyvector.size();ii++) myfile << real(energyvector[ii]) << " " << propagating[ii].size() << endl;
-myfile.close();
-for (uint ii=0;ii<energyvector.size();ii++) {
-stringstream mysstream;
-mysstream << "PropEigval" << ii;
-myfile.open(mysstream.str().c_str());
-for (uint jj=0;jj<propagating[ii].size();jj++) {
-myfile << real(propagating[ii][jj]) << " " << imag(propagating[ii][jj]) << endl;
-}
-myfile.close();
-}
-}
-*/
-// run distributed
+    MPI_Bcast(propagating_sizes_left,energyvector.size(),MPI_INT,0,MPI_COMM_WORLD);
+    MPI_Bcast(propagating_sizes_right,energyvector.size(),MPI_INT,0,MPI_COMM_WORLD);
+// run distributed BUT DELETE SINGULARITY CLASS BEFORE
     std::vector<double> currentvector(energyvector.size(),0.0);
     std::vector<double> transmission(energyvector.size(),0.0);
     std::vector<double> dos_profile(energyvector.size(),0.0);
@@ -273,17 +262,20 @@ myfile.close();
     int matrix_id, n_mat_comm;
     MPI_Comm_size(eq_rank_matrix_comm,&n_mat_comm);
     MPI_Comm_rank(eq_rank_matrix_comm,&matrix_id);
+    sabtime=get_time(0.0);
     uint jpos;
     for (int iseq=0;iseq<int(ceil(double(energyvector.size())/n_mat_comm));iseq++)
 //    for (int iseq=0;iseq<1;iseq++)
         if ( (jpos=matrix_id+iseq*n_mat_comm)<energyvector.size())
             if (abs(stepvector[jpos])>0.0)
-                if (density(KohnShamCollect,OverlapCollect,OverlapCollectPBC,Ps,energyvector[jpos],stepvector[jpos],methodvector[jpos],n_mu,muvec,contactvec,currentvector[jpos],transmission[jpos],dos_profile[jpos],propagating_sizes[jpos],atom_of_bf,eperatom,dperatom,transport_params,distribute_pmat,matrix_comm))
+                if (density(KohnShamCollect,OverlapCollect,OverlapCollectPBC,Ps,energyvector[jpos],stepvector[jpos],methodvector[jpos],n_mu,muvec,contactvec,currentvector[jpos],transmission[jpos],dos_profile[jpos],propagating_sizes_left[jpos],propagating_sizes_right[jpos],atom_of_bf,eperatom,dperatom,transport_params,distribute_pmat,matrix_comm))
                     return (LOGCERR, EXIT_FAILURE);
+    if (!iam) cout << "TIME FOR DENSITY " << get_time(sabtime) << endl;
     delete KohnShamCollect;
     delete OverlapCollect;
     delete OverlapCollectPBC;
-    delete[] propagating_sizes;
+    delete[] propagating_sizes_left;
+    delete[] propagating_sizes_right;
     MPI_Allreduce(eperatom,electronchargeperatom,n_atoms,MPI_DOUBLE,MPI_SUM,MPI_COMM_WORLD);
     MPI_Allreduce(dperatom,derivativechargeperatom,n_atoms,MPI_DOUBLE,MPI_SUM,MPI_COMM_WORLD);
     delete[] eperatom;

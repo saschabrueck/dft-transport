@@ -1,6 +1,6 @@
 #include "GetSingularities.H"
 
-Singularities::Singularities(c_transport_type parameter_sab)
+Singularities::Singularities(c_transport_type parameter_sab,int pn_mu)
 {
     eps_singularities=parameter_sab.eps_singularities;
     n_k=parameter_sab.n_kpoint;
@@ -9,24 +9,32 @@ Singularities::Singularities(c_transport_type parameter_sab)
     noccunitcell=parameter_sab.n_occ/parameter_sab.n_cells;
     Temp=parameter_sab.extra_param3;
 
-    energies_matrix    = NULL;
-    derivatives_matrix = NULL;
-    curvatures_matrix  = NULL;
+    n_mu=pn_mu;
+
+    MPI_Comm_size(MPI_COMM_WORLD,&nprocs);
+    MPI_Comm_rank(MPI_COMM_WORLD,&iam); 
+
+    energy_gs= (numeric_limits<double>::max)();
+    energy_vb=-(numeric_limits<double>::max)();
+    energy_cb= (numeric_limits<double>::max)();
+
+    energies_matrix = new double*[n_mu];
+    derivatives_matrix = new double*[n_mu];
+    curvatures_matrix = new double*[n_mu];
+    for (int i_mu=0;i_mu<n_mu;i_mu++) {
+        energies_matrix[i_mu]    = NULL;
+        derivatives_matrix[i_mu] = NULL;
+        curvatures_matrix[i_mu]  = NULL;
+    }
 }
 
-int Singularities::Execute(TCSR<double> *KohnSham,TCSR<double> *Overlap,int n_mu,double *muvec,double *dopingvec,int *contactvec)
+int Singularities::Execute(TCSR<double> *KohnSham,TCSR<double> *Overlap,double *muvec,double *dopingvec,int *contactvec)
 /**  \brief Initialize array energies and fill it with n_energies energy points at which there are singularities in the DOS, in addition get integration range
  *
  *   \param KohnSham      H matrix in CSR format
  *   \param Overlap       S matrix in CSR format
  */
 {
-    int iam, nprocs;
-    MPI_Comm_size(MPI_COMM_WORLD,&nprocs);
-    MPI_Comm_rank(MPI_COMM_WORLD,&iam); 
-
-    int do_fitting=0;
-
     double *k = new double[n_k];
     k[0]=0.0;
     if (n_k>1) for (int i=1;i<n_k;i++) k[i]=i*M_PI/(n_k-1);
@@ -35,16 +43,12 @@ int Singularities::Execute(TCSR<double> *KohnSham,TCSR<double> *Overlap,int n_mu
     int ndofsq=ndof*ndof;
     int ndofsqbw=ndofsq*(2*bandwidth+1);
     if (!iam) {
-        energies_matrix = new double[ndof*nprocs*seq_per_cpu];
-        derivatives_matrix = new double[ndof*nprocs*seq_per_cpu];
-        curvatures_matrix = new double[ndof*nprocs*seq_per_cpu];
-        energy_gs= (numeric_limits<double>::max)();
-        energy_vb=-(numeric_limits<double>::max)();
-        energy_cb= (numeric_limits<double>::max)();
+        for (int i_mu=0;i_mu<n_mu;i_mu++) {
+            energies_matrix[i_mu] = new double[ndof*nprocs*seq_per_cpu];
+            derivatives_matrix[i_mu] = new double[ndof*nprocs*seq_per_cpu];
+            curvatures_matrix[i_mu] = new double[ndof*nprocs*seq_per_cpu];
+        }
     }
-    double *energies_local = new double[ndof*seq_per_cpu]();
-    double *derivatives_local = new double[ndof*seq_per_cpu]();
-    double *curvatures_local = new double[ndof*seq_per_cpu]();
     int n_energies;
     int kpos;
     double extrval;
@@ -90,40 +94,46 @@ int Singularities::Execute(TCSR<double> *KohnSham,TCSR<double> *Overlap,int n_mu
             for (int ibw=1;ibw<=bandwidth;ibw++)
                 full_transpose(ndof,ndof,&S[(bandwidth-ibw)*ndofsq],&S[(bandwidth+ibw)*ndofsq]);
         }
+        double *energies_local = new double[ndof*seq_per_cpu]();
+        double *derivatives_local = new double[ndof*seq_per_cpu]();
+        double *curvatures_local = new double[ndof*seq_per_cpu]();
         for (int iseq=0;iseq<seq_per_cpu;iseq++)
             if ( (kpos=iseq+iam*seq_per_cpu)<n_k )
                 if (determine_velocities(H,S,k[kpos],&energies_local[iseq*ndof],&derivatives_local[iseq*ndof],&curvatures_local[iseq*ndof]))
                     return (LOGCERR, EXIT_FAILURE);
         delete[] H;
         delete[] S;
-        MPI_Gather(energies_local,ndof*seq_per_cpu,MPI_DOUBLE,energies_matrix,ndof*seq_per_cpu,MPI_DOUBLE,0,MPI_COMM_WORLD);
-        MPI_Gather(derivatives_local,ndof*seq_per_cpu,MPI_DOUBLE,derivatives_matrix,ndof*seq_per_cpu,MPI_DOUBLE,0,MPI_COMM_WORLD);
-        MPI_Gather(curvatures_local,ndof*seq_per_cpu,MPI_DOUBLE,curvatures_matrix,ndof*seq_per_cpu,MPI_DOUBLE,0,MPI_COMM_WORLD);
+        MPI_Gather(energies_local,ndof*seq_per_cpu,MPI_DOUBLE,energies_matrix[i_mu],ndof*seq_per_cpu,MPI_DOUBLE,0,MPI_COMM_WORLD);
+        MPI_Gather(derivatives_local,ndof*seq_per_cpu,MPI_DOUBLE,derivatives_matrix[i_mu],ndof*seq_per_cpu,MPI_DOUBLE,0,MPI_COMM_WORLD);
+        MPI_Gather(curvatures_local,ndof*seq_per_cpu,MPI_DOUBLE,curvatures_matrix[i_mu],ndof*seq_per_cpu,MPI_DOUBLE,0,MPI_COMM_WORLD);
+        delete[] energies_local;
+        delete[] derivatives_local;
+        delete[] curvatures_local;
         if (!iam) {
-            muvec[i_mu]=determine_fermi(dopingvec[i_mu],Temp);
-            follow_band();
-            write_bandstructure(i_mu);
+            muvec[i_mu]=determine_fermi(dopingvec[i_mu],Temp,i_mu);
+            follow_band(i_mu);
             for (int i=0;i<ndof;i++) {
+                int do_fitting=0;
                 if (do_fitting) {
-                    if (abs(derivatives_matrix[i])<eps_singularities) energies.push_back(energies_matrix[i]);
+                    if (abs(derivatives_matrix[i_mu][i])<eps_singularities) energies.push_back(energies_matrix[i_mu][i]);
                     for (int j=1;j<n_k-2;j++) {
-                        if (derivatives_matrix[i+j*ndof]*derivatives_matrix[i+(j+1)*ndof]<0.0) {
-                            if (min_parabola(4,&k[j-1],&energies_matrix[i+(j-1)*ndof],ndof,extrval)<1.0/n_k) energies.push_back(extrval);
+                        if (derivatives_matrix[i_mu][i+j*ndof]*derivatives_matrix[i_mu][i+(j+1)*ndof]<0.0) {
+                            if (min_parabola(4,&k[j-1],&energies_matrix[i_mu][i+(j-1)*ndof],ndof,extrval)<1.0/n_k) energies.push_back(extrval);
                         }
                     }
-                    if (abs(derivatives_matrix[i+(n_k-1)*ndof])<eps_singularities) energies.push_back(energies_matrix[i+(n_k-1)*ndof]);
+                    if (abs(derivatives_matrix[i_mu][i+(n_k-1)*ndof])<eps_singularities) energies.push_back(energies_matrix[i_mu][i+(n_k-1)*ndof]);
                 } else {
                     for (int j=0;j<n_k-1;j++) {
-                        double xval=-derivatives_matrix[i+j*ndof]/curvatures_matrix[i+j*ndof];
+                        double xval=-derivatives_matrix[i_mu][i+j*ndof]/curvatures_matrix[i_mu][i+j*ndof];
                         if (xval<M_PI/(n_k-1) && xval>=0.0) {
-                            energies.push_back(energies_matrix[i+j*ndof]+derivatives_matrix[i+j*ndof]*xval/2.0);
+                            energies.push_back(energies_matrix[i_mu][i+j*ndof]+derivatives_matrix[i_mu][i+j*ndof]*xval/2.0);
                         }
                     }
                 }
             }
-            for (int j=0;j<n_k;j++) if (energies_matrix[j*ndof]<energy_gs) energy_gs=energies_matrix[j*ndof];
-            for (int j=0;j<n_k;j++) if (energies_matrix[j*ndof+noccunitcell-1]>energy_vb) energy_vb=energies_matrix[j*ndof+noccunitcell-1];
-            for (int j=0;j<n_k;j++) if (energies_matrix[j*ndof+noccunitcell  ]<energy_cb) energy_cb=energies_matrix[j*ndof+noccunitcell  ];
+            for (int j=0;j<n_k;j++) if (energies_matrix[i_mu][j*ndof]<energy_gs) energy_gs=energies_matrix[i_mu][j*ndof];
+            for (int j=0;j<n_k;j++) if (energies_matrix[i_mu][j*ndof+noccunitcell-1]>energy_vb) energy_vb=energies_matrix[i_mu][j*ndof+noccunitcell-1];
+            for (int j=0;j<n_k;j++) if (energies_matrix[i_mu][j*ndof+noccunitcell  ]<energy_cb) energy_cb=energies_matrix[i_mu][j*ndof+noccunitcell  ];
         }
     }
     if (!iam) std::sort(energies.begin(),energies.end());
@@ -135,9 +145,6 @@ int Singularities::Execute(TCSR<double> *KohnSham,TCSR<double> *Overlap,int n_mu
     MPI_Bcast(&energy_vb,1,MPI_DOUBLE,0,MPI_COMM_WORLD);
     MPI_Bcast(&energy_cb,1,MPI_DOUBLE,0,MPI_COMM_WORLD);
     MPI_Bcast(&muvec[0],n_mu,MPI_DOUBLE,0,MPI_COMM_WORLD);
-    delete[] energies_local;
-    delete[] derivatives_local;
-    delete[] curvatures_local;
     delete[] k;
 
     return 0;
@@ -145,20 +152,27 @@ int Singularities::Execute(TCSR<double> *KohnSham,TCSR<double> *Overlap,int n_mu
 
 Singularities::~Singularities()
 {
-    if (energies_matrix!=NULL) delete[] energies_matrix;
-    if (derivatives_matrix!=NULL) delete[] derivatives_matrix;
-    if (curvatures_matrix!=NULL) delete[] curvatures_matrix;
+    if (!iam) {
+        for (int i_mu=0;i_mu<n_mu;i_mu++) {
+            delete[] energies_matrix[i_mu];
+            delete[] derivatives_matrix[i_mu];
+            delete[] curvatures_matrix[i_mu];
+        }
+    }
+    delete[] energies_matrix;
+    delete[] derivatives_matrix;
+    delete[] curvatures_matrix;
 }
 
-void Singularities::get_propagating(vector< vector<double> > &prop,const vector<CPX> &evec)
+void Singularities::get_propagating(vector< vector<double> > &prop,const vector<CPX> &evec,int i_mu)
 {
     prop.resize(evec.size());
     for (uint ie=0;ie<evec.size();ie++) {
         if (!imag(evec[ie])) {
             for (int iband=0;iband<ndof;iband++) {
                 for (int i_k=0;i_k<n_k-1;i_k++) {
-                   double val=-derivatives_matrix[iband+i_k*ndof]/curvatures_matrix[iband+i_k*ndof];
-                   double discri=val*val+2.0/curvatures_matrix[iband+i_k*ndof]*(real(evec[ie])-energies_matrix[iband+i_k*ndof]);
+                   double val=-derivatives_matrix[i_mu][iband+i_k*ndof]/curvatures_matrix[i_mu][iband+i_k*ndof];
+                   double discri=val*val+2.0/curvatures_matrix[i_mu][iband+i_k*ndof]*(real(evec[ie])-energies_matrix[i_mu][iband+i_k*ndof]);
                    if (discri>=0.0) {
                        double x1=(val+sqrt(discri))*(n_k-1)/M_PI;
                        if (x1<1.0 && x1>=0.0) {
@@ -175,29 +189,15 @@ void Singularities::get_propagating(vector< vector<double> > &prop,const vector<
     }
 }
 
-void Singularities::delete_matrices()
-{
-    int iam;
-    MPI_Comm_rank(MPI_COMM_WORLD,&iam); 
-    if (!iam) {
-        delete[] energies_matrix;
-        delete[] derivatives_matrix;
-        delete[] curvatures_matrix;
-        energies_matrix=NULL;
-        derivatives_matrix=NULL;
-        curvatures_matrix=NULL;
-    }
-}
-
-double Singularities::determine_fermi(double doping,double Temp) //slightly differs from OMEN
+double Singularities::determine_fermi(double doping,double Temp,int i_mu) //slightly differs from OMEN
 {
     double nocctol=1.0E-2/n_k;
     cout << "Fermi Level / Number of Electrons with precision " << nocctol << endl;
-    double mu=(energies_matrix[noccunitcell-1]+energies_matrix[noccunitcell])/2;
+    double mu=(energies_matrix[i_mu][noccunitcell-1]+energies_matrix[i_mu][noccunitcell])/2;
     double nocciter = 0.0;
     for (int j=0;j<n_k;j++) {
         for (int i=0;i<ndof;i++) {
-            nocciter+=2.0/n_k*fermi(energies_matrix[i+j*ndof],mu,Temp,0);
+            nocciter+=2.0/n_k*fermi(energies_matrix[i_mu][i+j*ndof],mu,Temp,0);
         }
     }
     cout << mu << " / " << nocciter << endl;
@@ -205,14 +205,14 @@ double Singularities::determine_fermi(double doping,double Temp) //slightly diff
         double dfermi=0.0;
         for (int j=0;j<n_k;j++) {
             for (int i=0;i<ndof;i++) {
-                dfermi+=fermi(energies_matrix[i+j*ndof],mu,Temp,2);
+                dfermi+=fermi(energies_matrix[i_mu][i+j*ndof],mu,Temp,2);
             }
         }
         mu+=(2.0*noccunitcell+doping-nocciter)/n_k;
         nocciter=0.0;
         for (int j=0;j<n_k;j++) {
             for (int i=0;i<ndof;i++) {
-                nocciter+=2.0/n_k*fermi(energies_matrix[i+j*ndof],mu,Temp,0);
+                nocciter+=2.0/n_k*fermi(energies_matrix[i_mu][i+j*ndof],mu,Temp,0);
             }
         }
     }
@@ -220,20 +220,20 @@ double Singularities::determine_fermi(double doping,double Temp) //slightly diff
     return mu;
 }
 
-void Singularities::follow_band()
+void Singularities::follow_band(int i_mu)
 {
     valarray<double> searchvec(ndof);
     for (int iband=0;iband<ndof;iband++) {
         for (int i_k=1;i_k<n_k;i_k++) {
-            c_dcopy(ndof,&energies_matrix[i_k*ndof],1,&searchvec[0],1);
-            double E=energies_matrix[iband+(i_k-1)*ndof];
-            double D=derivatives_matrix[iband+(i_k-1)*ndof];
-            double C=curvatures_matrix[iband+(i_k-1)*ndof];
+            c_dcopy(ndof,&energies_matrix[i_mu][i_k*ndof],1,&searchvec[0],1);
+            double E=energies_matrix[i_mu][iband+(i_k-1)*ndof];
+            double D=derivatives_matrix[i_mu][iband+(i_k-1)*ndof];
+            double C=curvatures_matrix[i_mu][iband+(i_k-1)*ndof];
             searchvec=abs(searchvec-E-D*M_PI/(n_k-1)-C/2.0*M_PI/(n_k-1)*M_PI/(n_k-1));
             int iband2=distance(&searchvec[0],min_element(&searchvec[0]+iband,&searchvec[0]+ndof));
-            swap(energies_matrix[iband+i_k*ndof],energies_matrix[iband2+i_k*ndof]);
-            swap(derivatives_matrix[iband+i_k*ndof],derivatives_matrix[iband2+i_k*ndof]);
-            swap(curvatures_matrix[iband+i_k*ndof],curvatures_matrix[iband2+i_k*ndof]);
+            swap(energies_matrix[i_mu][iband+i_k*ndof],energies_matrix[i_mu][iband2+i_k*ndof]);
+            swap(derivatives_matrix[i_mu][iband+i_k*ndof],derivatives_matrix[i_mu][iband2+i_k*ndof]);
+            swap(curvatures_matrix[i_mu][iband+i_k*ndof],curvatures_matrix[i_mu][iband2+i_k*ndof]);
         }
     }
 }
@@ -281,7 +281,7 @@ void Singularities::write_bandstructure(int i_mu)
     myfile.precision(15);
     for (int iband=0;iband<ndof;iband++) {
         for (int i_k=0;i_k<n_k;i_k++) {
-            myfile << " " << energies_matrix[iband+ndof*i_k];
+            myfile << " " << energies_matrix[i_mu][iband+ndof*i_k];
         }
         myfile << endl;
     }
@@ -293,7 +293,7 @@ void Singularities::write_bandstructure(int i_mu)
     myfile.precision(15);
     for (int iband=0;iband<ndof;iband++) {
         for (int i_k=0;i_k<n_k;i_k++) {
-            myfile << " " << derivatives_matrix[iband+ndof*i_k];
+            myfile << " " << derivatives_matrix[i_mu][iband+ndof*i_k];
         }
         myfile << endl;
     }
@@ -305,7 +305,7 @@ void Singularities::write_bandstructure(int i_mu)
     myfile.precision(15);
     for (int iband=0;iband<ndof;iband++) {
         for (int i_k=0;i_k<n_k;i_k++) {
-            myfile << " " << curvatures_matrix[iband+ndof*i_k];
+            myfile << " " << curvatures_matrix[i_mu][iband+ndof*i_k];
         }
         myfile << endl;
     }

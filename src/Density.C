@@ -26,7 +26,7 @@ int ldlt_free__(int *);
 int ldlt_blkselinv__(int *, int*, int*, CPX *, int*);
 }
 
-int density(TCSR<double> *KohnSham,TCSR<double> *Overlap,TCSR<double> *OverlapPBC,TCSR<double> *Ps,CPX energy,CPX weight,transport_methods::transport_method method,int n_mu,double *muvec,int *contactvec,double &current,double &transm,double &dos,int propnum,int *atom_of_bf,double *erhoperatom,double *drhoperatom,c_transport_type parameter_sab,int distribute_pmat,MPI_Comm matrix_comm)
+int density(TCSR<double> *KohnSham,TCSR<double> *Overlap,TCSR<double> *OverlapPBC,TCSR<double> *Ps,CPX energy,CPX weight,transport_methods::transport_method method,int n_mu,double *muvec,int *contactvec,double &current,double &transm,double &dos,int propnum_left,int propnum_right,int *atom_of_bf,double *erhoperatom,double *drhoperatom,c_transport_type parameter_sab,int distribute_pmat,MPI_Comm matrix_comm)
 {
     double d_one=1.0;
     double d_zer=0.0;
@@ -95,7 +95,8 @@ int worldrank; MPI_Comm_rank(MPI_COMM_WORLD,&worldrank);
             lambda = new CPX[nprol+npror];
             c_zcopy(nprol,selfenergies[0].lambdapro,1,lambda,1);
             c_zcopy(npror,selfenergies[1].lambdapro,1,&lambda[nprol],1);
-if (npror!=propnum) cout << "WARNING: FOUND " << npror << " OF " << propnum << " MODES AT " << real(energy) << endl;
+if (nprol!=propnum_left) cout << "WARNING: FOUND " << nprol << " OF " << propnum_left << " LEFT MODES AT " << real(energy) << endl;
+if (npror!=propnum_right) cout << "WARNING: FOUND " << npror << " OF " << propnum_right << " RIGHT MODES AT " << real(energy) << endl;
             inj = new CPX[HamSig->size*(nprol+npror)]();
             if (selfenergies[0].spainjdist->n_nonzeros) {
                 selfenergies[0].spainjdist->sparse_to_full(inj,HamSig->size,nprol);
@@ -247,7 +248,7 @@ if (!worldrank) cout << "TIME FOR SPARSE INVERSION " << get_time(sabtime) << end
         if (solver_method==0) {
             solver = new SuperLU<CPX>(HamSig,matrix_comm);
         } else if (solver_method==1) {
-            solver = new MUMPS<CPX>(HamSig,matrix_comm,0);
+            solver = new MUMPS<CPX>(HamSig,matrix_comm);
         } else if (solver_method==2) {
             solver = new SpikeSolver<CPX>(HamSig,matrix_comm);
         } else if (solver_method==3 && matrix_procs==1) {
