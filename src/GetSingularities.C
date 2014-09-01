@@ -18,14 +18,13 @@ Singularities::Singularities(c_transport_type parameter_sab,int pn_mu)
     energy_vb=-(numeric_limits<double>::max)();
     energy_cb= (numeric_limits<double>::max)();
 
-    energies_matrix = new double*[n_mu];
-    derivatives_matrix = new double*[n_mu];
-    curvatures_matrix = new double*[n_mu];
-    for (int i_mu=0;i_mu<n_mu;i_mu++) {
-        energies_matrix[i_mu]    = NULL;
-        derivatives_matrix[i_mu] = NULL;
-        curvatures_matrix[i_mu]  = NULL;
-    }
+    energies_extremum.resize(n_mu);
+    curvatures_extremum.resize(n_mu);
+    kval_extremum.resize(n_mu);
+
+    energies_matrix.resize(n_mu);
+    derivatives_matrix.resize(n_mu);
+    curvatures_matrix.resize(n_mu);
 }
 
 int Singularities::Execute(TCSR<double> *KohnSham,TCSR<double> *Overlap,double *muvec,double *dopingvec,int *contactvec)
@@ -35,23 +34,14 @@ int Singularities::Execute(TCSR<double> *KohnSham,TCSR<double> *Overlap,double *
  *   \param Overlap       S matrix in CSR format
  */
 {
-    double *k = new double[n_k];
-    k[0]=0.0;
-    if (n_k>1) for (int i=1;i<n_k;i++) k[i]=i*M_PI/(n_k-1);
+    std::vector<double> k(n_k);
+    for (int i=1;i<n_k;i++) k[i]=i*M_PI/(n_k-1);
     int seq_per_cpu=int(ceil(double(n_k)/nprocs));
     ndof=Overlap->size_tot/n_cells;
     int ndofsq=ndof*ndof;
     int ndofsqbw=ndofsq*(2*bandwidth+1);
-    if (!iam) {
-        for (int i_mu=0;i_mu<n_mu;i_mu++) {
-            energies_matrix[i_mu] = new double[ndof*nprocs*seq_per_cpu];
-            derivatives_matrix[i_mu] = new double[ndof*nprocs*seq_per_cpu];
-            curvatures_matrix[i_mu] = new double[ndof*nprocs*seq_per_cpu];
-        }
-    }
     int n_energies;
     int kpos;
-    double extrval;
     CPX *H;
     CPX *S;
     for (int i_mu=0;i_mu<n_mu;i_mu++) {
@@ -103,34 +93,32 @@ int Singularities::Execute(TCSR<double> *KohnSham,TCSR<double> *Overlap,double *
                     return (LOGCERR, EXIT_FAILURE);
         delete[] H;
         delete[] S;
-        MPI_Gather(energies_local,ndof*seq_per_cpu,MPI_DOUBLE,energies_matrix[i_mu],ndof*seq_per_cpu,MPI_DOUBLE,0,MPI_COMM_WORLD);
-        MPI_Gather(derivatives_local,ndof*seq_per_cpu,MPI_DOUBLE,derivatives_matrix[i_mu],ndof*seq_per_cpu,MPI_DOUBLE,0,MPI_COMM_WORLD);
-        MPI_Gather(curvatures_local,ndof*seq_per_cpu,MPI_DOUBLE,curvatures_matrix[i_mu],ndof*seq_per_cpu,MPI_DOUBLE,0,MPI_COMM_WORLD);
+        if (!iam) {
+            energies_matrix[i_mu].resize(ndof*nprocs*seq_per_cpu);
+            derivatives_matrix[i_mu].resize(ndof*nprocs*seq_per_cpu);
+            curvatures_matrix[i_mu].resize(ndof*nprocs*seq_per_cpu);
+        }
+        MPI_Gather(energies_local,ndof*seq_per_cpu,MPI_DOUBLE,&energies_matrix[i_mu][0],ndof*seq_per_cpu,MPI_DOUBLE,0,MPI_COMM_WORLD);
+        MPI_Gather(derivatives_local,ndof*seq_per_cpu,MPI_DOUBLE,&derivatives_matrix[i_mu][0],ndof*seq_per_cpu,MPI_DOUBLE,0,MPI_COMM_WORLD);
+        MPI_Gather(curvatures_local,ndof*seq_per_cpu,MPI_DOUBLE,&curvatures_matrix[i_mu][0],ndof*seq_per_cpu,MPI_DOUBLE,0,MPI_COMM_WORLD);
         delete[] energies_local;
         delete[] derivatives_local;
         delete[] curvatures_local;
         if (!iam) {
-            muvec[i_mu]=determine_fermi(dopingvec[i_mu],Temp,i_mu);
+            muvec[i_mu]=determine_fermi(dopingvec[i_mu],i_mu);
             follow_band(i_mu);
             for (int i=0;i<ndof;i++) {
-                int do_fitting=0;
-                if (do_fitting) {
-                    if (abs(derivatives_matrix[i_mu][i])<eps_singularities) energies.push_back(energies_matrix[i_mu][i]);
-                    for (int j=1;j<n_k-2;j++) {
-                        if (derivatives_matrix[i_mu][i+j*ndof]*derivatives_matrix[i_mu][i+(j+1)*ndof]<0.0) {
-                            if (min_parabola(4,&k[j-1],&energies_matrix[i_mu][i+(j-1)*ndof],ndof,extrval)<1.0/n_k) energies.push_back(extrval);
-                        }
-                    }
-                    if (abs(derivatives_matrix[i_mu][i+(n_k-1)*ndof])<eps_singularities) energies.push_back(energies_matrix[i_mu][i+(n_k-1)*ndof]);
-                } else {
-                    for (int j=0;j<n_k-1;j++) {
-                        double xval=-derivatives_matrix[i_mu][i+j*ndof]/curvatures_matrix[i_mu][i+j*ndof];
-                        if (xval<M_PI/(n_k-1) && xval>=0.0) {
-                            energies.push_back(energies_matrix[i_mu][i+j*ndof]+derivatives_matrix[i_mu][i+j*ndof]*xval/2.0);
-                        }
+                for (int j=0;j<n_k-1;j++) {
+                    double xval=-derivatives_matrix[i_mu][i+j*ndof]/curvatures_matrix[i_mu][i+j*ndof];
+                    if (xval<M_PI/(n_k-1) && xval>=0.0) {
+                        energies_extremum[i_mu].push_back(energies_matrix[i_mu][i+j*ndof]+derivatives_matrix[i_mu][i+j*ndof]*xval/2.0);
+                        double frval=xval/M_PI*(n_k-1);
+                        curvatures_extremum[i_mu].push_back(frval*curvatures_matrix[i_mu][i+j*ndof]+(1-frval)*curvatures_matrix[i_mu][i+(j+1)*ndof]);
+                        kval_extremum[i_mu].push_back(k[j]+xval);
                     }
                 }
             }
+            energies.insert(energies.end(),energies_extremum[i_mu].begin(),energies_extremum[i_mu].end());
             for (int j=0;j<n_k;j++) if (energies_matrix[i_mu][j*ndof]<energy_gs) energy_gs=energies_matrix[i_mu][j*ndof];
             for (int j=0;j<n_k;j++) if (energies_matrix[i_mu][j*ndof+noccunitcell-1]>energy_vb) energy_vb=energies_matrix[i_mu][j*ndof+noccunitcell-1];
             for (int j=0;j<n_k;j++) if (energies_matrix[i_mu][j*ndof+noccunitcell  ]<energy_cb) energy_cb=energies_matrix[i_mu][j*ndof+noccunitcell  ];
@@ -145,51 +133,79 @@ int Singularities::Execute(TCSR<double> *KohnSham,TCSR<double> *Overlap,double *
     MPI_Bcast(&energy_vb,1,MPI_DOUBLE,0,MPI_COMM_WORLD);
     MPI_Bcast(&energy_cb,1,MPI_DOUBLE,0,MPI_COMM_WORLD);
     MPI_Bcast(&muvec[0],n_mu,MPI_DOUBLE,0,MPI_COMM_WORLD);
-    delete[] k;
 
     return 0;
 }
 
 Singularities::~Singularities()
 {
-    if (!iam) {
-        for (int i_mu=0;i_mu<n_mu;i_mu++) {
-            delete[] energies_matrix[i_mu];
-            delete[] derivatives_matrix[i_mu];
-            delete[] curvatures_matrix[i_mu];
-        }
-    }
-    delete[] energies_matrix;
-    delete[] derivatives_matrix;
-    delete[] curvatures_matrix;
 }
 
-void Singularities::get_propagating(vector< vector<double> > &prop,const vector<CPX> &evec,int i_mu)
+std::vector< std::vector< std::vector<double> > > Singularities::get_propagating(const std::vector<CPX> &evec)
 {
-    prop.resize(evec.size());
-    for (uint ie=0;ie<evec.size();ie++) {
-        if (!imag(evec[ie])) {
-            for (int iband=0;iband<ndof;iband++) {
-                for (int i_k=0;i_k<n_k-1;i_k++) {
-                   double val=-derivatives_matrix[i_mu][iband+i_k*ndof]/curvatures_matrix[i_mu][iband+i_k*ndof];
-                   double discri=val*val+2.0/curvatures_matrix[i_mu][iband+i_k*ndof]*(real(evec[ie])-energies_matrix[i_mu][iband+i_k*ndof]);
-                   if (discri>=0.0) {
-                       double x1=(val+sqrt(discri))*(n_k-1)/M_PI;
-                       if (x1<1.0 && x1>=0.0) {
-                           prop[ie].push_back((i_k+x1)*M_PI/(n_k-1));
-                       }
-                       double x2=(val-sqrt(discri))*(n_k-1)/M_PI;
-                       if (x2<1.0 && x2>=0.0) {
-                           prop[ie].push_back((i_k+x2)*M_PI/(n_k-1));
-                       }
-                   }
+    if (!iam) {
+        std::vector< std::vector< std::vector<double> > > prop(n_mu);
+        for (int i_mu=0;i_mu<n_mu;i_mu++) {
+            prop[i_mu].resize(evec.size());
+            for (uint ie=0;ie<evec.size();ie++) {
+                if (!imag(evec[ie])) {
+                    for (int iband=0;iband<ndof;iband++) {
+                        for (int i_k=0;i_k<n_k-1;i_k++) {
+                            double val=-derivatives_matrix[i_mu][iband+i_k*ndof]/curvatures_matrix[i_mu][iband+i_k*ndof];
+                            double discri=val*val+2.0/curvatures_matrix[i_mu][iband+i_k*ndof]*(real(evec[ie])-energies_matrix[i_mu][iband+i_k*ndof]);
+                            if (discri>=0.0) {
+                                double x1=(val+sqrt(discri))*(n_k-1)/M_PI;
+                                if (x1<1.0 && x1>=0.0) {
+                                    prop[i_mu][ie].push_back((i_k+x1)*M_PI/(n_k-1));
+                                }
+                                double x2=(val-sqrt(discri))*(n_k-1)/M_PI;
+                                if (x2<1.0 && x2>=0.0) {
+                                    prop[i_mu][ie].push_back((i_k+x2)*M_PI/(n_k-1));
+                                }
+                            }
+                        }
+                    }
                 }
             }
         }
+        return prop;
+    } else {
+        return std::vector< std::vector< std::vector<double> > > (); 
     }
 }
 
-double Singularities::determine_fermi(double doping,double Temp,int i_mu) //slightly differs from OMEN
+std::vector< std::vector< std::vector<CPX> > > Singularities::get_decaying(const std::vector<CPX> &evec,double thr_decay)
+{
+    if (!iam) {
+        std::vector< std::vector< std::vector<CPX> > > decay(n_mu);
+        for (int i_mu=0;i_mu<n_mu;i_mu++) {
+            decay[i_mu].resize(evec.size());
+            for (uint ie=0;ie<evec.size();ie++) {
+                double energy_ie=real(evec[ie]);
+                for (uint iE=0;iE<energies_extremum[i_mu].size();iE++) {
+                    double energy_dist=energies_extremum[i_mu][iE]-energy_ie;
+                    if (abs(energy_dist)<2.0) {
+                        double k_sq=2.0*energy_dist/curvatures_extremum[i_mu][iE];
+                        if (k_sq>=0.0) {
+                            CPX k_cpx=CPX(kval_extremum[i_mu][iE],sqrt(k_sq));
+                            if (abs(exp(CPX(0.0,-1.0)*k_cpx))<thr_decay) {
+                                decay[i_mu][ie].push_back(k_cpx);
+                                if (real(k_cpx)>M_PI/(n_k-1)) {
+                                    decay[i_mu][ie].push_back(CPX(-real(k_cpx),imag(k_cpx)));
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        return decay;
+    } else {
+        return std::vector< std::vector< std::vector<CPX> > > (); 
+    }
+}
+
+double Singularities::determine_fermi(double doping,int i_mu) //slightly differs from OMEN
 {
     double nocctol=1.0E-2/n_k;
     cout << "Fermi Level / Number of Electrons with precision " << nocctol << endl;
@@ -236,40 +252,6 @@ void Singularities::follow_band(int i_mu)
             swap(curvatures_matrix[i_mu][iband+i_k*ndof],curvatures_matrix[i_mu][iband2+i_k*ndof]);
         }
     }
-}
-
-double Singularities::min_parabola(int n,double *x,double *y,int disp,double& extr)
-{
-    int i,j,p;
-    double a[3];
-    double mat[9];
-    if (n==3) {
-        for (i=0;i<3;i++) {
-            a[i]=y[i*disp];
-            for (j=0;j<3;j++)
-                mat[i+3*j]=pow(x[i],2-j);
-        }
-    } else if (n>3) {
-        for (i=0;i<3;i++) {
-            a[i]=0.0;
-            for (p=0;p<n;p++)
-                a[i]+=pow(x[p],2-i)*y[p*disp];
-            for (j=0;j<3;j++) {
-                mat[i+3*j]=0.0;
-                for (p=0;p<n;p++)
-                    mat[i+3*j]+=pow(x[p],4-i-j);
-            }
-        }
-    }
-    int info;
-    int pivarray[3];
-    c_dgetrf(3,3,mat,3,pivarray,&info);
-    c_dgetrs('N',3,1,mat,3,pivarray,a,3,&info);
-    extr = a[2]-a[1]*a[1]/a[0]/4.0;
-    double resid = 0.0;
-    for (p=0;p<n;p++)
-        resid+=pow(a[0]*x[p]*x[p]+a[1]*x[p]+a[2]-y[p*disp],2);
-    return sqrt(resid);
 }
 
 void Singularities::write_bandstructure(int i_mu)

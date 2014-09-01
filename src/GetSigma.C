@@ -345,18 +345,20 @@ int worldrank; MPI_Comm_rank(MPI_COMM_WORLD,&worldrank);
         }
     }
 if (!worldrank) cout << "TIME FOR EIGENVALUE SOLVER " << get_time(sabtime) << endl;
-/*
+// /*
 if (!boundary_rank) cout<<worldrank<<" AT "<<real(energy)<<" NPROTRA "<<nprotra<<" NPROREF "<<nproref<<" NDECTRA "<<ndectra<<" NDECREF "<<ndecref<<" SIGN "<<inj_sign<<endl;
 if (!boundary_rank) {
 stringstream mysstream;
 mysstream << "AllEigvals" << worldrank << "_" << inj_sign;
 ofstream myfile(mysstream.str().c_str());
 myfile.precision(15);
-for (int iele=0;iele<nproref+ndecref;iele++)
-    myfile << real(lambdaref[iele]) << " " << imag(lambdaref[iele]) << endl;
+for (int iele=0;iele<nproref+ndecref;iele++) {
+    CPX k_eigval=CPX(0.0,1.0)*log(lambdaref[iele]);
+    myfile << real(k_eigval) << " " << imag(k_eigval) << endl;
+}
 myfile.close();
 }
-*/
+// */
 if (!boundary_rank) {
     if (nprotra!=nproref) return (LOGCERR, EXIT_FAILURE);
     if (ndectra!=ndecref) ndecref=min(ndectra,ndecref);//NEEDED?
