@@ -18,7 +18,8 @@ public:
 Singularities(c_transport_type,int);
 int Execute(TCSR<double>*,TCSR<double>*,double*,double*,int*);
 void write_bandstructure(int);
-void get_propagating(vector< vector<double> >&,const vector<CPX>&,int);
+std::vector< std::vector< std::vector<double> > > get_propagating(const std::vector<CPX>&);
+std::vector< std::vector< std::vector<CPX> > > get_decaying(const std::vector<CPX>&,double);
 ~Singularities();
 
 /// Vector containing the singularity points
@@ -42,13 +43,16 @@ int noccunitcell;
 double Temp;
 int n_mu;
 
-double **energies_matrix;
-double **derivatives_matrix;
-double **curvatures_matrix;
+std::vector< std::vector<double> > energies_extremum;
+std::vector< std::vector<double> > curvatures_extremum;
+std::vector< std::vector<double> > kval_extremum;
 
-double min_parabola(int,double*,double*,int,double&);
+std::vector< std::vector<double> > energies_matrix;
+std::vector< std::vector<double> > derivatives_matrix;
+std::vector< std::vector<double> > curvatures_matrix;
+
 int determine_velocities(CPX*,CPX*,double,double*,double*,double*);
-double determine_fermi(double,double,int);
+double determine_fermi(double,int);
 int eigen(CPX*,CPX*,CPX*,CPX*,CPX,double*);
 void follow_band(int);
 

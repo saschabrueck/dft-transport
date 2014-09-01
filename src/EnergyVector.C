@@ -219,11 +219,11 @@ methodvector[0]=transport_methods::WF;
         energyvector.assign(start_evec,end_evec);
         methodvector.clear();
         methodvector.assign(energyvector.size(),transport_methods::WF);
+        stepvector.clear();
         if (energyvector.size()==1) {
-            stepvector.clear();
             stepvector.assign(1,CPX(1.0,0.0));
         } else {
-            stepvector.resize(1,(energyvector[1]-energyvector[0])/2.0);
+            stepvector.assign(1,(energyvector[1]-energyvector[0])/2.0);
             for (uint istep=1;istep<energyvector.size()-1;istep++) {
                 stepvector.push_back((energyvector[istep+1]-energyvector[istep-1])/2.0);
             }
@@ -236,17 +236,28 @@ methodvector[0]=transport_methods::WF;
     int *propagating_sizes_left = new int[energyvector.size()];
     int *propagating_sizes_right = new int[energyvector.size()];
     if (!iam) {
-        std::vector< std::vector<double> > propagating_left;
-        std::vector< std::vector<double> > propagating_right;
-        singularities.get_propagating(propagating_left,energyvector,0);
-        singularities.get_propagating(propagating_right,energyvector,1);
+        std::vector< std::vector< std::vector<double> > > propagating = singularities.get_propagating(energyvector);
         for (uint ie=0;ie<energyvector.size();ie++) {
-            propagating_sizes_left[ie]=propagating_left[ie].size();
-            propagating_sizes_right[ie]=propagating_right[ie].size();
+            propagating_sizes_left[ie]=propagating[0][ie].size();
+            propagating_sizes_right[ie]=propagating[1][ie].size();
         }
     }
     MPI_Bcast(propagating_sizes_left,energyvector.size(),MPI_INT,0,MPI_COMM_WORLD);
     MPI_Bcast(propagating_sizes_right,energyvector.size(),MPI_INT,0,MPI_COMM_WORLD);
+    if (!iam) {
+        std::vector< std::vector< std::vector<CPX> > > decaying = singularities.get_decaying(energyvector,10.0);
+        for (int i_mu=0;i_mu<n_mu;i_mu++) {
+            for (uint ie=0;ie<energyvector.size();ie++) {
+                stringstream mysstream;
+                mysstream << "Decaying" << ie << "_" << i_mu;
+                ofstream myfile(mysstream.str().c_str());
+                for (uint iout=0;iout<decaying[i_mu][ie].size();iout++) {
+                    myfile << real(decaying[i_mu][ie][iout]) << " " << imag(decaying[i_mu][ie][iout]) << endl;
+                }
+                myfile.close();
+            }
+        }
+    }
 // run distributed BUT DELETE SINGULARITY CLASS BEFORE
     std::vector<double> currentvector(energyvector.size(),0.0);
     std::vector<double> transmission(energyvector.size(),0.0);
@@ -265,7 +276,6 @@ methodvector[0]=transport_methods::WF;
     sabtime=get_time(0.0);
     uint jpos;
     for (int iseq=0;iseq<int(ceil(double(energyvector.size())/n_mat_comm));iseq++)
-//    for (int iseq=0;iseq<1;iseq++)
         if ( (jpos=matrix_id+iseq*n_mat_comm)<energyvector.size())
             if (abs(stepvector[jpos])>0.0)
                 if (density(KohnShamCollect,OverlapCollect,OverlapCollectPBC,Ps,energyvector[jpos],stepvector[jpos],methodvector[jpos],n_mu,muvec,contactvec,currentvector[jpos],transmission[jpos],dos_profile[jpos],propagating_sizes_left[jpos],propagating_sizes_right[jpos],atom_of_bf,eperatom,dperatom,transport_params,distribute_pmat,matrix_comm))
