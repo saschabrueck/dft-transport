@@ -1,6 +1,7 @@
 #include "FEMGrid.H"
 #include "Poisson.H"
 #include "GetSingularities.H"
+#include "EnergyVector.H"
 #include <numeric>
 #include <iterator>
 
@@ -10,9 +11,7 @@ extern Poisson *OMEN_Poisson_Solver;
 extern FEMGrid *FEM;
 extern PARAM *parameter;
 extern VOLTAGE *voltage;
-
-int energyvector(TCSR<double>*,TCSR<double>*,int,double*,int*,double*,double*,double*,int,int*,c_transport_type);
-        
+ 
 int semiselfconsistent(TCSR<double> *Overlap,TCSR<double> *KohnSham,c_transport_type transport_params)
 {
     int iam;MPI_Comm_rank(MPI_COMM_WORLD,&iam);
@@ -45,7 +44,15 @@ if (!iam) cout << "N_ATOMS " << NAtom_work << endl;
     c_dscal(KohnSham->n_nonzeros,transport_params.evoltfactor,KohnSham->nnz,1);
 
     if (!do_semiself) {
-        if (energyvector(Overlap,KohnSham,n_mu,muvec,contactvec,dopingvec,rho_atom,drho_atom_dV,NAtom_work,atom_of_bf,transport_params)) return (LOGCERR, EXIT_FAILURE);
+        Energyvector energyvector;
+        if (energyvector.Execute(Overlap,KohnSham,n_mu,muvec,contactvec,dopingvec,rho_atom,drho_atom_dV,NAtom_work,atom_of_bf,transport_params)) return (LOGCERR, EXIT_FAILURE);
+if(!iam){
+stringstream mysstream;
+mysstream << "rhofile";
+ofstream rhofile(mysstream.str().c_str());
+for (int ig=0;ig<NAtom_work;ig++) rhofile<<rho_atom[ig]<<endl;
+rhofile.close();
+}
         return 0;
     }
 
@@ -126,7 +133,8 @@ if (!iam) cout << "GATE POTENTIAL " << Vg << endl;
         TCSR<double> *KohnShamPot = new TCSR<double>(1.0,KohnSham,1.0,Pot);
         delete Pot;
 
-        if (energyvector(Overlap,KohnShamPot,n_mu,muvec,contactvec,dopingvec,rho_atom,drho_atom_dV,FEM->NAtom,atom_of_bf,transport_params)) return (LOGCERR, EXIT_FAILURE);
+        Energyvector energyvector;
+        if (energyvector.Execute(Overlap,KohnShamPot,n_mu,muvec,contactvec,dopingvec,rho_atom,drho_atom_dV,FEM->NAtom,atom_of_bf,transport_params)) return (LOGCERR, EXIT_FAILURE);
         delete KohnShamPot;
 
         if (!iam) cout << "TIME FOR SCHROEDINGER " << get_time(sabtime) << endl;

@@ -227,7 +227,7 @@ void BoundarySelfEnergy::Distribute(TCSR<CPX> *SumHamC,MPI_Comm matrix_comm)
         }
 }
 
-int BoundarySelfEnergy::GetSigma(MPI_Comm boundary_comm)
+int BoundarySelfEnergy::GetSigma(MPI_Comm boundary_comm,int evecpos)
 {
     double d_one=1.0;
     double d_zer=0.0;
@@ -345,11 +345,11 @@ int worldrank; MPI_Comm_rank(MPI_COMM_WORLD,&worldrank);
         }
     }
 if (!worldrank) cout << "TIME FOR EIGENVALUE SOLVER " << get_time(sabtime) << endl;
-// /*
+ /*
 if (!boundary_rank) cout<<worldrank<<" AT "<<real(energy)<<" NPROTRA "<<nprotra<<" NPROREF "<<nproref<<" NDECTRA "<<ndectra<<" NDECREF "<<ndecref<<" SIGN "<<inj_sign<<endl;
 if (!boundary_rank) {
 stringstream mysstream;
-mysstream << "AllEigvals" << worldrank << "_" << inj_sign;
+mysstream << "AllEigvals" << evecpos << "_" << inj_sign;
 ofstream myfile(mysstream.str().c_str());
 myfile.precision(15);
 for (int iele=0;iele<nproref+ndecref;iele++) {
@@ -358,7 +358,7 @@ for (int iele=0;iele<nproref+ndecref;iele++) {
 }
 myfile.close();
 }
-// */
+ */
 if (!boundary_rank) {
     if (nprotra!=nproref) return (LOGCERR, EXIT_FAILURE);
     if (ndectra!=ndecref) ndecref=min(ndectra,ndecref);//NEEDED?
@@ -386,9 +386,6 @@ if (!boundary_rank) {
     delete[] VT;
     delete[] matcpx;
 if (!worldrank) cout << "TIME FOR MATRIX MATRIX MULTIPLICATIONS FOR INVERSE OF G " << get_time(sabtime) << endl;
-    sigma         = new CPX[triblocksize];
-    CPX *presigma = new CPX[triblocksize];
-    CPX *matctri  = new CPX[triblocksize];
     sabtime=get_time(d_zer);
     double *worknorm=new double[neigbas];
     double anorm=c_zlange('1',neigbas,neigbas,invgrs,neigbas,worknorm);
@@ -404,6 +401,7 @@ if (!worldrank) cout << "TIME FOR MATRIX MATRIX MULTIPLICATIONS FOR INVERSE OF G
     delete[] cworkcond;
     delete[] dworkcond;
     if (rcond<numeric_limits<double>::epsilon()) return (LOGCERR, EXIT_FAILURE);
+    sigma = new CPX[triblocksize];
     CPX* RCOR = new CPX[ntriblock*neigbas];
     int inversion_small_multmult = 1;
     if (inversion_small_multmult) {
@@ -412,10 +410,12 @@ if (!worldrank) cout << "TIME FOR MATRIX MATRIX MULTIPLICATIONS FOR INVERSE OF G
         if (iinfo) return (LOGCERR, EXIT_FAILURE);
         c_zgemm('N','N',ntriblock,ntriblock,neigbas,z_one,Vref,ntriblock,RCOR,neigbas,z_zer,sigma,ntriblock);
 // i wouldnt need all the transpose if g00R, which is contained in sigma, was symmetric
+        CPX *matctri  = new CPX[triblocksize];
         full_transpose(ntriblock,ntriblock,sigma,matctri);
-        H1t->trans_mat_vec_mult(matctri,presigma,ntriblock,1);
-        H1t->trans_mat_vec_mult(presigma,matctri,ntriblock,1);
+        H1t->trans_mat_vec_mult(matctri,sigma,ntriblock,1);
+        H1t->trans_mat_vec_mult(sigma,matctri,ntriblock,1);
         full_transpose(ntriblock,ntriblock,matctri,sigma);
+        delete[] matctri;
     } else {
         CPX* LCOR = new CPX[ntriblock*neigbas];
         H1t->mat_vec_mult(Vref,LCOR,neigbas);
@@ -423,55 +423,12 @@ if (!worldrank) cout << "TIME FOR MATRIX MATRIX MULTIPLICATIONS FOR INVERSE OF G
         c_zgetrs('N',neigbas,ntriblock,invgrs,neigbas,pivarrayg,RCOR,neigbas,&iinfo);
         if (iinfo) return (LOGCERR, EXIT_FAILURE);
         c_zgemm('N','N',ntriblock,ntriblock,neigbas,z_one,LCOR,ntriblock,RCOR,neigbas,z_zer,sigma,ntriblock);
-        full_transpose(neigbas,ntriblock,Vref,RCOR);
-        c_zgetrs('N',neigbas,ntriblock,invgrs,neigbas,pivarrayg,RCOR,neigbas,&iinfo);
-        if (iinfo) return (LOGCERR, EXIT_FAILURE);
-        c_zgemm('N','N',ntriblock,ntriblock,neigbas,z_one,LCOR,ntriblock,RCOR,neigbas,z_zer,presigma,ntriblock);
         delete[] LCOR;
     }
     delete[] pivarrayg;
     delete[] RCOR;
     delete[] invgrs;
 if (!worldrank) cout << "TIME FOR INVERSION AND MATRIX MATRIX MULTIPLICATIONS FOR SIGMA " << get_time(sabtime) << endl;
-
-    sabtime=get_time(d_zer);
-    int inversion_with_sparse_mult_symm=0;
-    int linear_system_with_dense_mult_symm=0;
-    if (inversion_with_sparse_mult_symm) {
-        H0->sparse_to_full(matctri,ntriblock,ntriblock);
-        c_zaxpy(triblocksize,-z_one,sigma,1,matctri,1);
-        int *pivarrays=new int[ntriblock];
-        c_zgetrf(ntriblock,ntriblock,matctri,ntriblock,pivarrays,&iinfo);
-        if (iinfo) return (LOGCERR, EXIT_FAILURE);
-        CPX nworks;
-        c_zgetri(ntriblock,matctri,ntriblock,pivarrays,&nworks,-1,&iinfo);
-        int lworks=int(real(nworks));
-        CPX* works=new CPX[lworks];
-        c_zgetri(ntriblock,matctri,ntriblock,pivarrays,works,lworks,&iinfo);
-        if (iinfo) return (LOGCERR, EXIT_FAILURE);
-        delete[] works;
-        delete[] pivarrays;
-        full_transpose(ntriblock,ntriblock,matctri,sigma);
-        H1t->trans_mat_vec_mult(sigma,presigma,ntriblock,1);
-        H1t->trans_mat_vec_mult(presigma,matctri,ntriblock,1);
-        full_transpose(ntriblock,ntriblock,matctri,sigma);
-    } else if (linear_system_with_dense_mult_symm) {
-        H0->sparse_to_full(matctri,ntriblock,ntriblock);
-        c_zaxpy(triblocksize,-z_one,sigma,1,matctri,1);
-        int *pivarrays=new int[ntriblock];
-        c_zgetrf(ntriblock,ntriblock,matctri,ntriblock,pivarrays,&iinfo);
-        if (iinfo) return (LOGCERR, EXIT_FAILURE);
-        H1->sparse_to_full(sigma,ntriblock,ntriblock);
-        c_zgetrs('T',ntriblock,ntriblock,matctri,ntriblock,pivarrays,sigma,ntriblock,&iinfo);
-        if (iinfo) return (LOGCERR, EXIT_FAILURE);
-        delete[] pivarrays;
-        full_transpose(ntriblock,ntriblock,sigma,presigma);
-        H1t->trans_mat_vec_mult(presigma,matctri,ntriblock,1);
-        full_transpose(ntriblock,ntriblock,matctri,sigma);
-    }
-if (!worldrank) cout << "TIME FOR SYMMETRIZATION " << get_time(sabtime) << endl;
-
-    delete[] matctri;
 
     if (compute_inj) {
         sabtime=get_time(d_zer);
@@ -482,34 +439,16 @@ if (!worldrank) cout << "TIME FOR SYMMETRIZATION " << get_time(sabtime) << endl;
         for (int ipro=0;ipro<nprotra;ipro++) {
             lambdapro[ipro]=pow(lambdaref[ipro],+inj_sign);
         }
-        int dotheh0ph1inj=0;
-        if (dotheh0ph1inj) {
-            H1t->mat_vec_mult(Vref,inj,nprotra);
-//            H1t->mat_vec_mult(Vtra,inj,nprotra);
-            CPX *injr1=new CPX[ntriblock*nprotra];
-            c_zcopy(ntriblock*nprotra,inj,1,injr1,1);
-            for (int ipro=0;ipro<nprotra;ipro++) {
-                c_zscal(ntriblock,pow(lambdaref[ipro],-inj_sign*bandwidth),&injr1[ipro*ntriblock],1);
-//                c_zscal(ntriblock,pow(lambdatra[ipro],inj_sign*bandwidth),&injr1[ipro*ntriblock],1);
-            }
-            H0->mat_vec_mult_add(Vref,injr1,nprotra,z_one);
-//            H0->mat_vec_mult_add(Vtra,injr1,nprotra,z_one);
-            c_zgemm('N','N',ntriblock,nprotra,ntriblock,-z_one,presigma,ntriblock,injr1,ntriblock,z_one,inj,ntriblock);
-            delete[] injr1;
-        } else {
-            H1t->mat_vec_mult(Vref,inj,nprotra);
-            for (int ipro=0;ipro<nprotra;ipro++) {
-                c_zscal(ntriblock,pow(lambdaref[ipro],inj_sign*bandwidth),&Vref[ipro*ntriblock],1);
-            }
-            c_zgemm('N','N',ntriblock,nprotra,ntriblock,z_one,sigma,ntriblock,Vref,ntriblock,z_one,inj,ntriblock);
+        H1t->mat_vec_mult(Vref,inj,nprotra);
+        for (int ipro=0;ipro<nprotra;ipro++) {
+            c_zscal(ntriblock,pow(lambdaref[ipro],inj_sign*bandwidth),&Vref[ipro*ntriblock],1);
         }
+        c_zgemm('N','N',ntriblock,nprotra,ntriblock,z_one,sigma,ntriblock,Vref,ntriblock,z_one,inj,ntriblock);
         for (int ipro=0;ipro<nprotra;ipro++) {
             c_zscal(ntriblock,CPX(d_one/sqrt(2*M_PI*velref[ipro]),d_zer),&inj[ipro*ntriblock],1);
-//            c_zscal(ntriblock,CPX(d_one/sqrt(2*M_PI*veltra[ipro]),d_zer),&inj[ipro*ntriblock],1);
         }
 if (!worldrank) cout << "MATRIX MATRIX MULTIPLICATIONS FOR INJECTION " << get_time(sabtime) << endl;
     }
-    delete[] presigma;
     delete[] Vtra;
     delete[] Vref;
     delete[] lambdatra;

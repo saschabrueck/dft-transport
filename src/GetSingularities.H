@@ -19,18 +19,16 @@ Singularities(c_transport_type,int);
 int Execute(TCSR<double>*,TCSR<double>*,double*,double*,int*);
 void write_bandstructure(int);
 std::vector< std::vector< std::vector<double> > > get_propagating(const std::vector<CPX>&);
-std::vector< std::vector< std::vector<CPX> > > get_decaying(const std::vector<CPX>&,double);
 ~Singularities();
 
 /// Vector containing the singularity points
-std::vector<double> energies;
+std::vector< std::vector<double> > energies_extremum;
 /// Lower integration limit
 double energy_gs;
 /// Valence band edge
 double energy_vb;
 /// Conduction band edge
 double energy_cb;
-
 
 private:
 int iam, nprocs;
@@ -43,7 +41,6 @@ int noccunitcell;
 double Temp;
 int n_mu;
 
-std::vector< std::vector<double> > energies_extremum;
 std::vector< std::vector<double> > curvatures_extremum;
 std::vector< std::vector<double> > kval_extremum;
 

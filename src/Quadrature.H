@@ -18,8 +18,9 @@ enum quadrature_type {
   GL=2,     // Gauss-Legendre
   ANPS=3,   // Areshkin-Nikolic Pole Summation
   GC=4,     // Gauss-Chebychev
-  TS=5,    // Tanh-sinh
-  TR=6    // Trapezoidal Rule
+  TS=5,     // Tanh-sinh
+  TR=6,     // Trapezoidal Rule
+  CCTR=7    // Complex Contour Trapezoidal Rule
 };
 } // namespace
 
@@ -38,16 +39,12 @@ class Quadrature {
  public:
   std::vector<CPX> abscissae;    ///< Vector containing the abscissae
   std::vector<CPX> weights; ///< Vector containing the corresponding weights
-  Quadrature(quadrature_types::quadrature_type, double, double, double, 
-      double, unsigned int);
-  double get_start() {return band_start;}; ///< Get start of band
-  double get_end() {return band_end;}; ///< Get end of band
+  Quadrature(quadrature_types::quadrature_type, double, double, 
+      unsigned int, double = 0.0, double = 0.0);
 
  private:
   double band_start;
   double band_end;
-  double fermi_level;
-  double temperature;
   quadrature_types::quadrature_type my_type;
 };
 
