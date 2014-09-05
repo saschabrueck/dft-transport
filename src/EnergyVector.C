@@ -1,58 +1,38 @@
 #include "Utilities.H"
-#include "CSR.H"
 #include "Density.H"
 #include "GetSingularities.H"
 #include "Quadrature.H"
+#include "EnergyVector.H"
 #include <iterator>
 
-int energyvector(TCSR<double> *Overlap,TCSR<double> *KohnSham,int n_mu,double* muvec, int* contactvec,double* dopingvec,double* electronchargeperatom,double* derivativechargeperatom,int n_atoms,int* atom_of_bf,c_transport_type transport_params)
+Energyvector::Energyvector()
 {
-    int iam, nprocs;
     MPI_Comm_size(MPI_COMM_WORLD,&nprocs);
     MPI_Comm_rank(MPI_COMM_WORLD,&iam);
-    MPI_Comm matrix_comm;
-    MPI_Comm eq_rank_matrix_comm;
+}
+
+Energyvector::~Energyvector()
+{
+}
+
+int Energyvector::Execute(TCSR<double> *Overlap,TCSR<double> *KohnSham,int n_mu,double* muvec, int* contactvec,double* dopingvec,double* electronchargeperatom,double* derivativechargeperatom,int n_atoms,int* atom_of_bf,c_transport_type transport_params)
+{
     double sabtime;
-// check parameters
     if ( Overlap->size_tot%transport_params.n_cells || transport_params.bandwidth<1 ) return (LOGCERR, EXIT_FAILURE);
-    int tasks_per_point=1; // set to 2 for SPIKE
-    if (tasks_per_point>1) if (!iam) cout<<"Distributing matrix over "<<tasks_per_point<<" tasks"<<endl;
+    int tasks_per_point=1;
+    if (!iam) cout << "Distributing matrix over " << tasks_per_point << " tasks" << endl;
     if ( nprocs%tasks_per_point ) {
         if (!iam) cout << "Choose number of tasks per energy point as a divider of total number of tasks" << endl;
         return (LOGCERR, EXIT_FAILURE);
     }
-// additional parameters not needed in the future
-    int n_cells=transport_params.n_cells;
     int distribute_pmat=1;
-// only to write out unit cell Hamiltonian and Overlap matrix
-#ifdef _CONTACT_WRITEOUT
-    int ndof=Overlap->size_tot/n_cells;
-    TCSR<double> *Hcut = new TCSR<double>(KohnSham,0,ndof,0,(transport_params.bandwidth+1)*ndof);
-    TCSR<double> *Hsp = new TCSR<double>(Hcut,0,MPI_COMM_WORLD);
-    delete Hcut;
-    if (!iam) {
-        Hsp->shift_resize(0,ndof,0,(transport_params.bandwidth+1)*ndof);
-        Hsp->change_findx(1);
-        Hsp->write("H012");
-    }
-    delete Hsp;
-    TCSR<double> *Scut = new TCSR<double>(Overlap,0,ndof,0,(transport_params.bandwidth+1)*ndof);
-    TCSR<double> *Ssp = new TCSR<double>(Scut,MPI_COMM_WORLD);
-    delete Scut;
-    if (!iam) {
-        Ssp->shift_resize(0,ndof,0,(transport_params.bandwidth+1)*ndof);
-        Ssp->change_findx(1);
-        Ssp->write("S012");
-    }
-    delete Ssp;
-    MPI_Barrier(MPI_COMM_WORLD);
-    exit(0);
-#endif
 // allocate matrices to gather on every node
     sabtime=get_time(0.0);
+    MPI_Comm matrix_comm;
+    MPI_Comm eq_rank_matrix_comm;
     TCSR<double> *KohnShamCollect;
     TCSR<double> *OverlapCollect;
-    TCSR<double> *Ps=NULL;
+    TCSR<double> *Ps = NULL;
     if (tasks_per_point > 1) {
         MPI_Comm KS_matrix_comm;
         MPI_Comm KS_eq_rank_matrix_comm;
@@ -117,153 +97,17 @@ exit(0);
 #endif
     }
     if (!iam) cout << "TIME FOR DISTRIBUTING MATRICES " << get_time(sabtime) << endl;
-// determine singularity stuff
-    double Temp=transport_params.extra_param3;
-    sabtime=get_time(0.0);
-    Singularities singularities(transport_params,n_mu);
-    if ( singularities.Execute(KohnSham,Overlap,muvec,dopingvec,contactvec) ) return (LOGCERR, EXIT_FAILURE);
-#ifdef _OMEN_WRITEOUT
-if (!iam) {
-int ndof=Overlap->size_tot/n_cells;
-ofstream matpar("mat_par");
-matpar << "1 1" << endl;
-matpar << singularities.energy_cb-singularities.energy_vb << " " << singularities.energy_cb << " " << singularities.energy_vb << endl;
-matpar << "12 12" << endl;
-matpar.close();
-KohnShamCollect->removepbc(transport_params.bandwidth,ndof);
-KohnShamCollect->change_findx(1);
-KohnShamCollect->write_CSR_bin("H_4.bin");
-OverlapCollect->removepbc(transport_params.bandwidth,ndof);
-OverlapCollect->change_findx(1);
-OverlapCollect->write_CSR_bin("S_4.bin");
-}
-MPI_Barrier(MPI_COMM_WORLD);
-exit(0);
-#endif
-//this is for no bias to make sure
-//muvec[0]=(muvec[0]+muvec[1])/2.0;muvec[1]=muvec[0];
-    if (!iam) cout << "TIME FOR SINGULARITIES " << get_time(sabtime) << endl;
-if (!iam) for (int i_mu=0;i_mu<n_mu;i_mu++) singularities.write_bandstructure(i_mu);
-// determine elements in nonequilibrium range
-    double k_b=K_BOLTZMANN;
-    double nonequi_start=min(muvec[0],muvec[n_mu-1])-35.0*k_b*Temp;
-// IF ONLY CONDUCTION ELECTRONS
-if (singularities.energy_cb<singularities.energy_vb) return (LOGCERR, EXIT_FAILURE);
-singularities.energy_gs=singularities.energy_cb-0.000001;
-nonequi_start=max(nonequi_start,singularities.energy_gs);
-// REAL AXIS
-int integral_over_real_axis=0;
-if (!iam) if (integral_over_real_axis) cout << "Integral over real axis" << endl;
-if (integral_over_real_axis) nonequi_start=singularities.energy_gs;
-    double nonequi_end=max(muvec[0],muvec[n_mu-1])+35.0*k_b*Temp;
-    std::vector<double> energylist;
-    energylist.push_back(nonequi_start);
-    for (uint i_energies=0;i_energies<singularities.energies.size();i_energies++)
-        if (singularities.energies[i_energies]>nonequi_start && singularities.energies[i_energies]<nonequi_end)
-            energylist.push_back(singularities.energies[i_energies]);
-    energylist.push_back(nonequi_end);
-    if (!iam) cout << energylist.size() << " energies in nonequilibrium range from a total of " << singularities.energies.size() << " singularity points" << endl;
-    if (!iam) {
-        ofstream myfile;
-        myfile.open("SingularityList");
-        myfile.precision(15);
-        for (uint iele=0;iele<energylist.size();iele++)
-            myfile << energylist[iele] << endl;
-        myfile.close();
-    }
-// get integration points along complex contour with gauss legendre
-    int num_points_on_contour=transport_params.n_abscissae;
-    Quadrature gausslegendre(quadrature_types::CCGL,singularities.energy_gs,nonequi_start,Temp,muvec[0],num_points_on_contour);
-    std::vector<CPX> energyvector(gausslegendre.abscissae);
-    std::vector<CPX> stepvector(gausslegendre.weights);
-    std::vector<transport_methods::transport_method> methodvector(gausslegendre.abscissae.size(),transport_methods::NEGF);
-// get integration points along real axis with gauss cheby
-    double smallest_energy_distance=transport_params.extra_param2;
-if (!iam) cout<<"Smallest enery distance "<<smallest_energy_distance<<endl;
-if (!iam) cout<<"Max number of points per small interval "<<transport_params.extra_int_param1<<endl;
-if (!iam) cout<<"Average distance for big intervals "<<transport_params.extra_param1<<endl;
-    for (uint i_energies=1;i_energies<energylist.size();i_energies++) {
-        int num_points_per_interval=max(transport_params.extra_int_param1,int(ceil(abs(energylist[i_energies]-energylist[i_energies-1])/transport_params.extra_param1)));
-        while ((energylist[i_energies]-energylist[i_energies-1])*(1.0-cos(M_PI/(2.0*num_points_per_interval)))/2.0<smallest_energy_distance && num_points_per_interval>1)
-            --num_points_per_interval;
-        if (num_points_per_interval>1) {
-            Quadrature gausscheby(quadrature_types::GC,energylist[i_energies-1],energylist[i_energies],0.0,0.0,num_points_per_interval);
-            energyvector.insert(energyvector.end(),gausscheby.abscissae.begin(),gausscheby.abscissae.end());
-            stepvector.insert(stepvector.end(),gausscheby.weights.begin(),gausscheby.weights.end());
-            std::vector<transport_methods::transport_method> methodblock(gausscheby.abscissae.size(),transport_methods::WF);
-            methodvector.insert(methodvector.end(),methodblock.begin(),methodblock.end());
-        }
-    }
-/*
-int ntrapez=2000;
-Quadrature trapez(quadrature_types::TR,nonequi_start,nonequi_end,Temp,muvec[0],ntrapez);
-energyvector.resize(ntrapez);
-stepvector.resize(ntrapez);
-methodvector.resize(ntrapez);
-copy(trapez.abscissae.begin(),trapez.abscissae.end(),energyvector.begin());
-copy(trapez.weights.begin(),trapez.weights.end(),stepvector.begin());
-fill(methodvector.begin(),methodvector.end(),transport_methods::WF);
-*/
-/*
-energyvector.resize(1);
-energyvector[0]=CPX(-3.947249951056,0.0);
-stepvector.resize(1);
-stepvector[0]=CPX(1.0,0.0);
-methodvector.resize(1);
-methodvector[0]=transport_methods::WF;
-*/
-    ifstream evecfile("OMEN_E");
-    if (evecfile) {
-        energyvector.clear();
-        istream_iterator<double> start_evec(evecfile), end_evec;
-        energyvector.assign(start_evec,end_evec);
-        methodvector.clear();
-        methodvector.assign(energyvector.size(),transport_methods::WF);
-        stepvector.clear();
-        if (energyvector.size()==1) {
-            stepvector.assign(1,CPX(1.0,0.0));
-        } else {
-            stepvector.assign(1,(energyvector[1]-energyvector[0])/2.0);
-            for (uint istep=1;istep<energyvector.size()-1;istep++) {
-                stepvector.push_back((energyvector[istep+1]-energyvector[istep-1])/2.0);
-            }
-            stepvector.push_back((energyvector[energyvector.size()-1]-energyvector[energyvector.size()-2])/2.0);
-        }
-    }
-    evecfile.close();
-    if (!iam) cout << "Size of Energyvector " << energyvector.size() << endl;
-// get propagating modes from bandstructure
-    int *propagating_sizes_left = new int[energyvector.size()];
-    int *propagating_sizes_right = new int[energyvector.size()];
-    if (!iam) {
-        std::vector< std::vector< std::vector<double> > > propagating = singularities.get_propagating(energyvector);
-        for (uint ie=0;ie<energyvector.size();ie++) {
-            propagating_sizes_left[ie]=propagating[0][ie].size();
-            propagating_sizes_right[ie]=propagating[1][ie].size();
-        }
-    }
-    MPI_Bcast(propagating_sizes_left,energyvector.size(),MPI_INT,0,MPI_COMM_WORLD);
-    MPI_Bcast(propagating_sizes_right,energyvector.size(),MPI_INT,0,MPI_COMM_WORLD);
-    if (!iam) {
-        std::vector< std::vector< std::vector<CPX> > > decaying = singularities.get_decaying(energyvector,10.0);
-        for (int i_mu=0;i_mu<n_mu;i_mu++) {
-            for (uint ie=0;ie<energyvector.size();ie++) {
-                stringstream mysstream;
-                mysstream << "Decaying" << ie << "_" << i_mu;
-                ofstream myfile(mysstream.str().c_str());
-                for (uint iout=0;iout<decaying[i_mu][ie].size();iout++) {
-                    myfile << real(decaying[i_mu][ie][iout]) << " " << imag(decaying[i_mu][ie][iout]) << endl;
-                }
-                myfile.close();
-            }
-        }
-    }
-// run distributed BUT DELETE SINGULARITY CLASS BEFORE
+    std::vector<CPX> energyvector;
+    std::vector<CPX> stepvector;
+    std::vector<transport_methods::transport_method> methodvector;
+    std::vector< std::vector<int> > propagating_sizes;
+    if (determine_energyvector(energyvector,stepvector,methodvector,propagating_sizes,KohnSham,Overlap,muvec,dopingvec,contactvec,transport_params,n_mu)) return (LOGCERR, EXIT_FAILURE);
     std::vector<double> currentvector(energyvector.size(),0.0);
     std::vector<double> transmission(energyvector.size(),0.0);
     std::vector<double> dos_profile(energyvector.size(),0.0);
     double *eperatom = new double[n_atoms]();
     double *dperatom = new double[n_atoms]();
+    int n_cells=transport_params.n_cells;
     int ndof=Overlap->size_tot/n_cells;
     TCSR<double> *OverlapCollectSave = new TCSR<double>(OverlapCollect);
     KohnShamCollect->settozeropbc(transport_params.bandwidth,ndof);
@@ -278,14 +122,12 @@ methodvector[0]=transport_methods::WF;
     for (int iseq=0;iseq<int(ceil(double(energyvector.size())/n_mat_comm));iseq++)
         if ( (jpos=matrix_id+iseq*n_mat_comm)<energyvector.size())
             if (abs(stepvector[jpos])>0.0)
-                if (density(KohnShamCollect,OverlapCollect,OverlapCollectPBC,Ps,energyvector[jpos],stepvector[jpos],methodvector[jpos],n_mu,muvec,contactvec,currentvector[jpos],transmission[jpos],dos_profile[jpos],propagating_sizes_left[jpos],propagating_sizes_right[jpos],atom_of_bf,eperatom,dperatom,transport_params,distribute_pmat,matrix_comm))
+                if (density(KohnShamCollect,OverlapCollect,OverlapCollectPBC,Ps,energyvector[jpos],stepvector[jpos],methodvector[jpos],n_mu,muvec,contactvec,currentvector[jpos],transmission[jpos],dos_profile[jpos],propagating_sizes[jpos],atom_of_bf,eperatom,dperatom,transport_params,distribute_pmat,jpos,matrix_comm))
                     return (LOGCERR, EXIT_FAILURE);
     if (!iam) cout << "TIME FOR DENSITY " << get_time(sabtime) << endl;
     delete KohnShamCollect;
     delete OverlapCollect;
     delete OverlapCollectPBC;
-    delete[] propagating_sizes_left;
-    delete[] propagating_sizes_right;
     MPI_Allreduce(eperatom,electronchargeperatom,n_atoms,MPI_DOUBLE,MPI_SUM,MPI_COMM_WORLD);
     MPI_Allreduce(dperatom,derivativechargeperatom,n_atoms,MPI_DOUBLE,MPI_SUM,MPI_COMM_WORLD);
     delete[] eperatom;
@@ -345,5 +187,140 @@ methodvector[0]=transport_methods::WF;
     MPI_Comm_free(&matrix_comm);
     MPI_Comm_free(&eq_rank_matrix_comm);
 
+    return 0;
+}
+
+int Energyvector::determine_energyvector(std::vector<CPX> &energyvector,std::vector<CPX> &stepvector,std::vector<transport_methods::transport_method> &methodvector,std::vector< std::vector<int> > &propagating_sizes,TCSR<double> *KohnSham,TCSR<double> *Overlap,double *muvec,double *dopingvec,int *contactvec,c_transport_type transport_params,int n_mu)
+{
+    double sabtime=get_time(0.0);
+    double Temp=transport_params.extra_param3;
+    Singularities singularities(transport_params,n_mu);
+    if ( singularities.Execute(KohnSham,Overlap,muvec,dopingvec,contactvec) ) return (LOGCERR, EXIT_FAILURE);
+#ifdef _OMEN_WRITEOUT
+if (!iam) {
+int ndof=Overlap->size_tot/transport_params.n_cells;
+ofstream matpar("mat_par");
+matpar << "1 1" << endl;
+matpar << singularities.energy_cb-singularities.energy_vb << " " << singularities.energy_cb << " " << singularities.energy_vb << endl;
+matpar << "12 12" << endl;
+matpar.close();
+KohnShamCollect->removepbc(transport_params.bandwidth,ndof);
+KohnShamCollect->change_findx(1);
+KohnShamCollect->write_CSR_bin("H_4.bin");
+OverlapCollect->removepbc(transport_params.bandwidth,ndof);
+OverlapCollect->change_findx(1);
+OverlapCollect->write_CSR_bin("S_4.bin");
+}
+MPI_Barrier(MPI_COMM_WORLD);
+exit(0);
+#endif
+    if (!iam) cout << "TIME FOR SINGULARITIES " << get_time(sabtime) << endl;
+    for (int i_mu=0;i_mu<n_mu;i_mu++) singularities.write_bandstructure(i_mu);
+// determine elements in nonequilibrium range
+    double k_b=K_BOLTZMANN;
+    double nonequi_start=*min_element(muvec,muvec+n_mu)-35.0*k_b*Temp;
+// ONLY CONDUCTION ELECTRONS
+    int only_conduction_electrons=0;
+    if (only_conduction_electrons) {
+        if (singularities.energy_cb<singularities.energy_vb) return (LOGCERR, EXIT_FAILURE);
+        if (!iam) cout << "Only conduction electrons" << endl;
+        singularities.energy_gs=singularities.energy_cb;
+        nonequi_start=max(nonequi_start,singularities.energy_gs);
+    }
+// REAL AXIS
+    int integral_over_real_axis=0;
+    if (integral_over_real_axis) {
+        if (!iam) cout << "Integral over real axis" << endl;
+        nonequi_start=singularities.energy_gs;
+    }
+    double nonequi_end=*max_element(muvec,muvec+n_mu)+35.0*k_b*Temp;
+    std::vector<double> energylist;
+    int n_energies;
+    if (!iam) {
+        energylist.push_back(nonequi_start);
+        for (int i_mu=0;i_mu<n_mu;i_mu++)
+            for (uint i_energies=0;i_energies<singularities.energies_extremum[i_mu].size();i_energies++)
+                if (singularities.energies_extremum[i_mu][i_energies]>nonequi_start && singularities.energies_extremum[i_mu][i_energies]<nonequi_end)
+                    energylist.push_back(singularities.energies_extremum[i_mu][i_energies]);
+        energylist.push_back(nonequi_end);
+        std::sort(energylist.begin(),energylist.end());
+        n_energies=energylist.size();
+    }
+    MPI_Bcast(&n_energies,1,MPI_INT,0,MPI_COMM_WORLD);
+    energylist.resize(n_energies);
+    MPI_Bcast(&energylist[0],n_energies,MPI_DOUBLE,0,MPI_COMM_WORLD);
+    if (!iam) {
+        ofstream myfile;
+        myfile.open("SingularityList");
+        myfile.precision(15);
+        for (uint iele=0;iele<energylist.size();iele++)
+            myfile << energylist[iele] << endl;
+        myfile.close();
+    }
+// get integration points along complex contour with gauss legendre
+    int num_points_on_contour=transport_params.n_abscissae;
+    Quadrature gausslegendre(quadrature_types::CCGL,singularities.energy_gs-0.5,nonequi_start,num_points_on_contour);
+    energyvector=gausslegendre.abscissae;
+    stepvector=gausslegendre.weights;
+    methodvector.assign(gausslegendre.abscissae.size(),transport_methods::NEGF);
+// get integration points along real axis with gauss cheby
+    double smallest_energy_distance=transport_params.extra_param2;
+if (!iam) cout<<"Smallest enery distance "<<smallest_energy_distance<<endl;
+if (!iam) cout<<"Max number of points per small interval "<<transport_params.extra_int_param1<<endl;
+if (!iam) cout<<"Average distance for big intervals "<<transport_params.extra_param1<<endl;
+    for (uint i_energies=1;i_energies<energylist.size();i_energies++) {
+        int num_points_per_interval=max(transport_params.extra_int_param1,int(ceil(abs(energylist[i_energies]-energylist[i_energies-1])/transport_params.extra_param1)));
+        while ((energylist[i_energies]-energylist[i_energies-1])*(1.0-cos(M_PI/(2.0*num_points_per_interval)))/2.0<smallest_energy_distance && num_points_per_interval>1)
+            --num_points_per_interval;
+        if (num_points_per_interval>1) {
+            Quadrature gausscheby(quadrature_types::GC,energylist[i_energies-1],energylist[i_energies],num_points_per_interval);
+            energyvector.insert(energyvector.end(),gausscheby.abscissae.begin(),gausscheby.abscissae.end());
+            stepvector.insert(stepvector.end(),gausscheby.weights.begin(),gausscheby.weights.end());
+            std::vector<transport_methods::transport_method> methodblock(gausscheby.abscissae.size(),transport_methods::WF);
+            methodvector.insert(methodvector.end(),methodblock.begin(),methodblock.end());
+        }
+    }
+    ifstream evecfile("OMEN_E");
+    if (evecfile) {
+        energyvector.clear();
+        istream_iterator<double> start_evec(evecfile), end_evec;
+        energyvector.assign(start_evec,end_evec);
+        methodvector.clear();
+        methodvector.assign(energyvector.size(),transport_methods::WF);
+        stepvector.clear();
+        if (energyvector.size()==1) {
+            stepvector.assign(1,CPX(1.0,0.0));
+        } else {
+            stepvector.assign(1,(energyvector[1]-energyvector[0])/2.0);
+            for (uint istep=1;istep<energyvector.size()-1;istep++) {
+                stepvector.push_back((energyvector[istep+1]-energyvector[istep-1])/2.0);
+            }
+            stepvector.push_back((energyvector[energyvector.size()-1]-energyvector[energyvector.size()-2])/2.0);
+        }
+    }
+    evecfile.close();
+    if (!iam) cout << "Size of Energyvector " << energyvector.size() << endl;
+    if (!iam) {
+        ofstream myfile;
+        myfile.open("EnergyList");
+        myfile.precision(15);
+        for (uint iele=0;iele<energyvector.size();iele++)
+            myfile << real(energyvector[iele]) << " " << imag(energyvector[iele]) << endl;
+        myfile.close();
+    }
+// get propagating modes from bandstructure
+    propagating_sizes.resize(energyvector.size());
+    for (uint ie=0;ie<energyvector.size();ie++) propagating_sizes[ie].resize(n_mu);
+    if (!iam) {
+        std::vector< std::vector< std::vector<double> > > propagating = singularities.get_propagating(energyvector);
+        for (uint ie=0;ie<energyvector.size();ie++) {
+            for (int i_mu=0;i_mu<n_mu;i_mu++) {
+                propagating_sizes[ie][i_mu]=propagating[i_mu][ie].size();
+            }
+        }
+    }
+    for (uint ie=0;ie<energyvector.size();ie++) {
+        MPI_Bcast(&propagating_sizes[ie][0],n_mu,MPI_INT,0,MPI_COMM_WORLD);
+    }
     return 0;
 }

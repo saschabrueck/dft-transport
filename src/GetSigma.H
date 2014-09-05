@@ -15,7 +15,7 @@ BoundarySelfEnergy();
 int Set_master(MPI_Comm,MPI_Comm);
 int Cutout(TCSR<CPX>*,int,CPX,transport_methods::transport_method,c_transport_type,MPI_Comm);
 void Distribute(TCSR<CPX>*,MPI_Comm);
-int GetSigma(MPI_Comm);
+int GetSigma(MPI_Comm,int);
 
 /// Self Energy
 CPX *sigma;

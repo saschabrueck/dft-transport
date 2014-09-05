@@ -74,10 +74,6 @@ void sparse_invert(TCSR<CPX> *matrix, std::vector<int> Bmax) {
 
   for (int block_row = 0; block_row < num_blocks; ++block_row) {
 
-    std::cout << block_row << ": Going from row " << Bmin[block_row] << " to "
-              << Bmax[block_row] << ", up to column " << Bmin[block_row + 2]
-              << "\n";
-
     for (int row = Bmin[block_row]; row <= Bmax[block_row]; ++row) {
       int nnz_start = matrix->edge_i[row] - matrix->findx;
       int nnz_end = matrix->edge_i[row+1] - matrix->findx;

@@ -26,7 +26,7 @@ int ldlt_free__(int *);
 int ldlt_blkselinv__(int *, int*, int*, CPX *, int*);
 }
 
-int density(TCSR<double> *KohnSham,TCSR<double> *Overlap,TCSR<double> *OverlapPBC,TCSR<double> *Ps,CPX energy,CPX weight,transport_methods::transport_method method,int n_mu,double *muvec,int *contactvec,double &current,double &transm,double &dos,int propnum_left,int propnum_right,int *atom_of_bf,double *erhoperatom,double *drhoperatom,c_transport_type parameter_sab,int distribute_pmat,MPI_Comm matrix_comm)
+int density(TCSR<double> *KohnSham,TCSR<double> *Overlap,TCSR<double> *OverlapPBC,TCSR<double> *Ps,CPX energy,CPX weight,transport_methods::transport_method method,int n_mu,double *muvec,int *contactvec,double &current,double &transm,double &dos,std::vector<int> propnum,int *atom_of_bf,double *erhoperatom,double *drhoperatom,c_transport_type parameter_sab,int distribute_pmat,int evecpos,MPI_Comm matrix_comm)
 {
     double d_one=1.0;
     double d_zer=0.0;
@@ -76,7 +76,7 @@ int worldrank; MPI_Comm_rank(MPI_COMM_WORLD,&worldrank);
                 if ( selfenergies[ibpos].Cutout(SumHamC,contactvec[ibpos],energy,method,parameter_sab,matrix_comm) ) return (LOGCERR, EXIT_FAILURE);
             }
             if (ipos<n_mu) {
-                if ( selfenergies[ipos].GetSigma(boundary_comm) ) return (LOGCERR, EXIT_FAILURE);
+                if ( selfenergies[ipos].GetSigma(boundary_comm,evecpos) ) return (LOGCERR, EXIT_FAILURE);
             }
             for (int i_bound_id=0;i_bound_id<n_bound_comm;i_bound_id++) {
                 int ibpos=i_bound_id+iseq*n_bound_comm;
@@ -95,8 +95,8 @@ int worldrank; MPI_Comm_rank(MPI_COMM_WORLD,&worldrank);
             lambda = new CPX[nprol+npror];
             c_zcopy(nprol,selfenergies[0].lambdapro,1,lambda,1);
             c_zcopy(npror,selfenergies[1].lambdapro,1,&lambda[nprol],1);
-if (nprol!=propnum_left) cout << "WARNING: FOUND " << nprol << " OF " << propnum_left << " LEFT MODES AT " << real(energy) << endl;
-if (npror!=propnum_right) cout << "WARNING: FOUND " << npror << " OF " << propnum_right << " RIGHT MODES AT " << real(energy) << endl;
+if (nprol!=propnum[0]) cout << "WARNING: FOUND " << nprol << " OF " << propnum[0] << " LEFT MODES AT " << real(energy) << endl;
+if (npror!=propnum[1]) cout << "WARNING: FOUND " << npror << " OF " << propnum[1] << " RIGHT MODES AT " << real(energy) << endl;
             inj = new CPX[HamSig->size*(nprol+npror)]();
             if (selfenergies[0].spainjdist->n_nonzeros) {
                 selfenergies[0].spainjdist->sparse_to_full(inj,HamSig->size,nprol);
@@ -244,7 +244,7 @@ if (!worldrank) cout << "TIME FOR SPARSE INVERSION " << get_time(sabtime) << end
         delete H1cut;
         sabtime=get_time(d_zer);
         LinearSolver<CPX>* solver;
-        int solver_method=0;
+        int solver_method=1;
         if (solver_method==0) {
             solver = new SuperLU<CPX>(HamSig,matrix_comm);
         } else if (solver_method==1) {

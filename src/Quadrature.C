@@ -53,22 +53,22 @@ class excQuadrature: public std::exception {
  *                      Upper bound of range with nonzero state density in
  *                      [eV].
  *
- * \param[in]           T
- *                      Temperature in [K].
- *
- * \param[in]           Ef
- *                      Fermi level in [eV].
- *
  * \param[in]           num_abscissae
  *                      For GL, CCGL and GC: How many abscissae to use for the
  *                      quadrature. For ANPS: exponent specifying the precision
  *                      to base e. Example: set to 6 to specify a precision of
  *                      exp(-6) ~= 0.0025. Machine precision for a 64bit double
  *                      is roughly exp(-36).
+ *
+ * \param[in]           T
+ *                      Temperature in [K].
+ *
+ * \param[in]           Ef
+ *                      Fermi level in [eV].
  */
 Quadrature::Quadrature(quadrature_types::quadrature_type type, double start, 
-                       double end, double T, double Ef, 
-                       unsigned int num_abscissae) {
+                       double end, unsigned int num_abscissae,
+                       double T, double Ef) {
   double k=K_BOLTZMANN;
   my_type = type;
   if (start < end) {
@@ -140,7 +140,6 @@ Quadrature::Quadrature(quadrature_types::quadrature_type type, double start,
       }
       delete[] eigenvectors;
 
-      CPX fermi(1.0, 0.0);
       for (uint i = 0; i <= num_abscissae - 1; ++i) {
         // Shift the precalculated abscissa from [-1 1] to [0, pi] interval
         double abscissa = abscissae_precalc[i] * (M_PI - 0.0) / 2.0 +
@@ -149,14 +148,8 @@ Quadrature::Quadrature(quadrature_types::quadrature_type type, double start,
         CPX contour_point = radius * CPX(-cos(abscissa), sin(abscissa)) +
                              center;
         abscissae.push_back(contour_point);
-        // Fermi function at given point:
-        if (T != 0) {
-          fermi = 1.0 / (exp((contour_point - Ef) / (k * T)) + 1.0);
-        }
-        // Account for length of parametrization, the fermi level, and the 
-        // derivative along the contour 
         weights.push_back(weights_precalc[i] * (M_PI - 0) / 2.0 * radius *
-                          fermi * CPX(sin(abscissa), cos(abscissa)));
+                          CPX(sin(abscissa), cos(abscissa)));
       }
       break;
     }
@@ -217,22 +210,14 @@ Quadrature::Quadrature(quadrature_types::quadrature_type type, double start,
 
 
       
-      double fermi = 1.0;
       for (uint i = 0; i <= num_abscissae - 1; ++i) {
 
         double abscissa = (abscissae_precalc[i] * (band_end - band_start) / 2.0) + 
                           (band_end + band_start) / 2.0;
         abscissae.push_back(abscissa);
 
-        if (T != 0) {
-          fermi = 1.0 / (exp((abscissa - Ef) / (k * T)) + 1.0);
-        } else if (abscissa > Ef) {
-          fermi = 0.0;
-        }
-        
-        double weight = weights_precalc[i] * (band_end - band_start) / 2.0 *
-                        fermi;
-        weights.push_back(weight);
+        weights.push_back(weights_precalc[i] * (band_end - band_start) / 2.0);
+
       }
 
       //for (int i = 0; i < num_abscissae; ++i)
@@ -401,6 +386,20 @@ Quadrature::Quadrature(quadrature_types::quadrature_type type, double start,
         } else {
             weights.push_back(step);
         }
+      }
+      break;
+    }
+    case quadrature_types::CCTR: {
+      if (num_abscissae <= 1) {
+        throw excQuadrature("Invalid number of abscissae");
+      }
+      double radius = (band_end - band_start) / 2.0;
+      double center = (band_end + band_start) / 2.0;
+      for (uint n = 0; n <= num_abscissae - 1; ++n) {
+        double step = (n + 0.5) / num_abscissae;
+        CPX theta = radius * exp(CPX(0.0, M_PI * step));
+        abscissae.push_back(center - theta);
+        weights.push_back(CPX(0.0, M_PI / num_abscissae) * theta);
       }
       break;
     }
