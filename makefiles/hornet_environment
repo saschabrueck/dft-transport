@@ -1,0 +1,4 @@
+module switch PrgEnv-cray PrgEnv-gnu
+module load cray-tpsl
+module load fftw
+export IIS='bruecks@grombach.ee.ethz.ch:'
