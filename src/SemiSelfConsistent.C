@@ -17,6 +17,38 @@ int semiselfconsistent(TCSR<double> *Overlap,TCSR<double> *KohnSham,c_transport_
     int iam;MPI_Comm_rank(MPI_COMM_WORLD,&iam);
     int procs;MPI_Comm_size(MPI_COMM_WORLD,&procs);
 
+    c_dscal(KohnSham->n_nonzeros,transport_params.evoltfactor,KohnSham->nnz,1);
+
+    if (transport_params.method==0) {
+        TCSR<double> *KohnShamCollect = new TCSR<double>(KohnSham,MPI_COMM_WORLD);
+        TCSR<double> *OverlapCollect = new TCSR<double>(Overlap,MPI_COMM_WORLD);
+        if (!iam) {
+            KohnShamCollect->write_CSR("KohnSham");
+            OverlapCollect->write_CSR("Overlap");
+            ofstream paramoutfile("TransportParams");
+            paramoutfile << transport_params.method << endl;
+            paramoutfile << transport_params.bandwidth << endl;
+            paramoutfile << transport_params.n_cells << endl;
+            paramoutfile << transport_params.n_occ << endl;
+            paramoutfile << transport_params.n_abscissae << endl;
+            paramoutfile << transport_params.n_kpoint << endl;
+            paramoutfile << transport_params.extra_int_param1 << endl;
+            paramoutfile << transport_params.extra_int_param2 << endl;
+            paramoutfile << transport_params.extra_int_param3 << endl;
+            paramoutfile << transport_params.evoltfactor << endl;
+            paramoutfile << transport_params.colzero_threshold << endl;
+            paramoutfile << transport_params.eps_limit << endl;
+            paramoutfile << transport_params.eps_decay << endl;
+            paramoutfile << transport_params.eps_singularities << endl;
+            paramoutfile << transport_params.extra_param1 << endl;
+            paramoutfile << transport_params.extra_param2 << endl;
+            paramoutfile << transport_params.extra_param3 << endl;
+            paramoutfile.close();
+        }
+        MPI_Barrier(MPI_COMM_WORLD);
+        exit(0);
+    }
+
     int do_semiself=0;
     if (transport_params.method==3) do_semiself=1;
     int NAtom_work=transport_params.extra_int_param3;
@@ -41,11 +73,9 @@ if (!iam) cout << "N_ATOMS " << NAtom_work << endl;
     contactvec[1]=2;
     double *dopingvec = new double[n_mu]();
 
-    c_dscal(KohnSham->n_nonzeros,transport_params.evoltfactor,KohnSham->nnz,1);
-
     if (!do_semiself) {
         Energyvector energyvector;
-        if (energyvector.Execute(Overlap,KohnSham,n_mu,muvec,contactvec,dopingvec,rho_atom,drho_atom_dV,NAtom_work,atom_of_bf,transport_params)) return (LOGCERR, EXIT_FAILURE);
+        if (energyvector.Execute(Overlap,KohnSham,n_mu,muvec,contactvec,rho_atom,drho_atom_dV,NAtom_work,atom_of_bf,transport_params)) return (LOGCERR, EXIT_FAILURE);
 if(!iam){
 stringstream mysstream;
 mysstream << "rhofile";
@@ -77,7 +107,8 @@ if (!iam) cout << "DOPING " << dopingvec[0] << " " << dopingvec[1] << endl;
     double Vg=-voltage->Vgmin[0];
     {
         Singularities singularities(transport_params,n_mu);
-        if ( singularities.Execute(KohnSham,Overlap,muvec,dopingvec,contactvec) ) return (LOGCERR, EXIT_FAILURE);
+        if ( singularities.Execute(KohnSham,Overlap,contactvec) ) return (LOGCERR, EXIT_FAILURE);
+        for (int i_mu=0;i_mu<n_mu;i_mu++) muvec[i_mu]=singularities.determine_fermi(dopingvec[i_mu],i_mu);
         Vg+=std::accumulate(muvec,muvec+n_mu,0.0)/n_mu-singularities.energy_cb;
     }
 
@@ -90,7 +121,7 @@ if (!iam) cout << "GATE POTENTIAL " << Vg << endl;
 
     for (int IX=0;IX<FEM->NGrid;IX++) {
         double x=FEM->grid[3*IX]-FEM->grid[0];
-        double dx_ramp = 1.0;
+        double dx_ramp = 1;
         double dV= (muvec[0]-muvec[1])/2.0;
 
         if(x<(Ls-dx_ramp)){
@@ -111,8 +142,19 @@ if (!iam) cout << "GATE POTENTIAL " << Vg << endl;
         if(x>=(Ls+Lc+dx_ramp)){
             Vnew[IX] = -Vd+dV;
         }
+        double bfac = 1.0/K_BOLTZMANN;
+        Vnew[IX] = (Vs+Vg+Vd)*fermi(x-(Ls+Lc),0,bfac,0)*fermi(-x+Ls,0,bfac,0)-Vs*fermi(x-(Ls+Lc),0,bfac,0)-Vd*fermi(-x+Ls,0,bfac,0);
+//        Vnew[IX] = 0.0;
     }
     c_dcopy(FEM->NGrid,Vnew,1,Vold,1);
+
+if(!iam){
+stringstream mysstream;
+mysstream << "potfile" << 0;
+ofstream potfile(mysstream.str().c_str());
+for (int ig=0;ig<FEM->NGrid;ig++) potfile<<Vnew[ig]<<endl;
+potfile.close();
+}
 
     double *Overlap_nnz = new double[Overlap->n_nonzeros];
     c_dcopy(Overlap->n_nonzeros,Overlap->nnz,1,Overlap_nnz,1);
@@ -132,9 +174,14 @@ if (!iam) cout << "GATE POTENTIAL " << Vg << endl;
         TCSR<double> *Pot = new TCSR<double>(Overlap,Vbf);
         TCSR<double> *KohnShamPot = new TCSR<double>(1.0,KohnSham,1.0,Pot);
         delete Pot;
+        if (i_iter==1) {
+            Singularities singularities(transport_params,n_mu);
+            if ( singularities.Execute(KohnShamPot,Overlap,contactvec) ) return (LOGCERR, EXIT_FAILURE);
+            for (int i_mu=0;i_mu<n_mu;i_mu++) muvec[i_mu]=singularities.determine_fermi(dopingvec[i_mu],i_mu);
+        }
 
         Energyvector energyvector;
-        if (energyvector.Execute(Overlap,KohnShamPot,n_mu,muvec,contactvec,dopingvec,rho_atom,drho_atom_dV,FEM->NAtom,atom_of_bf,transport_params)) return (LOGCERR, EXIT_FAILURE);
+        if (energyvector.Execute(Overlap,KohnShamPot,n_mu,muvec,contactvec,rho_atom,drho_atom_dV,FEM->NAtom,atom_of_bf,transport_params)) return (LOGCERR, EXIT_FAILURE);
         delete KohnShamPot;
 
         if (!iam) cout << "TIME FOR SCHROEDINGER " << get_time(sabtime) << endl;
@@ -175,13 +222,13 @@ rgfile.close();
 }
 //*/
 
-//        c_daxpy(FEM->NAtom,1.0,&nuclearchargeperatom[0],1,rho_atom,1);
+        if (transport_params.n_abscissae) c_daxpy(FEM->NAtom,1.0,&nuclearchargeperatom[0],1,rho_atom,1);
 
 if(!iam){
 stringstream mysstream;
 mysstream << "rhofile" << i_iter;
 ofstream rhofile(mysstream.str().c_str());
-for (int ig=0;ig<2*FEM->NAtom;ig++) rhofile<<rho_atom[ig]<<endl;
+for (int ig=0;ig<FEM->NAtom;ig++) rhofile<<rho_atom[ig]<<endl;
 rhofile.close();
 }
 
@@ -195,7 +242,8 @@ rhofile.close();
         MPI_Comm newcomm;
         MPI_Comm_split(MPI_COMM_WORLD,iam,iam,&newcomm);
 
-        double mixing_parameter = 0.8;
+//        double mixing_parameter = 0.8;
+        double mixing_parameter = 1.0;
         if (i_iter==1) {
             c_dcopy(2*NAtom_work,rho_atom,1,rho_atom_previous,1);
             c_dcopy(2*NAtom_work,drho_atom_dV,1,drho_atom_dV_previous,1);

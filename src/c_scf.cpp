@@ -59,6 +59,10 @@ void c_scf_method(c_transport_type transport_env_params, c_DBCSR S, c_DBCSR KS, 
    if (!rank) KohnSham->first_row=0; else KohnSham->first_row=first_rows[rank-1]; 
 
    switch (transport_env_params.method) {
+      case 0:
+         if (!rank) cout << "Writing Matrices" << endl;
+         if (semiselfconsistent(Overlap,KohnSham,transport_env_params)) throw SCF_Exception(__LINE__,__FILE__);
+         break;
       case 1:
          if (!rank) cout << "Starting ScaLaPackDiag" << endl;
          if (diagscalapack(Overlap,KohnSham,transport_env_params)) throw SCF_Exception(__LINE__,__FILE__);

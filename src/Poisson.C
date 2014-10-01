@@ -279,7 +279,7 @@ void Poisson::solve_FEM(double *Vnew,double *Vold,double *rho_atom,double *drho_
 	double criterion  = poisson_criterion/1000;
 	double beta1      = (e*1.0e9)/Eps0;
 	double beta2      = (e*1.0e-18)/Eps0;
-	double NC         = fabs(max_sign_abs_vec(FEM->doping,FEM->NGrid,1));
+	double NC         = 10.0*fabs(max_sign_abs_vec(FEM->doping,FEM->NGrid,1));
 	double *rho       = new double[RP2->size];
 	double *drho_dV   = new double[RP2->size];
 	double *doping    = new double[RP2->size];
@@ -310,16 +310,16 @@ void Poisson::solve_FEM(double *Vnew,double *Vold,double *rho_atom,double *drho_
 
 	while((condition>criterion)&&(IC<max_iter)){
 	  
-	    if((IC)||(no_task==34)){
+//	    if((IC)||(no_task==34)){
 	        calc_cd_cdd(rho,drho_dV,rhsign,Ef,Vnew,NC,FEM->real_at_index,\
 			    FEM->ratom_index,Wire->ch_conv,FEM->poisson_index,FEM->atom_index,\
 			    FEM->NAtom,Temp,start,stop);
 		
-	    }else{
-	        copy_cd_cdd(rho,drho_dV,rho_atom,drho_atom_dV,FEM->ratom_index,\
-			    Wire->ch_conv,FEM->poisson_index,FEM->atom_index,\
-			    FEM->NAtom,start,stop);
-	    }
+//	    }else{
+//	        copy_cd_cdd(rho,drho_dV,rho_atom,drho_atom_dV,FEM->ratom_index,\
+//			    Wire->ch_conv,FEM->poisson_index,FEM->atom_index,\
+//			    FEM->NAtom,start,stop);
+//	    }
 
 	    P2->mat_vec_mult(Vnew,res,1);
 	    c_daxpy(RP2->size,-beta1,rho,1,res,1);

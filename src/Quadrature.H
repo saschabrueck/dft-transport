@@ -20,7 +20,9 @@ enum quadrature_type {
   GC=4,     // Gauss-Chebychev
   TS=5,     // Tanh-sinh
   TR=6,     // Trapezoidal Rule
-  CCTR=7    // Complex Contour Trapezoidal Rule
+  MR=7,     // Midpoint Rule
+  CCMR=8,   // Complex Contour Midpoint Rule
+  RCMR=9    // Rectangular Contour Midpoint Rule
 };
 } // namespace
 

@@ -78,16 +78,13 @@ Quadrature::Quadrature(quadrature_types::quadrature_type type, double start,
     my_type = quadrature_types::NONE;
   }
   if (num_abscissae == 0) {
-    throw excQuadrature("Invalid number of abscissae specified");
+    my_type = quadrature_types::NONE;
   }
   switch (my_type) {
     case quadrature_types::NONE: {
       break;
     }
     case quadrature_types::CCGL: {
-      if (num_abscissae == 0) {
-        throw excQuadrature("Invalid number of abscissae");
-      } 
       double radius = (band_end - band_start) / 2.0;
       double center = (band_start + band_end) / 2.0;
 
@@ -154,7 +151,7 @@ Quadrature::Quadrature(quadrature_types::quadrature_type type, double start,
       break;
     }
     case quadrature_types::GL: {
-      if (num_abscissae == 0) {
+      if (num_abscissae <= 1) {
         throw excQuadrature("Invalid number of abscissae");
       }
 
@@ -342,9 +339,6 @@ Quadrature::Quadrature(quadrature_types::quadrature_type type, double start,
 
     } // case ANPS
     case quadrature_types::GC: {
-      if (num_abscissae <= 1) {
-        throw excQuadrature("Invalid number of abscissae");
-      }
       for (uint n = 1; n <= num_abscissae; ++n) {
         double abscissa = (cos(M_PI * (2 * n - 1.0) / (2.0 * num_abscissae)) *
                         (band_start - band_end) / 2.0 +
@@ -356,9 +350,6 @@ Quadrature::Quadrature(quadrature_types::quadrature_type type, double start,
       break;
     }
     case quadrature_types::TS: {
-      if (num_abscissae <= 1) {
-        throw excQuadrature("Invalid number of abscissae");
-      }
       double step = 6.0 / (num_abscissae + 1);
       for (uint n = 1; n <= num_abscissae; ++n) {
         double tau = step / 2.0 * (2 * n - num_abscissae - 1);
@@ -389,17 +380,40 @@ Quadrature::Quadrature(quadrature_types::quadrature_type type, double start,
       }
       break;
     }
-    case quadrature_types::CCTR: {
-      if (num_abscissae <= 1) {
-        throw excQuadrature("Invalid number of abscissae");
+    case quadrature_types::MR: {
+      double step = (band_end - band_start) / num_abscissae;
+      for (uint n = 0; n <= num_abscissae - 1; ++n) {
+        abscissae.push_back(band_start + (n + 0.5) * step);
+        weights.push_back(step);
       }
+      break;
+    }
+    case quadrature_types::CCMR: {
       double radius = (band_end - band_start) / 2.0;
       double center = (band_end + band_start) / 2.0;
       for (uint n = 0; n <= num_abscissae - 1; ++n) {
-        double step = (n + 0.5) / num_abscissae;
-        CPX theta = radius * exp(CPX(0.0, M_PI * step));
+        CPX theta = radius * exp(CPX(0.0, M_PI * (n + 0.5) / num_abscissae));
         abscissae.push_back(center - theta);
         weights.push_back(CPX(0.0, M_PI / num_abscissae) * theta);
+      }
+      break;
+    }
+    case quadrature_types::RCMR: {
+      unsigned int num_real = num_abscissae / 2;
+      unsigned int num_imag = num_abscissae / 4;
+      double step_real = (band_end - band_start) / num_real;
+      double step_imag = 1.0 * step_real;
+      for (uint n = 0; n <= num_imag - 1; ++n) {
+        abscissae.push_back(CPX(band_start, (n + 0.5) * step_imag));
+        weights.push_back(CPX(0.0, step_imag));
+      }
+      for (uint n = 0; n <= num_real - 1; ++n) {
+        abscissae.push_back(CPX(band_start + (n + 0.5) * step_real, num_imag * step_imag));
+        weights.push_back(step_real);
+      }
+      for (uint n = 0; n <= num_imag - 1; ++n) {
+        abscissae.push_back(CPX(band_end, (num_imag - (n + 0.5)) * step_imag));
+        weights.push_back(CPX(0.0, -step_imag));
       }
       break;
     }
