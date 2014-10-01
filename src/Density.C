@@ -13,10 +13,12 @@ using namespace std;
 #include "Umfpack.H"
 #include "MUMPS.H"
 #include "SuperLU.H"
-#include "Pardiso.H"
 #include "tmprGF.H"
 #include "GetSigma.H"
+#ifdef HAVE_PARDISO
+#include "Pardiso.H"
 #include "SpikeSolver.H"
+#endif
 #include "Density.H"
 
 extern "C" {
@@ -32,14 +34,15 @@ int density(TCSR<double> *KohnSham,TCSR<double> *Overlap,TCSR<double> *OverlapPB
     double d_zer=0.0;
     CPX z_one=CPX(d_one,d_zer);
     CPX z_zer=CPX(d_zer,d_zer);
+    CPX z_img=CPX(d_zer,d_one);
     double sabtime;
-    int iinfo=0;
     TCSR<CPX> *HamSig;
     CPX* inj = NULL;
     int nprol, npror;
     CPX *lambda;
     int *dist_sol;
     int *displc_sol;
+    vector<TCSR<CPX>*> Gamma(n_mu);
     int matrix_procs,matrix_rank;
     MPI_Comm_size(matrix_comm,&matrix_procs);
     MPI_Comm_rank(matrix_comm,&matrix_rank);
@@ -55,9 +58,6 @@ int worldrank; MPI_Comm_rank(MPI_COMM_WORLD,&worldrank);
         SumHamC->settozeropbc(bandwidth,ndof);
 // compute self energies
         vector<BoundarySelfEnergy> selfenergies(n_mu);
-        int matrix_procs,matrix_rank;
-        MPI_Comm_size(matrix_comm,&matrix_procs);
-        MPI_Comm_rank(matrix_comm,&matrix_rank);
         if (matrix_procs>1 && matrix_procs%n_mu) {
             if (!matrix_rank) cout << "Choose number of tasks per energy point as one or a multiple of number of contacts" << endl;
             return (LOGCERR, EXIT_FAILURE);
@@ -111,48 +111,70 @@ if (npror!=propnum[1]) cout << "WARNING: FOUND " << npror << " OF " << propnum[1
                 displc_sol[iii]=displc_sol[iii-1]+dist_sol[iii-1];
             }
         }
+        if (method==transport_methods::NEGF) {
+            if (matrix_procs>1) return (LOGCERR, EXIT_FAILURE);
+            for (int i_mu=0;i_mu<n_mu;i_mu++) {
+                TCSR<CPX> *Sigma_H = new TCSR<CPX>(selfenergies[i_mu].spsigmadist);
+                Sigma_H->sparse_transpose(selfenergies[i_mu].spsigmadist);
+                c_dscal(Sigma_H->n_nonzeros,-d_one,((double*)Sigma_H->nnz)+1,2);
+                Gamma[i_mu] = new TCSR<CPX>(z_one,selfenergies[i_mu].spsigmadist,-z_one,Sigma_H);
+                delete Sigma_H;
+//OR JUST USE IMAGINARY PART OF SIGMA INSTEAD
+            }
+        }
     }
-    if (method==transport_methods::TEST) {
-// this is only a lil debugging thing
-        int triblocksize=ntriblock*ntriblock;
-        CPX* H0cpx=new CPX[triblocksize];
-        CPX* sigmal=new CPX[triblocksize];
-        CPX* sigmar=new CPX[triblocksize];
-        c_zaxpy(triblocksize,-z_one,sigmal,1,H0cpx,1);
-        c_zaxpy(triblocksize,-z_one,sigmar,1,H0cpx,1);
-        int *pivarrayd= new int[ntriblock];
+    if (method==transport_methods::NEGF) {
+        int HamSigsize_tot=HamSig->size_tot;
+        int HamSigfindx=HamSig->findx;
+        int iinfo;
+        int *pivarrays = new int[HamSigsize_tot];
+        CPX *HamBig0 = new CPX[HamSigsize_tot*HamSigsize_tot]();
+        HamSig->sparse_to_full(HamBig0,HamSigsize_tot,HamSigsize_tot);
+        delete HamSig;
         sabtime=get_time(d_zer);
-        c_zgetrf(ntriblock,ntriblock,H0cpx,ntriblock,pivarrayd,&iinfo);
+        c_zgetrf(HamSigsize_tot,HamSigsize_tot,HamBig0,HamSigsize_tot,pivarrays,&iinfo);
+        if (!worldrank) cout << "TIME FOR LU " << get_time(sabtime) << endl;
         if (iinfo) return (LOGCERR, EXIT_FAILURE);
-        CPX workytestc;
-        c_zgetri(ntriblock,H0cpx,ntriblock,pivarrayd,&workytestc,-1,&iinfo);
-        int lworkyd=int(real(workytestc));
-        CPX *workyd=new CPX[lworkyd];
-        c_zgetri(ntriblock,H0cpx,ntriblock,pivarrayd,workyd,lworkyd,&iinfo);
-        if (iinfo) return (LOGCERR, EXIT_FAILURE);
-        delete[] pivarrayd;
-        delete[] workyd;
-//transm=-trace((sigmar-sigmar')*G*(sigmal-sigmal')*G'); i think its better not to use imag() because of symmetry error
+        CPX nworks;
+        c_zgetri(HamSigsize_tot,HamBig0,HamSigsize_tot,pivarrays,&nworks,-1,&iinfo);
+        int lworks=int(real(nworks));
+        CPX* works=new CPX[lworks];
         sabtime=get_time(d_zer);
-        CPX *matctrit= new CPX[triblocksize];
-        for (int jtri=0;jtri<ntriblock;jtri++)
-            for (int itri=0;itri<ntriblock;itri++)
-                matctrit[itri*ntriblock+jtri]=sigmal[itri*ntriblock+jtri]-conj(sigmal[jtri*ntriblock+itri]);
-        c_zgemm('N','C',ntriblock,ntriblock,ntriblock,z_one,matctrit,ntriblock,H0cpx,ntriblock,z_zer,sigmal,ntriblock);
-        for (int jtri=0;jtri<ntriblock;jtri++)
-            for (int itri=0;itri<ntriblock;itri++)
-                matctrit[itri*ntriblock+jtri]=sigmar[itri*ntriblock+jtri]-conj(sigmar[jtri*ntriblock+itri]);
-        c_zgemm('N','N',ntriblock,ntriblock,ntriblock,z_one,matctrit,ntriblock,H0cpx,ntriblock,z_zer,sigmar,ntriblock);
-        delete[] matctrit;
-        delete[] H0cpx;
-        delete[] sigmal;
-        delete[] sigmar;
-        CPX trace=0;
-        for (int jtri=0;jtri<ntriblock;jtri++)
-            for (int itri=0;itri<ntriblock;itri++)
-                trace+=-sigmar[itri*ntriblock+jtri]*sigmal[jtri*ntriblock+itri];
-        cout << "Energy " << energy << " Transmission " << real(trace) << endl;
-    } else if (method==transport_methods::NEGF) {
+        c_zgetri(HamSigsize_tot,HamBig0,HamSigsize_tot,pivarrays,works,lworks,&iinfo);
+        if (!worldrank) cout << "TIME FOR INV " << get_time(sabtime) << endl;
+        delete[] works;
+        delete[] pivarrays;
+        CPX *HamBig1 = new CPX[HamSigsize_tot*HamSigsize_tot]();
+        CPX *HamBig2 = new CPX[HamSigsize_tot*HamSigsize_tot]();
+        c_zcopy(HamSigsize_tot*HamSigsize_tot,HamBig0,1,HamBig1,1);
+        c_dscal(HamSigsize_tot*HamSigsize_tot,-d_one,((double*)HamBig1)+1,2);
+        sabtime=get_time(d_zer);
+        Gamma[1]->trans_mat_vec_mult(HamBig1,HamBig2,HamSigsize_tot,1);
+        if (!worldrank) cout << "TIME FOR MULT A " << get_time(sabtime) << endl;
+        full_transpose(HamSigsize_tot,HamSigsize_tot,HamBig2,HamBig1);
+        TCSR<CPX> *Gamma_G = new TCSR<CPX>(HamSigsize_tot,HamSigsize_tot*ntriblock,HamSigfindx);
+        Gamma_G->full_to_sparse(HamBig1,HamSigsize_tot,HamSigsize_tot);
+        c_zcopy(HamSigsize_tot*HamSigsize_tot,HamBig0,1,HamBig1,1);
+        sabtime=get_time(d_zer);
+        Gamma_G->trans_mat_vec_mult(HamBig1,HamBig2,HamSigsize_tot,1);
+        if (!worldrank) cout << "TIME FOR MULT B " << get_time(sabtime) << endl;
+        delete Gamma_G;
+        sabtime=get_time(d_zer);
+        Gamma[0]->trans_mat_vec_mult(HamBig2,HamBig1,HamSigsize_tot,1);
+        if (!worldrank) cout << "TIME FOR MULT C " << get_time(sabtime) << endl;
+        for (int i=0;i<HamSigsize_tot;i++) transm+=-real(HamBig1[(HamSigsize_tot+1)*i]);
+        full_transpose(HamSigsize_tot,HamSigsize_tot,HamBig2,HamBig1);
+        delete[] HamBig2;
+        TCSR<CPX> *HamBigSparse = new TCSR<CPX>(HamSigsize_tot,HamSigsize_tot*HamSigsize_tot,HamSigfindx);
+        HamBigSparse->full_to_sparse(HamBig1,HamSigsize_tot,HamSigsize_tot);
+        delete[] HamBig1;
+//we need the real part of hambig but my routines give me the imaginary one
+//        c_zscal(HamBigSparse->n_nonzeros,CPX(0.0,1.0),HamBigSparse->nnz,1);
+        Ps->add_real(HamBigSparse,-weight/M_PI*z_img);
+        Overlap->atomdensity(HamBigSparse,-2.0*weight/M_PI*z_img,atom_of_bf,erhoperatom);
+        delete HamBigSparse;
+        delete[] HamBig0;
+    } else if (method==transport_methods::GF) {
         TCSR<CPX> *HamSigG = new TCSR<CPX>(HamSig,0,matrix_comm);
         sabtime=get_time(d_zer);
         int inversion_method=0;
@@ -166,8 +188,8 @@ if (npror!=propnum[1]) cout << "WARNING: FOUND " << npror << " OF " << propnum[1
                 }
                 HamSigG->scatter(HamSig,0,matrix_comm);
                 delete HamSigG;
-                Ps->add_imag(HamSig,+weight/M_PI);
-                Overlap->atomdensity(HamSig,+2.0*weight/M_PI,atom_of_bf,erhoperatom);
+                Ps->add_real(HamSig,-weight/M_PI*z_img);
+                Overlap->atomdensity(HamSig,-2.0*weight/M_PI*z_img,atom_of_bf,erhoperatom);
                 delete HamSig;
             } else {
                 delete HamSig;
@@ -175,9 +197,30 @@ if (npror!=propnum[1]) cout << "WARNING: FOUND " << npror << " OF " << propnum[1
                     std::vector<int> Bvec(ncells/bandwidth,0);
                     for (int ii=0;ii<ncells/bandwidth;ii++) Bvec[ii]=(ii+1)*ntriblock-1;
                     tmprGF::sparse_invert(HamSigG,Bvec);
-                    Ps->add_imag(HamSigG,+weight/M_PI);
+//                    Ps->add_real(HamSigG,-weight/M_PI*z_img);
                 }
-                if (matrix_procs==1) Overlap->atomdensity(HamSigG,+2.0*weight/M_PI,atom_of_bf,erhoperatom);
+/*
+                TCSR<CPX> *P_PBC = new TCSR<CPX>(OverlapPBC->size,OverlapPBC->n_nonzeros,OverlapPBC->findx);
+                P_PBC->copy_index(OverlapPBC);
+                for (int i_mu=0;i_mu<n_mu;i_mu++) {
+                    P_PBC->fill_pbc_block(HamSigG,ndof,bandwidth,contactvec[i_mu],matrix_comm);
+                }
+                Ps->add_real(P_PBC,-weight/M_PI*z_img);
+                OverlapPBC->atomdensity(P_PBC,-2.0*weight/M_PI*z_img,atom_of_bf,erhoperatom);
+                delete P_PBC;
+*/
+// /*
+                TCSR<CPX> *Green = new TCSR<CPX>(KohnSham->size,KohnSham->n_nonzeros,KohnSham->findx);
+                Green->copy_index(KohnSham);
+                Green->add(HamSigG,CPX(1.0,0.0));
+                for (int i_mu=0;i_mu<n_mu;i_mu++) {
+                    Green->replicate_cell(ndof,bandwidth,contactvec[i_mu],bandwidth,matrix_comm);
+                }
+                Ps->add_real(Green,-weight/M_PI*z_img);
+                Overlap->atomdensity(Green,-2.0*weight/M_PI*z_img,atom_of_bf,erhoperatom);
+                OverlapPBC->atomdensity(Green,-2.0*weight/M_PI*z_img,atom_of_bf,erhoperatom);
+// */ 
+//                if (matrix_procs==1) Overlap->atomdensity(HamSigG,-2.0*weight/M_PI*z_img,atom_of_bf,erhoperatom);
                 delete HamSigG;
             }
 #ifdef HAVE_PARDISO            
@@ -188,14 +231,14 @@ if (npror!=propnum[1]) cout << "WARNING: FOUND " << npror << " OF " << propnum[1
                 }
                 HamSigG->scatter(HamSig,0,matrix_comm);
                 delete HamSigG;
-                Ps->add_imag(HamSig,+weight/M_PI);
-                Overlap->atomdensity(HamSig,+2.0*weight/M_PI,atom_of_bf,erhoperatom);
+                Ps->add_real(HamSig,-weight/M_PI*z_img);
+                Overlap->atomdensity(HamSig,-2.0*weight/M_PI*z_img,atom_of_bf,erhoperatom);
                 delete HamSig;
             } else {
                 delete HamSig;
                 if (!matrix_rank) {
                     Pardiso::sparse_invert(HamSigG);
-                    Ps->add_imag(HamSigG,+weight/M_PI);
+                    Ps->add_real(HamSigG,-weight/M_PI*z_img);
                 }
                 delete HamSigG;
             }
@@ -229,7 +272,8 @@ if (npror!=propnum[1]) cout << "WARNING: FOUND " << npror << " OF " << propnum[1
                     InverseMatTotal->nnz[InverseMatTotal->diag_pos[idiag]]*=CPX(0.5,0.0);
                 delete InverseMat;
                 delete InverseMatTrans;
-                Ps->add_imag(InverseMatTotal,+weight/M_PI);
+                Ps->add_real(InverseMatTotal,-weight/M_PI*z_img);
+                if (matrix_procs==1) Overlap->atomdensity(InverseMatTotal,-2.0*weight/M_PI*z_img,atom_of_bf,erhoperatom);
                 delete InverseMatTotal;
             } else {
                 delete HamSigG;
@@ -249,8 +293,10 @@ if (!worldrank) cout << "TIME FOR SPARSE INVERSION " << get_time(sabtime) << end
             solver = new SuperLU<CPX>(HamSig,matrix_comm);
         } else if (solver_method==1) {
             solver = new MUMPS<CPX>(HamSig,matrix_comm);
+#ifdef HAVE_PARDISO            
         } else if (solver_method==2) {
             solver = new SpikeSolver<CPX>(HamSig,matrix_comm);
+#endif
         } else if (solver_method==3 && matrix_procs==1) {
             solver = new Umfpack<CPX>(HamSig,matrix_comm);
         } else return (LOGCERR, EXIT_FAILURE);
@@ -297,12 +343,14 @@ if (!worldrank) cout << "TIME FOR WAVEFUNCTION SPARSE SOLVER WITH "<< ncells <<"
             Overlap->psipsidagger(&Sol[Ps->size_tot*nprol],npror,+2.0*weight*fermir,atom_of_bf,erhoperatom);
             OverlapPBC->psipsidagger(&Sol[Ps->size_tot*nprol],&Soll[Ps->size_tot*nprol],npror,+2.0*weight*fermir,atom_of_bf,erhoperatom);
             OverlapPBC->psipsidagger(&Sol[Ps->size_tot*nprol],&Solr[Ps->size_tot*nprol],npror,+2.0*weight*fermir,atom_of_bf,erhoperatom);
+/*
             Overlap->psipsidagger(Sol,nprol,-2.0*weight*dfermil,atom_of_bf,drhoperatom);
             OverlapPBC->psipsidagger(Sol,Soll,nprol,-2.0*weight*dfermil,atom_of_bf,drhoperatom);
             OverlapPBC->psipsidagger(Sol,Solr,nprol,-2.0*weight*dfermil,atom_of_bf,drhoperatom);
             Overlap->psipsidagger(&Sol[Ps->size_tot*nprol],npror,-2.0*weight*dfermir,atom_of_bf,drhoperatom);
             OverlapPBC->psipsidagger(&Sol[Ps->size_tot*nprol],&Soll[Ps->size_tot*nprol],npror,-2.0*weight*dfermir,atom_of_bf,drhoperatom);
             OverlapPBC->psipsidagger(&Sol[Ps->size_tot*nprol],&Solr[Ps->size_tot*nprol],npror,-2.0*weight*dfermir,atom_of_bf,drhoperatom);
+*/
         } else {
             if (!matrix_rank) {
                 Ps->psipsidagger(Sol,Soll,Solr,nprol,ndof,bandwidth,+weight*fermil);

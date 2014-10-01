@@ -15,11 +15,11 @@ Energyvector::~Energyvector()
 {
 }
 
-int Energyvector::Execute(TCSR<double> *Overlap,TCSR<double> *KohnSham,int n_mu,double* muvec, int* contactvec,double* dopingvec,double* electronchargeperatom,double* derivativechargeperatom,int n_atoms,int* atom_of_bf,c_transport_type transport_params)
+int Energyvector::Execute(TCSR<double> *Overlap,TCSR<double> *KohnSham,int n_mu,double* muvec, int* contactvec,double* electronchargeperatom,double* derivativechargeperatom,int n_atoms,int* atom_of_bf,c_transport_type transport_params)
 {
     double sabtime;
     if ( Overlap->size_tot%transport_params.n_cells || transport_params.bandwidth<1 ) return (LOGCERR, EXIT_FAILURE);
-    int tasks_per_point=1;
+    int tasks_per_point=transport_params.extra_int_param2;
     if (!iam) cout << "Distributing matrix over " << tasks_per_point << " tasks" << endl;
     if ( nprocs%tasks_per_point ) {
         if (!iam) cout << "Choose number of tasks per energy point as a divider of total number of tasks" << endl;
@@ -67,41 +67,13 @@ int Energyvector::Execute(TCSR<double> *Overlap,TCSR<double> *KohnSham,int n_mu,
         Ps = new TCSR<double>(OverlapCollect->size,OverlapCollect->n_nonzeros,OverlapCollect->findx);
         Ps->copy_index(OverlapCollect);
         Ps->init_variable(Ps->nnz,Ps->n_nonzeros);
-#ifdef _CP2K_WRITEOUT
-if (!iam) {
-c_dscal(KohnShamCollect->n_nonzeros,1.0/transport_params.evoltfactor,KohnShamCollect->nnz,1);
-KohnShamCollect->write_CSR("KohnSham");
-OverlapCollect->write_CSR("Overlap");
-ofstream paramoutfile("TransportParams");
-paramoutfile << transport_params.method << endl;
-paramoutfile << transport_params.bandwidth << endl;
-paramoutfile << transport_params.n_cells << endl;
-paramoutfile << transport_params.n_occ << endl;
-paramoutfile << transport_params.n_abscissae << endl;
-paramoutfile << transport_params.n_kpoint << endl;
-paramoutfile << transport_params.extra_int_param1 << endl;
-paramoutfile << transport_params.extra_int_param2 << endl;
-paramoutfile << transport_params.extra_int_param3 << endl;
-paramoutfile << transport_params.evoltfactor << endl;
-paramoutfile << transport_params.colzero_threshold << endl;
-paramoutfile << transport_params.eps_limit << endl;
-paramoutfile << transport_params.eps_decay << endl;
-paramoutfile << transport_params.eps_singularities << endl;
-paramoutfile << transport_params.extra_param1 << endl;
-paramoutfile << transport_params.extra_param2 << endl;
-paramoutfile << transport_params.extra_param3 << endl;
-paramoutfile.close();
-}
-MPI_Barrier(MPI_COMM_WORLD);
-exit(0);
-#endif
     }
     if (!iam) cout << "TIME FOR DISTRIBUTING MATRICES " << get_time(sabtime) << endl;
     std::vector<CPX> energyvector;
     std::vector<CPX> stepvector;
     std::vector<transport_methods::transport_method> methodvector;
     std::vector< std::vector<int> > propagating_sizes;
-    if (determine_energyvector(energyvector,stepvector,methodvector,propagating_sizes,KohnSham,Overlap,muvec,dopingvec,contactvec,transport_params,n_mu)) return (LOGCERR, EXIT_FAILURE);
+    if (determine_energyvector(energyvector,stepvector,methodvector,propagating_sizes,KohnSham,Overlap,muvec,contactvec,transport_params,n_mu)) return (LOGCERR, EXIT_FAILURE);
     std::vector<double> currentvector(energyvector.size(),0.0);
     std::vector<double> transmission(energyvector.size(),0.0);
     std::vector<double> dos_profile(energyvector.size(),0.0);
@@ -190,50 +162,25 @@ exit(0);
     return 0;
 }
 
-int Energyvector::determine_energyvector(std::vector<CPX> &energyvector,std::vector<CPX> &stepvector,std::vector<transport_methods::transport_method> &methodvector,std::vector< std::vector<int> > &propagating_sizes,TCSR<double> *KohnSham,TCSR<double> *Overlap,double *muvec,double *dopingvec,int *contactvec,c_transport_type transport_params,int n_mu)
+int Energyvector::determine_energyvector(std::vector<CPX> &energyvector,std::vector<CPX> &stepvector,std::vector<transport_methods::transport_method> &methodvector,std::vector< std::vector<int> > &propagating_sizes,TCSR<double> *KohnSham,TCSR<double> *Overlap,double *muvec,int *contactvec,c_transport_type transport_params,int n_mu)
 {
     double sabtime=get_time(0.0);
     double Temp=transport_params.extra_param3;
     Singularities singularities(transport_params,n_mu);
-    if ( singularities.Execute(KohnSham,Overlap,muvec,dopingvec,contactvec) ) return (LOGCERR, EXIT_FAILURE);
-#ifdef _OMEN_WRITEOUT
-if (!iam) {
-int ndof=Overlap->size_tot/transport_params.n_cells;
-ofstream matpar("mat_par");
-matpar << "1 1" << endl;
-matpar << singularities.energy_cb-singularities.energy_vb << " " << singularities.energy_cb << " " << singularities.energy_vb << endl;
-matpar << "12 12" << endl;
-matpar.close();
-KohnShamCollect->removepbc(transport_params.bandwidth,ndof);
-KohnShamCollect->change_findx(1);
-KohnShamCollect->write_CSR_bin("H_4.bin");
-OverlapCollect->removepbc(transport_params.bandwidth,ndof);
-OverlapCollect->change_findx(1);
-OverlapCollect->write_CSR_bin("S_4.bin");
-}
-MPI_Barrier(MPI_COMM_WORLD);
-exit(0);
-#endif
+    if ( singularities.Execute(KohnSham,Overlap,contactvec) ) return (LOGCERR, EXIT_FAILURE);
     if (!iam) cout << "TIME FOR SINGULARITIES " << get_time(sabtime) << endl;
     for (int i_mu=0;i_mu<n_mu;i_mu++) singularities.write_bandstructure(i_mu);
 // determine elements in nonequilibrium range
-    double k_b=K_BOLTZMANN;
-    double nonequi_start=*min_element(muvec,muvec+n_mu)-35.0*k_b*Temp;
+    //double nonequi_start=*min_element(muvec,muvec+n_mu)-40.0*K_BOLTZMANN*Temp;
+    //double nonequi_start=singularities.energies_cb[0];
+double nonequi_start=singularities.energy_cb;
 // ONLY CONDUCTION ELECTRONS
-    int only_conduction_electrons=0;
-    if (only_conduction_electrons) {
-        if (singularities.energy_cb<singularities.energy_vb) return (LOGCERR, EXIT_FAILURE);
+    if (!transport_params.n_abscissae) {
         if (!iam) cout << "Only conduction electrons" << endl;
-        singularities.energy_gs=singularities.energy_cb;
-        nonequi_start=max(nonequi_start,singularities.energy_gs);
+//        if (singularities.energy_cb<singularities.energy_vb+max(0.0,V_gate)) return (LOGCERR, EXIT_FAILURE);
+        nonequi_start=singularities.energy_cb;
     }
-// REAL AXIS
-    int integral_over_real_axis=0;
-    if (integral_over_real_axis) {
-        if (!iam) cout << "Integral over real axis" << endl;
-        nonequi_start=singularities.energy_gs;
-    }
-    double nonequi_end=*max_element(muvec,muvec+n_mu)+35.0*k_b*Temp;
+    double nonequi_end=*max_element(muvec,muvec+n_mu)+40.0*K_BOLTZMANN*Temp; //+max(0.0,V_gate);//WHY DO I ADD THE GATE VOLTAGE? NO CURRENT ABOVE HIGHEST FERMI LEVEL OR DOES GATE RAISE FERMI LEVEL
     std::vector<double> energylist;
     int n_energies;
     if (!iam) {
@@ -259,10 +206,20 @@ exit(0);
     }
 // get integration points along complex contour with gauss legendre
     int num_points_on_contour=transport_params.n_abscissae;
-    Quadrature gausslegendre(quadrature_types::CCGL,singularities.energy_gs-0.5,nonequi_start,num_points_on_contour);
+    Quadrature gausslegendre(quadrature_types::CCGL,singularities.energy_gs-0.5,singularities.energy_cb,num_points_on_contour);
+//    for (uint ivec=0;ivec<gausslegendre.weights.size();ivec++)
+//        gausslegendre.weights[ivec]*=1.0/(1.0+exp((gausslegendre.abscissae[ivec]-muvec[0])/(K_BOLTZMANN*Temp)));
     energyvector=gausslegendre.abscissae;
     stepvector=gausslegendre.weights;
-    methodvector.assign(gausslegendre.abscissae.size(),transport_methods::NEGF);
+    methodvector.assign(gausslegendre.abscissae.size(),transport_methods::GF);
+/*
+    Quadrature gausslegendre2(quadrature_types::CCGL,singularities.energy_cb,singularities.energies_cb[0],num_points_on_contour);
+    for (uint ivec=0;ivec<gausslegendre2.weights.size();ivec++)
+        gausslegendre2.weights[ivec]*=1.0/(1.0+exp((gausslegendre2.abscissae[ivec]-muvec[1])/(K_BOLTZMANN*Temp)));
+    energyvector.insert(energyvector.end(),gausslegendre2.abscissae.begin(),gausslegendre2.abscissae.end());
+    stepvector.insert(stepvector.end(),gausslegendre2.weights.begin(),gausslegendre2.weights.end());
+    methodvector.resize(methodvector.size()+gausslegendre2.abscissae.size(),transport_methods::GF);
+*/
 // get integration points along real axis with gauss cheby
     double smallest_energy_distance=transport_params.extra_param2;
 if (!iam) cout<<"Smallest enery distance "<<smallest_energy_distance<<endl;
@@ -276,8 +233,7 @@ if (!iam) cout<<"Average distance for big intervals "<<transport_params.extra_pa
             Quadrature gausscheby(quadrature_types::GC,energylist[i_energies-1],energylist[i_energies],num_points_per_interval);
             energyvector.insert(energyvector.end(),gausscheby.abscissae.begin(),gausscheby.abscissae.end());
             stepvector.insert(stepvector.end(),gausscheby.weights.begin(),gausscheby.weights.end());
-            std::vector<transport_methods::transport_method> methodblock(gausscheby.abscissae.size(),transport_methods::WF);
-            methodvector.insert(methodvector.end(),methodblock.begin(),methodblock.end());
+            methodvector.resize(methodvector.size()+gausscheby.abscissae.size(),transport_methods::WF);
         }
     }
     ifstream evecfile("OMEN_E");
@@ -302,10 +258,11 @@ if (!iam) cout<<"Average distance for big intervals "<<transport_params.extra_pa
     if (!iam) cout << "Size of Energyvector " << energyvector.size() << endl;
     if (!iam) {
         ofstream myfile;
-        myfile.open("EnergyList");
+        myfile.open("E_dat");
         myfile.precision(15);
+        myfile << energyvector.size() << endl;
         for (uint iele=0;iele<energyvector.size();iele++)
-            myfile << real(energyvector[iele]) << " " << imag(energyvector[iele]) << endl;
+            myfile << real(energyvector[iele]) << endl;
         myfile.close();
     }
 // get propagating modes from bandstructure

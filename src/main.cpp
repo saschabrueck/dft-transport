@@ -128,7 +128,11 @@ int main (int argc, char **argv)
 //      OMEN_Poisson_Solver->init(nanowire,FEM);
    }
 
+   int w_size, w_rank;
+   MPI_Comm_size(MPI_COMM_WORLD,&w_size);
+   MPI_Comm_rank(MPI_COMM_WORLD,&w_rank);
    if (run_cp2k) {
+      if (!w_rank) cout << "Starting CP2K" << endl;
       cp_c_calc_energy_force(&f_env_id, &calc_force, &error);
       cp_c_get_energy(&f_env_id, &e_pot, &error);
       cp_c_get_force(&f_env_id, force, &n_el_force, &error);
@@ -136,11 +140,6 @@ int main (int argc, char **argv)
       cp_c_destroy_fenv(&f_env_id, &error);
       cp_c_finalize_cp2k(&finalize_mpi, &error);
    } else {
-      int w_size, w_rank;
-      MPI_Comm_size(MPI_COMM_WORLD,&w_size);
-      MPI_Comm_rank(MPI_COMM_WORLD,&w_rank);
-      TCSR<double>* Overlap = new TCSR<double>("Overlap",w_size,w_rank);
-      TCSR<double>* KohnSham = new TCSR<double>("KohnSham",w_size,w_rank);
       c_transport_type transport_env_params;
       ifstream paraminfile("TransportParams");
       paraminfile >> transport_env_params.method;
@@ -161,6 +160,9 @@ int main (int argc, char **argv)
       paraminfile >> transport_env_params.extra_param2;
       paraminfile >> transport_env_params.extra_param3;
       paraminfile.close();
+      TCSR<double>* Overlap = new TCSR<double>("Overlap",w_size,w_rank);
+      TCSR<double>* KohnSham = new TCSR<double>("KohnSham",w_size,w_rank);
+      c_dscal(KohnSham->n_nonzeros,1.0/transport_env_params.evoltfactor,KohnSham->nnz,1);
       semiselfconsistent(Overlap,KohnSham,transport_env_params);
       delete Overlap;
       delete KohnSham;

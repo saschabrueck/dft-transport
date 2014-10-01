@@ -16,7 +16,8 @@
 class Singularities {
 public:
 Singularities(c_transport_type,int);
-int Execute(TCSR<double>*,TCSR<double>*,double*,double*,int*);
+int Execute(TCSR<double>*,TCSR<double>*,int*);
+double determine_fermi(double,int);
 void write_bandstructure(int);
 std::vector< std::vector< std::vector<double> > > get_propagating(const std::vector<CPX>&);
 ~Singularities();
@@ -29,6 +30,9 @@ double energy_gs;
 double energy_vb;
 /// Conduction band edge
 double energy_cb;
+
+std::vector<double> energies_vb;
+std::vector<double> energies_cb;
 
 private:
 int iam, nprocs;
@@ -49,7 +53,7 @@ std::vector< std::vector<double> > derivatives_matrix;
 std::vector< std::vector<double> > curvatures_matrix;
 
 int determine_velocities(CPX*,CPX*,double,double*,double*,double*);
-double determine_fermi(double,int);
+int determine_imaginary_bandstructure(CPX*,CPX*,double,CPX*);
 int eigen(CPX*,CPX*,CPX*,CPX*,CPX,double*);
 void follow_band(int);
 

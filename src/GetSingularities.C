@@ -6,7 +6,7 @@ Singularities::Singularities(c_transport_type parameter_sab,int pn_mu)
     n_k=parameter_sab.n_kpoint;
     n_cells=parameter_sab.n_cells;
     bandwidth=parameter_sab.bandwidth;
-    noccunitcell=parameter_sab.n_occ/parameter_sab.n_cells;
+    noccunitcell=parameter_sab.n_occ/parameter_sab.n_cells; // THIS IS AN INTEGER DIVISION
     Temp=parameter_sab.extra_param3;
 
     n_mu=pn_mu;
@@ -17,6 +17,8 @@ Singularities::Singularities(c_transport_type parameter_sab,int pn_mu)
     energy_gs= (numeric_limits<double>::max)();
     energy_vb=-(numeric_limits<double>::max)();
     energy_cb= (numeric_limits<double>::max)();
+    energies_vb.resize(n_mu,energy_vb);
+    energies_cb.resize(n_mu,energy_cb);
 
     energies_extremum.resize(n_mu);
     curvatures_extremum.resize(n_mu);
@@ -27,7 +29,7 @@ Singularities::Singularities(c_transport_type parameter_sab,int pn_mu)
     curvatures_matrix.resize(n_mu);
 }
 
-int Singularities::Execute(TCSR<double> *KohnSham,TCSR<double> *Overlap,double *muvec,double *dopingvec,int *contactvec)
+int Singularities::Execute(TCSR<double> *KohnSham,TCSR<double> *Overlap,int *contactvec)
 /**  \brief Initialize array energies and fill it with n_energies energy points at which there are singularities in the DOS, in addition get integration range
  *
  *   \param KohnSham      H matrix in CSR format
@@ -104,7 +106,6 @@ int Singularities::Execute(TCSR<double> *KohnSham,TCSR<double> *Overlap,double *
         delete[] derivatives_local;
         delete[] curvatures_local;
         if (!iam) {
-            muvec[i_mu]=determine_fermi(dopingvec[i_mu],i_mu);
             follow_band(i_mu);
             for (int i=0;i<ndof;i++) {
                 for (int j=0;j<n_k-1;j++) {
@@ -118,14 +119,20 @@ int Singularities::Execute(TCSR<double> *KohnSham,TCSR<double> *Overlap,double *
                 }
             }
             for (int j=0;j<n_k;j++) if (energies_matrix[i_mu][j*ndof]<energy_gs) energy_gs=energies_matrix[i_mu][j*ndof];
-            for (int j=0;j<n_k;j++) if (energies_matrix[i_mu][j*ndof+noccunitcell-1]>energy_vb) energy_vb=energies_matrix[i_mu][j*ndof+noccunitcell-1];
-            for (int j=0;j<n_k;j++) if (energies_matrix[i_mu][j*ndof+noccunitcell  ]<energy_cb) energy_cb=energies_matrix[i_mu][j*ndof+noccunitcell  ];
+            for (int j=0;j<n_k;j++) if (energies_matrix[i_mu][j*ndof+noccunitcell-1]>energies_vb[i_mu]) energies_vb[i_mu]=energies_matrix[i_mu][j*ndof+noccunitcell-1];
+            for (int j=0;j<n_k;j++) if (energies_matrix[i_mu][j*ndof+noccunitcell  ]<energies_cb[i_mu]) energies_cb[i_mu]=energies_matrix[i_mu][j*ndof+noccunitcell  ];
+            cout << "Contact " << i_mu << " Valence band edge " << energies_vb[i_mu] << " Conduction band edge " << energies_cb[i_mu] << endl;
         }
+    }
+    if (!iam) {
+        energy_vb=*max_element(energies_vb.begin(),energies_vb.end());
+        energy_cb=*min_element(energies_cb.begin(),energies_cb.end());
     }
     MPI_Bcast(&energy_gs,1,MPI_DOUBLE,0,MPI_COMM_WORLD);
     MPI_Bcast(&energy_vb,1,MPI_DOUBLE,0,MPI_COMM_WORLD);
     MPI_Bcast(&energy_cb,1,MPI_DOUBLE,0,MPI_COMM_WORLD);
-    MPI_Bcast(&muvec[0],n_mu,MPI_DOUBLE,0,MPI_COMM_WORLD);
+    MPI_Bcast(&energies_vb[0],n_mu,MPI_DOUBLE,0,MPI_COMM_WORLD);
+    MPI_Bcast(&energies_cb[0],n_mu,MPI_DOUBLE,0,MPI_COMM_WORLD);
 
     return 0;
 }
@@ -169,32 +176,39 @@ std::vector< std::vector< std::vector<double> > > Singularities::get_propagating
 
 double Singularities::determine_fermi(double doping,int i_mu) //slightly differs from OMEN
 {
-    double nocctol=1.0E-2/n_k;
-    cout << "Fermi Level / Number of Electrons with precision " << nocctol << endl;
-    double mu=(energies_matrix[i_mu][noccunitcell-1]+energies_matrix[i_mu][noccunitcell])/2;
-    double nocciter = 0.0;
-    for (int j=0;j<n_k;j++) {
-        for (int i=0;i<ndof;i++) {
-            nocciter+=2.0/n_k*fermi(energies_matrix[i_mu][i+j*ndof],mu,Temp,0);
-        }
-    }
-    cout << mu << " / " << nocciter << endl;
-    while (abs(2.0*noccunitcell+doping-nocciter)/doping>nocctol) {
-        double dfermi=0.0;
-        for (int j=0;j<n_k;j++) {
-            for (int i=0;i<ndof;i++) {
-                dfermi+=fermi(energies_matrix[i_mu][i+j*ndof],mu,Temp,2);
-            }
-        }
-        mu+=(2.0*noccunitcell+doping-nocciter)/n_k;
-        nocciter=0.0;
+    double mu;
+    if (!iam) {
+//doping=2.0;
+        double nocctol=1.0E-2/n_k;
+        cout << "Fermi Level / Number of Electrons with precision " << nocctol << endl;
+        mu=(energies_matrix[i_mu][noccunitcell-1]+energies_matrix[i_mu][noccunitcell])/2;
+        double nocciter = 0.0;
         for (int j=0;j<n_k;j++) {
             for (int i=0;i<ndof;i++) {
                 nocciter+=2.0/n_k*fermi(energies_matrix[i_mu][i+j*ndof],mu,Temp,0);
             }
         }
+        cout << mu << " / " << nocciter << endl;
+        while (abs(2.0*noccunitcell+doping-nocciter)>nocctol*abs(doping)) {
+            double dfermi=0.0;
+            for (int j=0;j<n_k;j++) {
+                for (int i=0;i<ndof;i++) {
+                    dfermi+=fermi(energies_matrix[i_mu][i+j*ndof],mu,Temp,2);
+                }
+            }
+            mu+=(2.0*noccunitcell+doping-nocciter)/n_k;
+//            mu+=(2.0*noccunitcell+doping-nocciter)/dfermi/n_k;
+            nocciter=0.0;
+            for (int j=0;j<n_k;j++) {
+                for (int i=0;i<ndof;i++) {
+                    nocciter+=2.0/n_k*fermi(energies_matrix[i_mu][i+j*ndof],mu,Temp,0);
+                }
+            }
+//cout << mu << " / " << nocciter << endl;
+        }
+        cout << mu << " / " << nocciter << endl;
     }
-    cout << mu << " / " << nocciter << endl;
+    MPI_Bcast(&mu,1,MPI_DOUBLE,0,MPI_COMM_WORLD);
     return mu;
 }
 
@@ -265,6 +279,51 @@ void Singularities::write_bandstructure(int i_mu)
         }
         myfile.close();
     }
+}
+
+int Singularities::determine_imaginary_bandstructure(CPX *H,CPX *S,double kimag_in,CPX *lambda)
+{
+    double kval=exp(-kimag_in);
+    int N=ndof;
+    double* areal = new double[N*N]();
+    double* breal = new double[N*N]();
+
+    for (int ibandw=-bandwidth;ibandw<=bandwidth;ibandw++) {
+        c_daxpy(N*N,pow(kval,ibandw),(double*)&H[(bandwidth+ibandw)*N*N],2,areal,1);
+        c_daxpy(N*N,pow(kval,ibandw),(double*)&S[(bandwidth+ibandw)*N*N],2,breal,1);
+    }
+
+    double* lambda_up_real = new double[N];
+    double* lambda_up_imag = new double[N];
+    double* lambda_down_real = new double[N];
+    double* vl_real = new double[1];
+    double* vr_real = new double[1];
+
+    int iinfo;
+    double work_test;
+    c_dggev('N','N',N,areal,N,breal,N,lambda_up_real,lambda_up_imag,lambda_down_real,vl_real,1,vr_real,1,&work_test,-1,&iinfo);
+    if (iinfo) return (LOGCERR, EXIT_FAILURE);
+    int lwork_real=int(work_test);
+    double* work_real = new double[lwork_real];
+    c_dggev('N','N',N,areal,N,breal,N,lambda_up_real,lambda_up_imag,lambda_down_real,vl_real,1,vr_real,1,work_real,lwork_real,&iinfo);
+    if (iinfo) return (LOGCERR, EXIT_FAILURE);
+    delete[] work_real;
+    delete[] areal;
+    delete[] breal;
+    for (int IN=0;IN<N;IN++) {
+        if (abs(lambda_down_real[IN])>1.0E-15) {
+            lambda[IN] = CPX(lambda_up_real[IN],lambda_up_imag[IN])/lambda_down_real[IN];
+        } else {
+            lambda[IN] = CPX(INF,INF);
+        }
+    }
+    delete[] lambda_up_real;
+    delete[] lambda_up_imag;
+    delete[] lambda_down_real;
+    delete[] vl_real;
+    delete[] vr_real;
+
+    return 0;
 }
 
 int Singularities::determine_velocities(CPX *H,CPX *S,double k_in,double *energies_k,double *derivatives_k,double *curvatures_k)

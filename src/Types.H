@@ -440,8 +440,8 @@ extern "C"
 
 namespace transport_methods {
 enum transport_method {
-  TEST=0,
-  NEGF=1,
+  NEGF=0,
+  GF=1,
   WF=2,
 };
 } // namespace

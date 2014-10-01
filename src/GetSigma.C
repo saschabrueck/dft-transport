@@ -88,7 +88,6 @@ int BoundarySelfEnergy::Cutout(TCSR<CPX> *SumHamC,int pcontact,CPX penergy,trans
     n_cells=parameter_sab.n_cells;
     ndof=SumHamC->size_tot/n_cells;
     bandwidth=parameter_sab.bandwidth;
-    int ndofsq=ndof*ndof;
     int ntriblock=bandwidth*ndof;
 
     colzerothr=parameter_sab.colzero_threshold;
@@ -131,22 +130,39 @@ int BoundarySelfEnergy::Cutout(TCSR<CPX> *SumHamC,int pcontact,CPX penergy,trans
         H1->shift_resize(i1,ntriblock,j1,ntriblock);
         H1t = new TCSR<CPX>(H1->size,H1->n_nonzeros,H1->findx);
         H1t->sparse_transpose(H1);
-        CPX *H = new CPX[ndofsq*(2*bandwidth+1)];
+        TCSR<CPX> **H = new TCSR<CPX>*[2*bandwidth+1];
         if (contact==1) {
-            H0->sparse_to_full(&H[bandwidth*ndofsq],ndof,ntriblock,0,0);
-            H1->sparse_to_full(&H[2*bandwidth*ndofsq],ndof,ndof,0,0);
-            for (int ibw=1;ibw<=bandwidth;ibw++)
-                full_transpose(ndof,ndof,&H[(bandwidth+ibw)*ndofsq],&H[(bandwidth-ibw)*ndofsq]);
+            for (int ibw=bandwidth;ibw<2*bandwidth;ibw++) {
+                H[ibw] = new TCSR<CPX>(H0,0,ndof,(ibw-bandwidth)*ndof,ndof);
+                H[ibw]->shift_resize(0,ndof,(ibw-bandwidth)*ndof,ndof);
+            }
+            H[2*bandwidth] = new TCSR<CPX>(H1,0,ndof,0,ndof);
+            H[2*bandwidth]->shift_resize(0,ndof,0,ndof);
+            for (int ibw=1;ibw<=bandwidth;ibw++) {
+                H[bandwidth-ibw] = new TCSR<CPX>(H[bandwidth+ibw]);
+                H[bandwidth-ibw]->sparse_transpose(H[bandwidth+ibw]);
+            }
         } else if (contact==2) {
-            H0->sparse_to_full(&H[ndofsq],ndof,ntriblock,ntriblock-ndof,0);
-            H1->sparse_to_full(&H[0],ndof,ndof,ntriblock-ndof,ntriblock-ndof);
-            for (int ibw=1;ibw<=bandwidth;ibw++)
-                full_transpose(ndof,ndof,&H[(bandwidth-ibw)*ndofsq],&H[(bandwidth+ibw)*ndofsq]);
+            H[0] =  new TCSR<CPX>(H1,ntriblock-ndof,ndof,ntriblock-ndof,ndof);
+            H[0]->shift_resize(ntriblock-ndof,ndof,ntriblock-ndof,ndof);
+            for (int ibw=1;ibw<bandwidth+1;ibw++) {
+                H[ibw] = new TCSR<CPX>(H0,ntriblock-ndof,ndof,(ibw-1)*ndof,ndof);
+                H[ibw]->shift_resize(ntriblock-ndof,ndof,(ibw-1)*ndof,ndof);
+            }
+            for (int ibw=1;ibw<=bandwidth;ibw++) {
+                H[bandwidth+ibw] = new TCSR<CPX>(H[bandwidth-ibw]);
+                H[bandwidth+ibw]->sparse_transpose(H[bandwidth-ibw]);
+            }
         }
-        TCSR<CPX> *spAu = new TCSR<CPX>(2*ntriblock,2*bandwidth*ndofsq,SumHamC->findx);
-        spAu->full_to_sparse(&H[ndofsq],ndof,2*bandwidth*ndof,0,0);
-        TCSR<CPX> *spBu = new TCSR<CPX>(2*ntriblock,ndofsq,SumHamC->findx);
-        spBu->full_to_sparse(H,ndof,ndof,0,0);
+        H[0]->shift_resize(0,ndof,0,2*ntriblock);
+        TCSR<CPX> *spBu = new TCSR<CPX>(H[0]);
+        for (int ibw=1;ibw<2*bandwidth+1;ibw++) {
+            H[ibw]->shift_resize(0,ndof,-(ibw-1)*ndof,2*ntriblock);
+        }
+        TCSR<CPX> *spAu = new TCSR<CPX>(2*bandwidth,NULL,&H[1],2*ntriblock);
+        for (int ibw=0;ibw<2*bandwidth+1;ibw++) {
+            delete H[ibw];
+        }
         delete[] H;
         spA = new TCSR<CPX>(2*ntriblock,spAu->n_nonzeros+2*ntriblock-ndof,spAu->findx);
         c_zcopy(spAu->n_nonzeros,spAu->nnz,1,spA->nnz,1);
@@ -268,7 +284,7 @@ int worldrank; MPI_Comm_rank(MPI_COMM_WORLD,&worldrank);
     int do_feast=0;
     if (do_feast) {
         InjectionFeast<CPX> *k_inj = new InjectionFeast<CPX>(complexenergypoint,2*bandwidth,10);
-        int neigfeast=45;
+        int neigfeast=50;
         k_inj->initialize(2*ntriblock,2*ntriblock,neigfeast);
         int Ntr;
         int Nref;
@@ -429,6 +445,63 @@ if (!worldrank) cout << "TIME FOR MATRIX MATRIX MULTIPLICATIONS FOR INVERSE OF G
     delete[] RCOR;
     delete[] invgrs;
 if (!worldrank) cout << "TIME FOR INVERSION AND MATRIX MATRIX MULTIPLICATIONS FOR SIGMA " << get_time(sabtime) << endl;
+
+// /*
+    sabtime=get_time(d_zer);
+    int inversion_with_sparse_mult_symm=1;
+    int linear_system_with_dense_mult_symm=0;
+    if (inversion_with_sparse_mult_symm) {
+        CPX *matctri  = new CPX[triblocksize];
+        CPX *presigma  = new CPX[triblocksize];
+        H0->sparse_to_full(matctri,ntriblock,ntriblock);
+        c_zaxpy(triblocksize,-z_one,sigma,1,matctri,1);
+        int *pivarrays=new int[ntriblock];
+        c_zgetrf(ntriblock,ntriblock,matctri,ntriblock,pivarrays,&iinfo);
+        if (iinfo) return (LOGCERR, EXIT_FAILURE);
+        CPX nworks;
+        c_zgetri(ntriblock,matctri,ntriblock,pivarrays,&nworks,-1,&iinfo);
+        int lworks=int(real(nworks));
+        CPX* works=new CPX[lworks];
+        c_zgetri(ntriblock,matctri,ntriblock,pivarrays,works,lworks,&iinfo);
+        if (iinfo) return (LOGCERR, EXIT_FAILURE);
+        delete[] works;
+        delete[] pivarrays;
+        full_transpose(ntriblock,ntriblock,matctri,sigma);
+        H1t->trans_mat_vec_mult(sigma,presigma,ntriblock,1);
+        H1t->trans_mat_vec_mult(presigma,matctri,ntriblock,1);
+        full_transpose(ntriblock,ntriblock,matctri,sigma);
+        int do_extra_symm=0;
+        if (do_extra_symm) {
+            c_zaxpy(ntriblock*ntriblock,z_one,matctri,1,sigma,1);
+            c_zscal(ntriblock*ntriblock,z_one*0.5,sigma,1);
+        }
+        delete[] matctri;
+        delete[] presigma;
+    } else if (linear_system_with_dense_mult_symm) {
+        CPX *matctri  = new CPX[triblocksize];
+        CPX *presigma  = new CPX[triblocksize];
+        H0->sparse_to_full(matctri,ntriblock,ntriblock);
+        c_zaxpy(triblocksize,-z_one,sigma,1,matctri,1);
+        int *pivarrays=new int[ntriblock];
+        c_zgetrf(ntriblock,ntriblock,matctri,ntriblock,pivarrays,&iinfo);
+        if (iinfo) return (LOGCERR, EXIT_FAILURE);
+        H1->sparse_to_full(sigma,ntriblock,ntriblock);
+        c_zgetrs('T',ntriblock,ntriblock,matctri,ntriblock,pivarrays,sigma,ntriblock,&iinfo);
+        if (iinfo) return (LOGCERR, EXIT_FAILURE);
+        delete[] pivarrays;
+        full_transpose(ntriblock,ntriblock,sigma,presigma);
+        H1t->trans_mat_vec_mult(presigma,matctri,ntriblock,1);
+        full_transpose(ntriblock,ntriblock,matctri,sigma);
+        int do_extra_symm=0;
+        if (do_extra_symm) {
+            c_zaxpy(ntriblock*ntriblock,z_one,matctri,1,sigma,1);
+            c_zscal(ntriblock*ntriblock,z_one*0.5,sigma,1);
+        }
+        delete[] matctri;
+        delete[] presigma;
+    }
+if (!worldrank) cout << "TIME FOR SYMMETRIZATION " << get_time(sabtime) << endl;
+// */
 
     if (compute_inj) {
         sabtime=get_time(d_zer);
