@@ -130,16 +130,14 @@ int Energyvector::Execute(TCSR<double> *Overlap,TCSR<double> *KohnSham,int n_mu,
         myfile.open("DOS_Profile");
         myfile.precision(15);
         for (uint iele=0;iele<energyvector.size();iele++)
-            if (abs(stepvector[iele])>0.0)
-                myfile << real(energyvector[iele]) << " " << real(stepvector[iele]) << " " << dos_profile2[iele] << endl;
+            myfile << real(energyvector[iele]) << " " << imag(energyvector[iele]) << " " << real(stepvector[iele]) << " " << imag(stepvector[iele]) << " " << dos_profile2[iele] << endl;
         myfile.close();
     }
     if (!iam) {
         myfile.open("Transmission");
         myfile.precision(15);
         for (uint iele=0;iele<energyvector.size();iele++)
-            if (abs(stepvector[iele])>0.0)
-                myfile << real(energyvector[iele]) << " " << real(stepvector[iele]) << " " << transmission2[iele] << endl;
+            myfile << real(energyvector[iele]) << " " << imag(energyvector[iele]) << " " << real(stepvector[iele]) << " " << imag(stepvector[iele]) << " " << transmission2[iele] << endl;
         myfile.close();
     }
     if (!iam) cout << "CURRENT IS " << c_ddot(energyvector.size(),&currentvector2[0],1,(double*)&stepvector[0],2) << endl;
@@ -170,72 +168,19 @@ int Energyvector::determine_energyvector(std::vector<CPX> &energyvector,std::vec
     if ( singularities.Execute(KohnSham,Overlap,contactvec) ) return (LOGCERR, EXIT_FAILURE);
     if (!iam) cout << "TIME FOR SINGULARITIES " << get_time(sabtime) << endl;
     for (int i_mu=0;i_mu<n_mu;i_mu++) singularities.write_bandstructure(i_mu);
-// determine elements in nonequilibrium range
+
     //double nonequi_start=*min_element(muvec,muvec+n_mu)-40.0*K_BOLTZMANN*Temp;
-    //double nonequi_start=singularities.energies_cb[0];
-double nonequi_start=singularities.energy_cb;
-// ONLY CONDUCTION ELECTRONS
-    if (!transport_params.n_abscissae) {
-        if (!iam) cout << "Only conduction electrons" << endl;
-//        if (singularities.energy_cb<singularities.energy_vb+max(0.0,V_gate)) return (LOGCERR, EXIT_FAILURE);
-        nonequi_start=singularities.energy_cb;
+    if (transport_params.n_abscissae) {
+        add_cmpx_cont_energies(singularities.energy_gs-0.5,singularities.energy_cb,muvec[0],energyvector,stepvector,methodvector,transport_params,n_mu);
     }
-    double nonequi_end=*max_element(muvec,muvec+n_mu)+40.0*K_BOLTZMANN*Temp; //+max(0.0,V_gate);//WHY DO I ADD THE GATE VOLTAGE? NO CURRENT ABOVE HIGHEST FERMI LEVEL OR DOES GATE RAISE FERMI LEVEL
-    std::vector<double> energylist;
-    int n_energies;
-    if (!iam) {
-        energylist.push_back(nonequi_start);
-        for (int i_mu=0;i_mu<n_mu;i_mu++)
-            for (uint i_energies=0;i_energies<singularities.energies_extremum[i_mu].size();i_energies++)
-                if (singularities.energies_extremum[i_mu][i_energies]>nonequi_start && singularities.energies_extremum[i_mu][i_energies]<nonequi_end)
-                    energylist.push_back(singularities.energies_extremum[i_mu][i_energies]);
-        energylist.push_back(nonequi_end);
-        std::sort(energylist.begin(),energylist.end());
-        n_energies=energylist.size();
+    if (transport_params.n_abscissae && transport_params.method==3){
+        add_real_axis_energies(singularities.energy_cb,singularities.energy_vb,energyvector,stepvector,methodvector,singularities.energies_extremum,transport_params,n_mu);
+        add_cmpx_cont_energies(max(singularities.energy_vb,singularities.energy_cb),singularities.energies_cb[0],muvec[1],energyvector,stepvector,methodvector,transport_params,n_mu);
     }
-    MPI_Bcast(&n_energies,1,MPI_INT,0,MPI_COMM_WORLD);
-    energylist.resize(n_energies);
-    MPI_Bcast(&energylist[0],n_energies,MPI_DOUBLE,0,MPI_COMM_WORLD);
-    if (!iam) {
-        ofstream myfile;
-        myfile.open("SingularityList");
-        myfile.precision(15);
-        for (uint iele=0;iele<energylist.size();iele++)
-            myfile << energylist[iele] << endl;
-        myfile.close();
+    if (transport_params.method==3) {
+        add_real_axis_energies(singularities.energies_cb[0],*max_element(muvec,muvec+n_mu)+40.0*K_BOLTZMANN*Temp,energyvector,stepvector,methodvector,singularities.energies_extremum,transport_params,n_mu);
     }
-// get integration points along complex contour with gauss legendre
-    int num_points_on_contour=transport_params.n_abscissae;
-    Quadrature gausslegendre(quadrature_types::CCGL,singularities.energy_gs-0.5,singularities.energy_cb,num_points_on_contour);
-//    for (uint ivec=0;ivec<gausslegendre.weights.size();ivec++)
-//        gausslegendre.weights[ivec]*=1.0/(1.0+exp((gausslegendre.abscissae[ivec]-muvec[0])/(K_BOLTZMANN*Temp)));
-    energyvector=gausslegendre.abscissae;
-    stepvector=gausslegendre.weights;
-    methodvector.assign(gausslegendre.abscissae.size(),transport_methods::GF);
-/*
-    Quadrature gausslegendre2(quadrature_types::CCGL,singularities.energy_cb,singularities.energies_cb[0],num_points_on_contour);
-    for (uint ivec=0;ivec<gausslegendre2.weights.size();ivec++)
-        gausslegendre2.weights[ivec]*=1.0/(1.0+exp((gausslegendre2.abscissae[ivec]-muvec[1])/(K_BOLTZMANN*Temp)));
-    energyvector.insert(energyvector.end(),gausslegendre2.abscissae.begin(),gausslegendre2.abscissae.end());
-    stepvector.insert(stepvector.end(),gausslegendre2.weights.begin(),gausslegendre2.weights.end());
-    methodvector.resize(methodvector.size()+gausslegendre2.abscissae.size(),transport_methods::GF);
-*/
-// get integration points along real axis with gauss cheby
-    double smallest_energy_distance=transport_params.extra_param2;
-if (!iam) cout<<"Smallest enery distance "<<smallest_energy_distance<<endl;
-if (!iam) cout<<"Max number of points per small interval "<<transport_params.extra_int_param1<<endl;
-if (!iam) cout<<"Average distance for big intervals "<<transport_params.extra_param1<<endl;
-    for (uint i_energies=1;i_energies<energylist.size();i_energies++) {
-        int num_points_per_interval=max(transport_params.extra_int_param1,int(ceil(abs(energylist[i_energies]-energylist[i_energies-1])/transport_params.extra_param1)));
-        while ((energylist[i_energies]-energylist[i_energies-1])*(1.0-cos(M_PI/(2.0*num_points_per_interval)))/2.0<smallest_energy_distance && num_points_per_interval>1)
-            --num_points_per_interval;
-        if (num_points_per_interval>1) {
-            Quadrature gausscheby(quadrature_types::GC,energylist[i_energies-1],energylist[i_energies],num_points_per_interval);
-            energyvector.insert(energyvector.end(),gausscheby.abscissae.begin(),gausscheby.abscissae.end());
-            stepvector.insert(stepvector.end(),gausscheby.weights.begin(),gausscheby.weights.end());
-            methodvector.resize(methodvector.size()+gausscheby.abscissae.size(),transport_methods::WF);
-        }
-    }
+
     ifstream evecfile("OMEN_E");
     if (evecfile) {
         energyvector.clear();
@@ -281,3 +226,58 @@ if (!iam) cout<<"Average distance for big intervals "<<transport_params.extra_pa
     }
     return 0;
 }
+
+void Energyvector::add_real_axis_energies(double nonequi_start,double nonequi_end,std::vector<CPX> &energyvector,std::vector<CPX> &stepvector,std::vector<transport_methods::transport_method> &methodvector,const std::vector< std::vector<double> > &energies_extremum,c_transport_type transport_params,int n_mu)
+{
+    std::vector<double> energylist;
+    int n_energies;
+    if (!iam) {
+        energylist.push_back(nonequi_start);
+        for (int i_mu=0;i_mu<n_mu;i_mu++)
+            for (uint i_energies=0;i_energies<energies_extremum[i_mu].size();i_energies++)
+                if (energies_extremum[i_mu][i_energies]>nonequi_start && energies_extremum[i_mu][i_energies]<nonequi_end)
+                    energylist.push_back(energies_extremum[i_mu][i_energies]);
+        energylist.push_back(nonequi_end);
+        std::sort(energylist.begin(),energylist.end());
+        n_energies=energylist.size();
+    }
+    MPI_Bcast(&n_energies,1,MPI_INT,0,MPI_COMM_WORLD);
+    energylist.resize(n_energies);
+    MPI_Bcast(&energylist[0],n_energies,MPI_DOUBLE,0,MPI_COMM_WORLD);
+    double smallest_energy_distance=transport_params.extra_param2;
+    if (!iam) cout<<"Smallest enery distance "<<smallest_energy_distance<<endl;
+    if (!iam) cout<<"Max number of points per small interval "<<transport_params.extra_int_param1<<endl;
+    if (!iam) cout<<"Average distance for big intervals "<<transport_params.extra_param1<<endl;
+    for (uint i_energies=1;i_energies<energylist.size();i_energies++) {
+        int num_points_per_interval=max(transport_params.extra_int_param1,int(ceil(abs(energylist[i_energies]-energylist[i_energies-1])/transport_params.extra_param1)));
+        while ((energylist[i_energies]-energylist[i_energies-1])*(1.0-cos(M_PI/(2.0*num_points_per_interval)))/2.0<smallest_energy_distance && num_points_per_interval>1)
+            --num_points_per_interval;
+        if (num_points_per_interval>1) {
+            Quadrature gausscheby(quadrature_types::GC,energylist[i_energies-1],energylist[i_energies],num_points_per_interval);
+            energyvector.insert(energyvector.end(),gausscheby.abscissae.begin(),gausscheby.abscissae.end());
+            stepvector.insert(stepvector.end(),gausscheby.weights.begin(),gausscheby.weights.end());
+            methodvector.resize(methodvector.size()+gausscheby.abscissae.size(),transport_methods::WF);
+        }
+    }
+}
+
+void Energyvector::add_cmpx_cont_energies(double start,double end,double mu,std::vector<CPX> &energyvector,std::vector<CPX> &stepvector,std::vector<transport_methods::transport_method> &methodvector,c_transport_type transport_params,int n_mu)
+{
+    double Temp=transport_params.extra_param3;
+    int num_points_on_contour=transport_params.n_abscissae;
+    Quadrature gausslegendre(quadrature_types::CCGL,start,end,num_points_on_contour);
+    for (uint ivec=0;ivec<gausslegendre.weights.size();ivec++) gausslegendre.weights[ivec]*=fermi(gausslegendre.abscissae[ivec],mu,Temp,0);
+    if (mu>start && mu<end && start<end) {
+        int nu=0;
+        CPX zval;
+        while (abs((zval=CPX(mu,(2*nu+++1)*M_PI*K_BOLTZMANN*Temp))-(end+start)/2.0)<(end-start)/2.0) {
+if (!iam) cout << "POINT " << zval << " " << abs(zval-(end+start)/2.0) << " " << (end-start)/2.0 << endl;
+            gausslegendre.abscissae.push_back(zval);
+            gausslegendre.weights.push_back(-CPX(0.0,2.0*M_PI*K_BOLTZMANN*Temp));
+        }
+    }
+    energyvector.insert(energyvector.end(),gausslegendre.abscissae.begin(),gausslegendre.abscissae.end());
+    stepvector.insert(stepvector.end(),gausslegendre.weights.begin(),gausslegendre.weights.end());
+    methodvector.resize(methodvector.size()+gausslegendre.abscissae.size(),transport_methods::GF);
+}
+
