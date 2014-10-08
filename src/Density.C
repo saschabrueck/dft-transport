@@ -14,6 +14,7 @@ using namespace std;
 #include "MUMPS.H"
 #include "SuperLU.H"
 #include "tmprGF.H"
+#include "c_pexsi_interface.h"
 #include "GetSigma.H"
 #ifdef HAVE_PARDISO
 #include "Pardiso.H"
@@ -36,6 +37,7 @@ int density(TCSR<double> *KohnSham,TCSR<double> *Overlap,TCSR<double> *OverlapPB
     CPX z_zer=CPX(d_zer,d_zer);
     CPX z_img=CPX(d_zer,d_one);
     double sabtime;
+    int iinfo;
     TCSR<CPX> *HamSig;
     CPX* inj = NULL;
     int nprol, npror;
@@ -126,7 +128,6 @@ if (npror!=propnum[1]) cout << "WARNING: FOUND " << npror << " OF " << propnum[1
     if (method==transport_methods::NEGF) {
         int HamSigsize_tot=HamSig->size_tot;
         int HamSigfindx=HamSig->findx;
-        int iinfo;
         int *pivarrays = new int[HamSigsize_tot];
         CPX *HamBig0 = new CPX[HamSigsize_tot*HamSigsize_tot]();
         HamSig->sparse_to_full(HamBig0,HamSigsize_tot,HamSigsize_tot);
@@ -175,16 +176,28 @@ if (npror!=propnum[1]) cout << "WARNING: FOUND " << npror << " OF " << propnum[1
         delete HamBigSparse;
         delete[] HamBig0;
     } else if (method==transport_methods::GF) {
-        TCSR<CPX> *HamSigG = new TCSR<CPX>(HamSig,0,matrix_comm);
         sabtime=get_time(d_zer);
-        int inversion_method=0;
+        int inversion_method=3;
         if (inversion_method==0) {
+            HamSig->change_findx(1);
+            int n_nonzeros_global;
+            MPI_Allreduce(&HamSig->n_nonzeros,&n_nonzeros_global,1,MPI_INT,MPI_SUM,matrix_comm);
+            double *HamSig_nnz = new double[2*HamSig->n_nonzeros];
+            c_dcopy(2*HamSig->n_nonzeros,(double*)HamSig->nnz,1,HamSig_nnz,1);
+            PSelInvComplexSymmetricInterface(HamSig->size_tot,n_nonzeros_global,HamSig->n_nonzeros,HamSig->size,HamSig->edge_i,HamSig->index_j,HamSig_nnz,2,1,matrix_comm,matrix_procs,1,(double*)HamSig->nnz,&iinfo);
+            Ps->add_real(HamSig,-weight/M_PI*z_img);
+            Overlap->atomdensity(HamSig,-2.0*weight/M_PI*z_img,atom_of_bf,erhoperatom);
+            delete HamSig;
+        } else if (inversion_method==3) {
+            TCSR<CPX> *HamSigG = new TCSR<CPX>(HamSig,0,matrix_comm);
             if (ncells%bandwidth) return (LOGCERR, EXIT_FAILURE);
             if (distribute_pmat && matrix_procs>1) {
                 if (!matrix_rank) {
                     std::vector<int> Bvec(ncells/bandwidth,0);
                     for (int ii=0;ii<ncells/bandwidth;ii++) Bvec[ii]=(ii+1)*ntriblock-1;
+                    omp_set_num_threads(omp_get_max_threads()*matrix_procs);
                     tmprGF::sparse_invert(HamSigG,Bvec);
+                    omp_set_num_threads(omp_get_max_threads()/matrix_procs);
                 }
                 HamSigG->scatter(HamSig,0,matrix_comm);
                 delete HamSigG;
@@ -196,7 +209,9 @@ if (npror!=propnum[1]) cout << "WARNING: FOUND " << npror << " OF " << propnum[1
                 if (!matrix_rank) {
                     std::vector<int> Bvec(ncells/bandwidth,0);
                     for (int ii=0;ii<ncells/bandwidth;ii++) Bvec[ii]=(ii+1)*ntriblock-1;
+                    omp_set_num_threads(omp_get_max_threads()*matrix_procs);
                     tmprGF::sparse_invert(HamSigG,Bvec);
+                    omp_set_num_threads(omp_get_max_threads()/matrix_procs);
 //                    Ps->add_real(HamSigG,-weight/M_PI*z_img);
                 }
 /*
@@ -225,6 +240,7 @@ if (npror!=propnum[1]) cout << "WARNING: FOUND " << npror << " OF " << propnum[1
             }
 #ifdef HAVE_PARDISO            
         } else if (inversion_method==1) {
+            TCSR<CPX> *HamSigG = new TCSR<CPX>(HamSig,0,matrix_comm);
             if (distribute_pmat && matrix_procs>1) {
                 if (!matrix_rank) {
                     Pardiso::sparse_invert(HamSigG);
@@ -245,6 +261,7 @@ if (npror!=propnum[1]) cout << "WARNING: FOUND " << npror << " OF " << propnum[1
 #endif
 #ifdef HAVE_SELINV            
         } else if (inversion_method==2) {
+            TCSR<CPX> *HamSigG = new TCSR<CPX>(HamSig,0,matrix_comm);
             if (distribute_pmat && matrix_procs>1) return (LOGCERR, EXIT_FAILURE);
             delete HamSig;
             if (!matrix_rank) {

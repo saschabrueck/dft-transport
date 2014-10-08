@@ -70,10 +70,12 @@ int min_active_vec(int,int*,int*);
 
 int max_active_vec(int,int*,int*);
 
-double fermi(double,double,double,int);
-
 template <typename T>
-void set_to_zero(int, T*);
+void set_to_zero(int length, T *array) {
+  for (int i=0; i < length; ++i) {
+    array[i] = (T)0;
+  }
+}
 
 void set_random(int, int, CPX*);
 
@@ -246,6 +248,45 @@ inline CPX convert(double val)
 }
 
 #endif
+/************************************************************************************************/
+
+template <typename T>
+T fermi(T E,double mu,double temp,int mode)
+{
+    double k_b=K_BOLTZMANN;
+    if (mode==0) {
+        if (temp<=0.0) {
+            if (real(E)<=mu) {
+                return 1.0;
+            } else {
+                return 0.0;
+            }
+        } else {
+            return 1.0/(1.0+exp((E-mu)/(k_b*temp)));
+        }
+    } else if (mode==1) {
+        if (temp<=0.0) {
+            return 0.0;
+        } else {
+            return log(1.0+exp(-(E-mu)/(k_b*temp)));
+        }
+    } else if (mode==2) {
+        if (temp<=0.0 || abs(E-mu)>10.0) { // CHECK WHY -nan FOR >10.0
+            return 0.0;
+        } else {
+            return exp((E-mu)/(k_b*temp))/(k_b*temp)/pow(1.0+exp((E-mu)/(k_b*temp)),2);
+        }
+    } else if (mode==3) {
+        if (temp<=0.0) {
+            return 0.0;
+        } else {
+            return exp((E-mu)/(k_b*temp))/(k_b*temp)/(1.0+exp(-(E-mu)/(k_b*temp)));
+        }
+    } else {
+        return 0.0;
+    }
+}
+
 /************************************************************************************************/
 
 #endif
