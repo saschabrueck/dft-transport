@@ -128,6 +128,7 @@ public:
     void extract_lower_triangle(TCSR<T>*);
     void extract_upper_triangle(TCSR<T>*);
     void sparse_to_full(T*,int,int,int,int);
+    void set_to_id();
 // sab end
     void set_nnz(int,T*);
     void set_index_i(int,int*);
@@ -2526,7 +2527,23 @@ void TCSR<T>::sparse_transpose(TCSR<T> *mat)
 
     get_diag_pos();
 }
-    
+
+/************************************************************************************************/
+
+template <class T>
+void TCSR<T>::set_to_id()
+{
+    n_nonzeros=size;
+    for (int i=0;i<size;i++) {
+        nnz[i]=1.0;
+        index_i[i]=1;
+        index_j[i]=first_row+findx+i;
+    }
+
+    get_row_edge();
+    get_diag_pos();
+}
+
 /*SAB*END****************************************************************************************/
 
 template <class T>

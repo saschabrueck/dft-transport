@@ -448,7 +448,7 @@ if (!worldrank) cout << "TIME FOR INVERSION AND MATRIX MATRIX MULTIPLICATIONS FO
 
 // /*
     sabtime=get_time(d_zer);
-    int inversion_with_sparse_mult_symm=1;
+    int inversion_with_sparse_mult_symm=0;
     int linear_system_with_dense_mult_symm=0;
     if (inversion_with_sparse_mult_symm) {
         CPX *matctri  = new CPX[triblocksize];

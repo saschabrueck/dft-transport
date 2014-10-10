@@ -88,6 +88,10 @@ int main (int argc, char **argv)
    fcomm = MPI_Comm_c2f(mpi_comm);
 
    int run_cp2k=1;
+   if (FILE *trpafile = fopen("TransportParams","r")) {
+      run_cp2k=0;
+      fclose(trpafile);
+   }
    if (run_cp2k) {
       cp_c_init_cp2k(&init_mpi, &error);
       cp_c_create_fenv_comm(&f_env_id, input_file, output_file, &fcomm, &error);
@@ -160,9 +164,21 @@ int main (int argc, char **argv)
       paraminfile >> transport_env_params.extra_param2;
       paraminfile >> transport_env_params.extra_param3;
       paraminfile.close();
-      TCSR<double>* Overlap = new TCSR<double>("Overlap",w_size,w_rank);
       TCSR<double>* KohnSham = new TCSR<double>("KohnSham",w_size,w_rank);
       c_dscal(KohnSham->n_nonzeros,1.0/transport_env_params.evoltfactor,KohnSham->nnz,1);
+      TCSR<double>* Overlap;
+      if (FILE *ovlfile = fopen("Overlap","r")) {
+         fclose(ovlfile);
+         Overlap = new TCSR<double>("Overlap",w_size,w_rank);
+      } else {
+         TCSR<double>* OverlapRoot = NULL;
+         if (!w_rank) {
+            OverlapRoot = new TCSR<double>(KohnSham->size_tot,KohnSham->size_tot,KohnSham->findx);
+            OverlapRoot->set_to_id();
+         }
+         Overlap = new TCSR<double>(KohnSham,OverlapRoot,0,MPI_COMM_WORLD);
+         if (!w_rank) delete OverlapRoot;
+      }
       semiselfconsistent(Overlap,KohnSham,transport_env_params);
       delete Overlap;
       delete KohnSham;
