@@ -114,7 +114,7 @@ if (!iam) cout << "DOPING " << dopingvec[0] << " " << dopingvec[1] << endl;
 
 if (!iam) cout << "GATE POTENTIAL " << Vg << endl;
 
-    std::vector<double> nuclearchargeperatom(FEM->NAtom,-4.0);
+    std::vector<double> nuclearchargeperatom(FEM->NAtom,-(2.0*transport_params.n_occ)/FEM->NAtom);
 
     double Ls=nanowire->Ls;
     double Lc=nanowire->Lc;
@@ -143,8 +143,7 @@ if (!iam) cout << "GATE POTENTIAL " << Vg << endl;
             Vnew[IX] = -Vd+dV;
         }
         double bfac = 1.0/K_BOLTZMANN;
-        Vnew[IX] = (Vs+Vg+Vd)*fermi(x-(Ls+Lc),0,bfac,0)*fermi(-x+Ls,0,bfac,0)-Vs*fermi(x-(Ls+Lc),0,bfac,0)-Vd*fermi(-x+Ls,0,bfac,0);
-//        Vnew[IX] = 0.0;
+//        Vnew[IX] = (Vs+Vg+Vd)*fermi(x-(Ls+Lc),0,bfac,0)*fermi(-x+Ls,0,bfac,0)-Vs*fermi(x-(Ls+Lc),0,bfac,0)-Vd*fermi(-x+Ls,0,bfac,0);
     }
     c_dcopy(FEM->NGrid,Vnew,1,Vold,1);
 

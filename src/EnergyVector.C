@@ -101,7 +101,7 @@ int Energyvector::Execute(TCSR<double> *Overlap,TCSR<double> *KohnSham,int n_mu,
     delete OverlapCollect;
     delete OverlapCollectPBC;
     MPI_Allreduce(eperatom,electronchargeperatom,n_atoms,MPI_DOUBLE,MPI_SUM,MPI_COMM_WORLD);
-    MPI_Allreduce(dperatom,derivativechargeperatom,n_atoms,MPI_DOUBLE,MPI_SUM,MPI_COMM_WORLD);
+//    MPI_Allreduce(dperatom,derivativechargeperatom,n_atoms,MPI_DOUBLE,MPI_SUM,MPI_COMM_WORLD);
     delete[] eperatom;
     delete[] dperatom;
     if (!iam) {
@@ -170,14 +170,14 @@ int Energyvector::determine_energyvector(std::vector<CPX> &energyvector,std::vec
     for (int i_mu=0;i_mu<n_mu;i_mu++) singularities.write_bandstructure(i_mu);
 
     //double nonequi_start=*min_element(muvec,muvec+n_mu)-40.0*K_BOLTZMANN*Temp;
-    if (transport_params.n_abscissae) {
+    if (!transport_params.n_abscissae) {
+        add_real_axis_energies(singularities.energy_cb,*max_element(muvec,muvec+n_mu)+40.0*K_BOLTZMANN*Temp,energyvector,stepvector,methodvector,singularities.energies_extremum,transport_params,n_mu);
+    } else if (transport_params.method==2) {
+        add_cmpx_cont_energies(singularities.energy_gs-0.5,muvec[0],muvec[0],energyvector,stepvector,methodvector,transport_params,n_mu);
+    } else {
         add_cmpx_cont_energies(singularities.energy_gs-0.5,singularities.energy_cb,muvec[0],energyvector,stepvector,methodvector,transport_params,n_mu);
-    }
-    if (transport_params.n_abscissae && transport_params.method==3){
         add_real_axis_energies(singularities.energy_cb,singularities.energy_vb,energyvector,stepvector,methodvector,singularities.energies_extremum,transport_params,n_mu);
         add_cmpx_cont_energies(max(singularities.energy_vb,singularities.energy_cb),singularities.energies_cb[0],muvec[1],energyvector,stepvector,methodvector,transport_params,n_mu);
-    }
-    if (transport_params.method==3) {
         add_real_axis_energies(singularities.energies_cb[0],*max_element(muvec,muvec+n_mu)+40.0*K_BOLTZMANN*Temp,energyvector,stepvector,methodvector,singularities.energies_extremum,transport_params,n_mu);
     }
 
