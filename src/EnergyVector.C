@@ -3,6 +3,7 @@
 #include "GetSingularities.H"
 #include "Quadrature.H"
 #include "EnergyVector.H"
+#include "pole.hpp"
 #include <iterator>
 
 Energyvector::Energyvector()
@@ -15,7 +16,7 @@ Energyvector::~Energyvector()
 {
 }
 
-int Energyvector::Execute(TCSR<double> *Overlap,TCSR<double> *KohnSham,int n_mu,double* muvec, int* contactvec,double* electronchargeperatom,double* derivativechargeperatom,int n_atoms,int* atom_of_bf,c_transport_type transport_params)
+int Energyvector::Execute(TCSR<double> *Overlap,TCSR<double> *KohnSham,int n_mu,double* muvec, int* contactvec,double* electronchargeperatom,double* derivativechargeperatom,double *Vatom,int n_atoms,int* atom_of_bf,c_transport_type transport_params)
 {
     double sabtime;
     if ( Overlap->size_tot%transport_params.n_cells || transport_params.bandwidth<1 ) return (LOGCERR, EXIT_FAILURE);
@@ -90,11 +91,11 @@ int Energyvector::Execute(TCSR<double> *Overlap,TCSR<double> *KohnSham,int n_mu,
     MPI_Comm_size(eq_rank_matrix_comm,&n_mat_comm);
     MPI_Comm_rank(eq_rank_matrix_comm,&matrix_id);
     sabtime=get_time(0.0);
-    uint jpos;
+    unsigned int jpos;
     for (int iseq=0;iseq<int(ceil(double(energyvector.size())/n_mat_comm));iseq++)
         if ( (jpos=matrix_id+iseq*n_mat_comm)<energyvector.size())
             if (abs(stepvector[jpos])>0.0)
-                if (density(KohnShamCollect,OverlapCollect,OverlapCollectPBC,Ps,energyvector[jpos],stepvector[jpos],methodvector[jpos],n_mu,muvec,contactvec,currentvector[jpos],transmission[jpos],dos_profile[jpos],propagating_sizes[jpos],atom_of_bf,eperatom,dperatom,transport_params,distribute_pmat,jpos,matrix_comm))
+                if (density(KohnShamCollect,OverlapCollect,OverlapCollectPBC,Ps,energyvector[jpos],stepvector[jpos],methodvector[jpos],n_mu,muvec,contactvec,currentvector[jpos],transmission[jpos],dos_profile[jpos],propagating_sizes[jpos],atom_of_bf,eperatom,dperatom,Vatom,transport_params,distribute_pmat,jpos,matrix_comm))
                     return (LOGCERR, EXIT_FAILURE);
     if (!iam) cout << "TIME FOR DENSITY " << get_time(sabtime) << endl;
     delete KohnShamCollect;
@@ -169,16 +170,22 @@ int Energyvector::determine_energyvector(std::vector<CPX> &energyvector,std::vec
     if (!iam) cout << "TIME FOR SINGULARITIES " << get_time(sabtime) << endl;
     for (int i_mu=0;i_mu<n_mu;i_mu++) singularities.write_bandstructure(i_mu);
 
-    //double nonequi_start=*min_element(muvec,muvec+n_mu)-40.0*K_BOLTZMANN*Temp;
+    double delta_eps_fermi=-log((numeric_limits<double>::epsilon)())*K_BOLTZMANN*Temp;
+    double muvec_min=*min_element(muvec,muvec+n_mu);
+    double muvec_max=*max_element(muvec,muvec+n_mu);
+    double nonequi_start=muvec_min-delta_eps_fermi;
+    double nonequi_end=muvec_max+delta_eps_fermi;
+    double energy_vb=*max_element(singularities.energies_vb.begin(),singularities.energies_vb.end());
+    double energy_cb=*min_element(singularities.energies_cb.begin(),singularities.energies_cb.end());
+
     if (!transport_params.n_abscissae) {
-        add_real_axis_energies(singularities.energy_cb,*max_element(muvec,muvec+n_mu)+40.0*K_BOLTZMANN*Temp,energyvector,stepvector,methodvector,singularities.energies_extremum,transport_params,n_mu);
+        add_real_axis_energies(energy_cb,nonequi_end,energyvector,stepvector,methodvector,singularities.energies_extremum,transport_params,n_mu);
     } else if (transport_params.method==2) {
-        add_cmpx_cont_energies(singularities.energy_gs-0.5,muvec[0],muvec[0],energyvector,stepvector,methodvector,transport_params,n_mu);
+        add_cmpx_cont_energies(singularities.energy_gs,singularities.energy_gs,muvec_min,energyvector,stepvector,methodvector,transport_params,n_mu); //FOR PEX ONLY MU AND EM
     } else {
-        add_cmpx_cont_energies(singularities.energy_gs-0.5,singularities.energy_cb,muvec[0],energyvector,stepvector,methodvector,transport_params,n_mu);
-        add_real_axis_energies(singularities.energy_cb,singularities.energy_vb,energyvector,stepvector,methodvector,singularities.energies_extremum,transport_params,n_mu);
-        add_cmpx_cont_energies(max(singularities.energy_vb,singularities.energy_cb),singularities.energies_cb[0],muvec[1],energyvector,stepvector,methodvector,transport_params,n_mu);
-        add_real_axis_energies(singularities.energies_cb[0],*max_element(muvec,muvec+n_mu)+40.0*K_BOLTZMANN*Temp,energyvector,stepvector,methodvector,singularities.energies_extremum,transport_params,n_mu);
+// all localized states with lowest fermi level corresponding to occupation of localized states in bandgap
+        add_cmpx_cont_energies(singularities.energy_gs,singularities.energy_gs,muvec_min,energyvector,stepvector,methodvector,transport_params,n_mu);
+        add_real_axis_energies(nonequi_start,nonequi_end,energyvector,stepvector,methodvector,singularities.energies_extremum,transport_params,n_mu);
     }
 
     ifstream evecfile("OMEN_E");
@@ -248,15 +255,17 @@ void Energyvector::add_real_axis_energies(double nonequi_start,double nonequi_en
     if (!iam) cout<<"Smallest enery distance "<<smallest_energy_distance<<endl;
     if (!iam) cout<<"Max number of points per small interval "<<transport_params.extra_int_param1<<endl;
     if (!iam) cout<<"Average distance for big intervals "<<transport_params.extra_param1<<endl;
+    if (!iam) cout<<"Singularities in range "<< n_energies-2 << endl;
     for (uint i_energies=1;i_energies<energylist.size();i_energies++) {
         int num_points_per_interval=max(transport_params.extra_int_param1,int(ceil(abs(energylist[i_energies]-energylist[i_energies-1])/transport_params.extra_param1)));
-        while ((energylist[i_energies]-energylist[i_energies-1])*(1.0-cos(M_PI/(2.0*num_points_per_interval)))/2.0<smallest_energy_distance && num_points_per_interval>1)
+        while ((energylist[i_energies]-energylist[i_energies-1])/2.0*(1.0-cos(M_PI/(2.0*num_points_per_interval)))<smallest_energy_distance && num_points_per_interval>1)
+//        while ((energylist[i_energies]-energylist[i_energies-1])/2.0*(1.0-tanh(M_PI/2.0*sinh(3.0)))<smallest_energy_distance && num_points_per_interval>1)
             --num_points_per_interval;
         if (num_points_per_interval>1) {
-            Quadrature gausscheby(quadrature_types::GC,energylist[i_energies-1],energylist[i_energies],num_points_per_interval);
-            energyvector.insert(energyvector.end(),gausscheby.abscissae.begin(),gausscheby.abscissae.end());
-            stepvector.insert(stepvector.end(),gausscheby.weights.begin(),gausscheby.weights.end());
-            methodvector.resize(methodvector.size()+gausscheby.abscissae.size(),transport_methods::WF);
+            Quadrature quadrature(quadrature_types::GC,energylist[i_energies-1],energylist[i_energies],num_points_per_interval);
+            energyvector.insert(energyvector.end(),quadrature.abscissae.begin(),quadrature.abscissae.end());
+            stepvector.insert(stepvector.end(),quadrature.weights.begin(),quadrature.weights.end());
+            methodvector.resize(energyvector.size(),transport_methods::WF);
         }
     }
 }
@@ -264,20 +273,51 @@ void Energyvector::add_real_axis_energies(double nonequi_start,double nonequi_en
 void Energyvector::add_cmpx_cont_energies(double start,double end,double mu,std::vector<CPX> &energyvector,std::vector<CPX> &stepvector,std::vector<transport_methods::transport_method> &methodvector,c_transport_type transport_params,int n_mu)
 {
     double Temp=transport_params.extra_param3;
-    int num_points_on_contour=transport_params.n_abscissae;
-    Quadrature gausslegendre(quadrature_types::CCGL,start,end,num_points_on_contour);
-    for (uint ivec=0;ivec<gausslegendre.weights.size();ivec++) gausslegendre.weights[ivec]*=fermi(gausslegendre.abscissae[ivec],mu,Temp,0);
-    if (mu>start && mu<end && start<end) {
-        int nu=0;
-        CPX zval;
-        while (abs((zval=CPX(mu,(2*nu+++1)*M_PI*K_BOLTZMANN*Temp))-(end+start)/2.0)<(end-start)/2.0) {
-if (!iam) cout << "POINT " << zval << " " << abs(zval-(end+start)/2.0) << " " << (end-start)/2.0 << endl;
-            gausslegendre.abscissae.push_back(zval);
-            gausslegendre.weights.push_back(-CPX(0.0,2.0*M_PI*K_BOLTZMANN*Temp));
-        }
-    }
-    energyvector.insert(energyvector.end(),gausslegendre.abscissae.begin(),gausslegendre.abscissae.end());
-    stepvector.insert(stepvector.end(),gausslegendre.weights.begin(),gausslegendre.weights.end());
-    methodvector.resize(methodvector.size()+gausslegendre.abscissae.size(),transport_methods::GF);
-}
+    enum choose_method {do_pexsi,do_pole_summation,do_contour,do_line};
+    choose_method method=do_pexsi;
+    if (method==do_pexsi) {
+        int num_points_on_contour=transport_params.n_abscissae;
+        energyvector.resize(num_points_on_contour);
+        stepvector.resize(num_points_on_contour);
+        double EM=abs(mu-start); // Max|E-mu| for all Eigenvalues E of 
+        if (PEXSI::GetPoleDensity(&energyvector[0],&stepvector[0],num_points_on_contour,K_BOLTZMANN*Temp,0.0,EM,mu)) LOGCERR;
+        c_zscal(num_points_on_contour,CPX(M_PI/2.0,0.0),&stepvector[0],1);
+    } else if (method==do_pole_summation) {
+        double Temp_r=1.0*Temp;
+        double Temp_i=1.0*Temp;
+        double eps=-log((numeric_limits<double>::epsilon)())*K_BOLTZMANN*Temp;
+        double eps_r=-log((numeric_limits<double>::epsilon)())*K_BOLTZMANN*Temp_r;
+        double mu_r=start-eps_r;
+        double eps_i=-log((numeric_limits<double>::epsilon)())*K_BOLTZMANN*Temp_i;
+        CPX    mu_i=CPX(mu_r-eps_r,eps_i);
 
+        int nu;
+        CPX zval;
+        nu=0;
+        while (imag(zval=CPX(mu,(2*nu+++1)*M_PI*K_BOLTZMANN*Temp))<2.0*eps_i) {
+            energyvector.push_back(zval);
+            stepvector.push_back(-CPX(0.0,2.0*M_PI*K_BOLTZMANN*Temp)*fermi(CPX(0.0,-1.0)*zval,CPX(0.0,-1.0)*mu_i,Temp_i,0));
+        }
+
+        nu=0;
+        while (imag(zval=CPX(mu_r,(2*nu+++1)*M_PI*K_BOLTZMANN*Temp_r))<2.0*eps_i) {
+            energyvector.push_back(zval);
+            stepvector.push_back(+CPX(0.0,2.0*M_PI*K_BOLTZMANN*Temp_r)*fermi(CPX(0.0,-1.0)*zval,CPX(0.0,-1.0)*mu_i,Temp_i,0));
+        }
+
+        nu=0;
+        while (real(zval=mu_i+CPX((2*nu+++1)*M_PI*K_BOLTZMANN*Temp_i,0.0))<mu+eps) {
+            energyvector.push_back(zval);
+            stepvector.push_back(CPX(2.0*M_PI*K_BOLTZMANN*Temp_i,0.0)*(fermi(zval,CPX(1.0,0.0)*mu,Temp,0)-fermi(zval,CPX(1.0,0.0)*mu_r,Temp_r,0)));
+        }
+    } else if (method==do_contour) {
+        Quadrature quadrature(quadrature_types::CCGL,start,end,transport_params.n_abscissae);
+        energyvector.insert(energyvector.end(),quadrature.abscissae.begin(),quadrature.abscissae.end());
+        stepvector.insert(stepvector.end(),quadrature.weights.begin(),quadrature.weights.end());
+    } else if (method==do_line) {
+        Quadrature quadrature(quadrature_types::MR,start,end,transport_params.n_abscissae);
+        energyvector.insert(energyvector.end(),quadrature.abscissae.begin(),quadrature.abscissae.end());
+        stepvector.insert(stepvector.end(),quadrature.weights.begin(),quadrature.weights.end());
+    }
+    methodvector.resize(energyvector.size(),transport_methods::GF);
+}

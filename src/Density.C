@@ -29,7 +29,7 @@ int ldlt_free__(int *);
 int ldlt_blkselinv__(int *, int*, int*, CPX *, int*);
 }
 
-int density(TCSR<double> *KohnSham,TCSR<double> *Overlap,TCSR<double> *OverlapPBC,TCSR<double> *Ps,CPX energy,CPX weight,transport_methods::transport_method method,int n_mu,double *muvec,int *contactvec,double &current,double &transm,double &dos,std::vector<int> propnum,int *atom_of_bf,double *erhoperatom,double *drhoperatom,c_transport_type parameter_sab,int distribute_pmat,int evecpos,MPI_Comm matrix_comm)
+int density(TCSR<double> *KohnSham,TCSR<double> *Overlap,TCSR<double> *OverlapPBC,TCSR<double> *Ps,CPX energy,CPX weight,transport_methods::transport_method method,int n_mu,double *muvec,int *contactvec,double &current,double &transm,double &dos,std::vector<int> propnum,int *atom_of_bf,double *erhoperatom,double *drhoperatom,double *Vatom,c_transport_type parameter_sab,int distribute_pmat,int evecpos,MPI_Comm matrix_comm)
 {
     double d_one=1.0;
     double d_zer=0.0;
@@ -49,7 +49,8 @@ int density(TCSR<double> *KohnSham,TCSR<double> *Overlap,TCSR<double> *OverlapPB
     MPI_Comm_size(matrix_comm,&matrix_procs);
     MPI_Comm_rank(matrix_comm,&matrix_rank);
 int worldrank; MPI_Comm_rank(MPI_COMM_WORLD,&worldrank);
-// get parameters
+// get parameters always at the beginning of a subroutine (or maybe even better in the constructor) to make it independent of the structure containing the parameters
+// but ndof bandwidth etc will be included in contactvec, which will become a more complicated structure
     int ncells=parameter_sab.n_cells;
     int bandwidth=parameter_sab.bandwidth;
     int ndof=Overlap->size_tot/parameter_sab.n_cells;
@@ -177,7 +178,7 @@ if (npror!=propnum[1]) cout << "WARNING: FOUND " << npror << " OF " << propnum[1
         delete[] HamBig0;
     } else if (method==transport_methods::GF) {
         sabtime=get_time(d_zer);
-        int inversion_method=3;
+        int inversion_method=0;
         if (inversion_method==0) {
             HamSig->change_findx(1);
             int n_nonzeros_global;
@@ -234,6 +235,7 @@ if (npror!=propnum[1]) cout << "WARNING: FOUND " << npror << " OF " << propnum[1
                 Ps->add_real(Green,-weight/M_PI*z_img);
                 Overlap->atomdensity(Green,-2.0*weight/M_PI*z_img,atom_of_bf,erhoperatom);
                 OverlapPBC->atomdensity(Green,-2.0*weight/M_PI*z_img,atom_of_bf,erhoperatom);
+                for (int i_diag=0;i_diag<Green->size;i_diag++) dos+=imag(Green->nnz[Green->diag_pos[i_diag]]);
 // */ 
 //                if (matrix_procs==1) Overlap->atomdensity(HamSigG,-2.0*weight/M_PI*z_img,atom_of_bf,erhoperatom);
                 delete HamSigG;
@@ -305,7 +307,7 @@ if (!worldrank) cout << "TIME FOR SPARSE INVERSION " << get_time(sabtime) << end
         delete H1cut;
         sabtime=get_time(d_zer);
         LinearSolver<CPX>* solver;
-        int solver_method=1;
+        int solver_method=0;
         if (solver_method==0) {
             solver = new SuperLU<CPX>(HamSig,matrix_comm);
         } else if (solver_method==1) {
@@ -345,21 +347,40 @@ if (!worldrank) cout << "TIME FOR WAVEFUNCTION SPARSE SOLVER WITH "<< ncells <<"
         }
         delete[] lambda;
         double Temp=parameter_sab.extra_param3;
-        double fermil=fermi(real(energy),muvec[0],Temp,0);
-        double fermir=fermi(real(energy),muvec[1],Temp,0);
-        double dfermil=fermi(real(energy),muvec[0],Temp,2);
-        double dfermir=fermi(real(energy),muvec[1],Temp,2);
+        double fermil=0.0;
+        double fermir=0.0;
+        if (!parameter_sab.n_abscissae) {
+            fermil=fermi(real(energy),muvec[0],Temp,0);
+            fermir=fermi(real(energy),muvec[1],Temp,0);
+        } else if (muvec[0]>muvec[1]) {
+            fermil=fermi(real(energy),muvec[0],Temp,0)-fermi(real(energy),muvec[1],Temp,0);
+        } else {
+            fermir=fermi(real(energy),muvec[1],Temp,0)-fermi(real(energy),muvec[0],Temp,0);
+        }
+//        double dfermil=fermi(real(energy),muvec[0],Temp,2);
+//        double dfermir=fermi(real(energy),muvec[1],Temp,2);
         sabtime=get_time(d_zer);
         if (distribute_pmat || matrix_procs==1) {
             Ps->psipsidagger(Sol,Soll,Solr,nprol,ndof,bandwidth,+weight*fermil);
             Ps->psipsidagger(&Sol[Ps->size_tot*nprol],&Soll[Ps->size_tot*nprol],&Solr[Ps->size_tot*nprol],npror,ndof,bandwidth,+weight*fermir);
             dos=Overlap->psipsidagger(Sol,nprol+npror);
+//            dos=Overlap->psipsidagger(Sol,nprol);
+//            dos=Overlap->psipsidagger(&Sol[Ps->size_tot*nprol],npror);
+/*
+if (parameter_sab.n_abscissae) {
+*/
             Overlap->psipsidagger(Sol,nprol,+2.0*weight*fermil,atom_of_bf,erhoperatom);
             OverlapPBC->psipsidagger(Sol,Soll,nprol,+2.0*weight*fermil,atom_of_bf,erhoperatom);
             OverlapPBC->psipsidagger(Sol,Solr,nprol,+2.0*weight*fermil,atom_of_bf,erhoperatom);
             Overlap->psipsidagger(&Sol[Ps->size_tot*nprol],npror,+2.0*weight*fermir,atom_of_bf,erhoperatom);
             OverlapPBC->psipsidagger(&Sol[Ps->size_tot*nprol],&Soll[Ps->size_tot*nprol],npror,+2.0*weight*fermir,atom_of_bf,erhoperatom);
             OverlapPBC->psipsidagger(&Sol[Ps->size_tot*nprol],&Solr[Ps->size_tot*nprol],npror,+2.0*weight*fermir,atom_of_bf,erhoperatom);
+/*
+} else {
+            Overlap->psipsidagger(Sol,nprol,+2.0*weight*fermil,atom_of_bf,erhoperatom,Vatom,real(energy));
+            Overlap->psipsidagger(&Sol[Ps->size_tot*nprol],npror,+2.0*weight*fermir,atom_of_bf,erhoperatom,Vatom,real(energy));
+}
+*/
 /*
             Overlap->psipsidagger(Sol,nprol,-2.0*weight*dfermil,atom_of_bf,drhoperatom);
             OverlapPBC->psipsidagger(Sol,Soll,nprol,-2.0*weight*dfermil,atom_of_bf,drhoperatom);
@@ -395,7 +416,8 @@ if (!worldrank) cout << "TIME FOR CONSTRUCTION OF S-PATTERN DENSITY MATRIX " << 
             delete[] vecoutdof;
             if (abs(abs(transml)-abs(transmr))>0.1) return (LOGCERR, EXIT_FAILURE);
             transm=transml;
-            current=2.0*E_ELECTRON*E_ELECTRON/(2.0*M_PI*H_BAR)*(fermil-fermir)*transm;
+            double diff_fermi=fermi(real(energy),muvec[0],Temp,0)-fermi(real(energy),muvec[1],Temp,0);
+            current=2.0*E_ELECTRON*E_ELECTRON/(2.0*M_PI*H_BAR)*diff_fermi*transm;
         }
         delete[] Sol;
         delete H1;

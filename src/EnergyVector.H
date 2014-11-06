@@ -10,7 +10,7 @@
 class Energyvector {
 public:
 Energyvector();
-int Execute(TCSR<double>*,TCSR<double>*,int,double*,int*,double*,double*,int,int*,c_transport_type);
+int Execute(TCSR<double>*,TCSR<double>*,int,double*,int*,double*,double*,double*,int,int*,c_transport_type);
 ~Energyvector();
 
 private:

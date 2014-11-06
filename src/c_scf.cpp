@@ -4,8 +4,7 @@ int kpointintegration(TCSR<double>*,TCSR<double>*,c_transport_type);
 int diagscalapack(TCSR<double>*,TCSR<double>*,c_transport_type);
 int semiselfconsistent(TCSR<double>*,TCSR<double>*,c_transport_type);
 
-class SCF_Exception{
-public:
+struct SCF_Exception{
     SCF_Exception(const int line,const char* file) {std::cerr<<"Error in line "<<line<<" of file "<<file<<std::endl;}
 };
 

@@ -15,10 +15,8 @@ Singularities::Singularities(c_transport_type parameter_sab,int pn_mu)
     MPI_Comm_rank(MPI_COMM_WORLD,&iam); 
 
     energy_gs= (numeric_limits<double>::max)();
-    energy_vb=-(numeric_limits<double>::max)();
-    energy_cb= (numeric_limits<double>::max)();
-    energies_vb.resize(n_mu,energy_vb);
-    energies_cb.resize(n_mu,energy_cb);
+    energies_vb.resize(n_mu,-(numeric_limits<double>::max)());
+    energies_cb.resize(n_mu, (numeric_limits<double>::max)());
 
     energies_extremum.resize(n_mu);
     curvatures_extremum.resize(n_mu);
@@ -124,13 +122,7 @@ int Singularities::Execute(TCSR<double> *KohnSham,TCSR<double> *Overlap,int *con
             cout << "Contact " << i_mu << " Valence band edge " << energies_vb[i_mu] << " Conduction band edge " << energies_cb[i_mu] << endl;
         }
     }
-    if (!iam) {
-        energy_vb=*max_element(energies_vb.begin(),energies_vb.end());
-        energy_cb=*min_element(energies_cb.begin(),energies_cb.end());
-    }
     MPI_Bcast(&energy_gs,1,MPI_DOUBLE,0,MPI_COMM_WORLD);
-    MPI_Bcast(&energy_vb,1,MPI_DOUBLE,0,MPI_COMM_WORLD);
-    MPI_Bcast(&energy_cb,1,MPI_DOUBLE,0,MPI_COMM_WORLD);
     MPI_Bcast(&energies_vb[0],n_mu,MPI_DOUBLE,0,MPI_COMM_WORLD);
     MPI_Bcast(&energies_cb[0],n_mu,MPI_DOUBLE,0,MPI_COMM_WORLD);
 
@@ -179,7 +171,7 @@ double Singularities::determine_fermi(double doping,int i_mu) //slightly differs
     double mu;
     if (!iam) {
 //doping=2.0;
-        double nocctol=1.0E-2/n_k;
+        double nocctol=max(1.0E-2/n_k*abs(doping),1.0E-4/n_k);//WHAT IS THE MAX PRECISION I CAN GET DEPENDING ON n_k?
         cout << "Fermi Level / Number of Electrons with precision " << nocctol << endl;
         mu=(energies_matrix[i_mu][noccunitcell-1]+energies_matrix[i_mu][noccunitcell])/2;
         double nocciter = 0.0;
@@ -189,22 +181,60 @@ double Singularities::determine_fermi(double doping,int i_mu) //slightly differs
             }
         }
         cout << mu << " / " << nocciter << endl;
-        while (abs(2.0*noccunitcell+doping-nocciter)>nocctol*abs(doping)) {
-            double dfermi=0.0;
-            for (int j=0;j<n_k;j++) {
-                for (int i=0;i<ndof;i++) {
-                    dfermi+=fermi(energies_matrix[i_mu][i+j*ndof],mu,Temp,2);
-                }
-            }
-            mu+=(2.0*noccunitcell+doping-nocciter)/n_k;
-//            mu+=(2.0*noccunitcell+doping-nocciter)/dfermi/n_k;
+        double mu_a = mu;
+        double nocc_a = nocciter;
+//Find Interval
+        while ((2.0*noccunitcell+doping-nocc_a)*(2.0*noccunitcell+doping-nocciter)>0) {
+            mu_a=mu;
+            nocc_a=nocciter;
+            mu+=(2.0*noccunitcell+doping-nocciter);
             nocciter=0.0;
             for (int j=0;j<n_k;j++) {
                 for (int i=0;i<ndof;i++) {
                     nocciter+=2.0/n_k*fermi(energies_matrix[i_mu][i+j*ndof],mu,Temp,0);
                 }
             }
-//cout << mu << " / " << nocciter << endl;
+cout << "[" << mu_a << "," << mu << "]" << " / " << nocciter << " FIND" << endl;
+        }
+        double mu_b = mu;
+        if (mu_a>mu_b) {
+            swap(mu_a,mu_b);
+            swap(nocc_a,nocciter);
+        }
+//Bisection
+        while (abs(mu_a-mu_b)>K_BOLTZMANN*Temp && abs(2.0*noccunitcell+doping-nocciter)>nocctol) {
+            mu=(mu_a+mu_b)/2.0;
+            nocciter=0.0;
+            for (int j=0;j<n_k;j++) {
+                for (int i=0;i<ndof;i++) {
+                    nocciter+=2.0/n_k*fermi(energies_matrix[i_mu][i+j*ndof],mu,Temp,0);
+                }
+            }
+            if ((2.0*noccunitcell+doping-nocc_a)*(2.0*noccunitcell+doping-nocciter)>0) {
+                mu_a=mu;
+                nocc_a=nocciter;
+            } else {
+                mu_b=mu;
+            }
+cout << "[" << mu_a << "," << mu_b << "]" << " / " << nocciter << " BISECT" << endl;
+        }
+        mu=(mu_a+mu_b)/2.0;
+//Newton
+        while (abs(2.0*noccunitcell+doping-nocciter)>nocctol) {
+            double dfermi=0.0;
+            for (int j=0;j<n_k;j++) {
+                for (int i=0;i<ndof;i++) {
+                    dfermi+=2.0/n_k*fermi(energies_matrix[i_mu][i+j*ndof],mu,Temp,2);
+                }
+            }
+            mu+=(2.0*noccunitcell+doping-nocciter)/dfermi;
+            nocciter=0.0;
+            for (int j=0;j<n_k;j++) {
+                for (int i=0;i<ndof;i++) {
+                    nocciter+=2.0/n_k*fermi(energies_matrix[i_mu][i+j*ndof],mu,Temp,0);
+                }
+            }
+cout << mu << " / " << nocciter << " NEWTON" << endl;
         }
         cout << mu << " / " << nocciter << endl;
     }

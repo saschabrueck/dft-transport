@@ -116,6 +116,7 @@ public:
     void psipsidagger(CPX*,int,CPX);
     void psipsidagger(CPX*,CPX*,CPX*,int,int,int,CPX);
     void psipsidagger(CPX*,int,CPX,int*,double*);
+    void psipsidagger(CPX*,int,CPX,int*,double*,double*,double);
     void psipsidagger(CPX*,CPX*,int,CPX,int*,double*);
     void atomdensity(TCSR<CPX>*,CPX,int*,double*);
     double collect_density(double*,double*,int*);
@@ -2185,6 +2186,21 @@ inline void TCSR<double>::psipsidagger(CPX* psi,int nkval,CPX factor,int* atom_o
     for(i=0;i<size;i++){
         for(e=edge_i[i]-findx;e<edge_i[i+1]-findx;e++){
             result[atom_of_bf[first_row+i]]+=nnz[e]*real(factor*c_zdotc(nkval,&psi[index_j[e]-findx],size_tot,&psi[first_row+i],size_tot));
+        }
+    }
+}
+
+/************************************************************************************************/
+
+template <>
+inline void TCSR<double>::psipsidagger(CPX* psi,int nkval,CPX factor,int* atom_of_bf,double* result,double* Vatom,double energy)
+{
+    int i,e;
+    for(i=0;i<size;i++){
+        if (energy>Vatom[atom_of_bf[first_row+i]]) {
+            for(e=edge_i[i]-findx;e<edge_i[i+1]-findx;e++){
+                result[atom_of_bf[first_row+i]]+=nnz[e]*real(factor*c_zdotc(nkval,&psi[index_j[e]-findx],size_tot,&psi[first_row+i],size_tot));
+            }
         }
     }
 }
