@@ -10,8 +10,8 @@
 #undef max
 #include <vector>
 #include <valarray>
-#include "Utilities.H"
 #include <limits>
+#include "Utilities.H"
 
 class Singularities {
 public:
@@ -27,11 +27,8 @@ std::vector< std::vector<double> > energies_extremum;
 /// Lower integration limit
 double energy_gs;
 /// Valence band edge
-double energy_vb;
-/// Conduction band edge
-double energy_cb;
-
 std::vector<double> energies_vb;
+/// Conduction band edge
 std::vector<double> energies_cb;
 
 private:

@@ -71,11 +71,16 @@ if (!iam) cout << "N_ATOMS " << NAtom_work << endl;
     int *contactvec = new int[n_mu];
     contactvec[0]=1;
     contactvec[1]=2;
-    double *dopingvec = new double[n_mu]();
 
     if (!do_semiself) {
+        Singularities singularities(transport_params,n_mu);
+        if ( singularities.Execute(KohnSham,Overlap,contactvec) ) return (LOGCERR, EXIT_FAILURE);
+        for (int i_mu=0;i_mu<n_mu;i_mu++) muvec[i_mu]=singularities.determine_fermi(0.0,i_mu);
+        double mu_avg=std::accumulate(muvec,muvec+n_mu,0.0)/n_mu;
+        muvec[0]=mu_avg;
+        muvec[1]=mu_avg;
         Energyvector energyvector;
-        if (energyvector.Execute(Overlap,KohnSham,n_mu,muvec,contactvec,rho_atom,drho_atom_dV,NAtom_work,atom_of_bf,transport_params)) return (LOGCERR, EXIT_FAILURE);
+        if (energyvector.Execute(Overlap,KohnSham,n_mu,muvec,contactvec,rho_atom,drho_atom_dV,Vbf,NAtom_work,atom_of_bf,transport_params)) return (LOGCERR, EXIT_FAILURE);
 if(!iam){
 stringstream mysstream;
 mysstream << "rhofile";
@@ -97,6 +102,7 @@ rhofile.close();
     for (int ia=0;ia<FEM->NAtom;ia++) {
         doping_cell[ia/(FEM->NAtom/transport_params.n_cells)]+=doping_atom[ia];
     }
+    double *dopingvec = new double[n_mu];
     dopingvec[0]=doping_cell[0];
     dopingvec[1]=doping_cell[transport_params.n_cells-1];
 
@@ -105,13 +111,22 @@ if (!iam) cout << "DOPING " << dopingvec[0] << " " << dopingvec[1] << endl;
     double Vs=voltage->Vsmin;
     double Vd=voltage->Vdmin;
     double Vg=-voltage->Vgmin[0];
+    double Vm;
+    double dV;
     {
         Singularities singularities(transport_params,n_mu);
         if ( singularities.Execute(KohnSham,Overlap,contactvec) ) return (LOGCERR, EXIT_FAILURE);
+        for (int i_mu=0;i_mu<n_mu;i_mu++) muvec[i_mu]=singularities.determine_fermi(0.0,i_mu);
+        Vm=std::accumulate(muvec,muvec+n_mu,0.0)/n_mu;
         for (int i_mu=0;i_mu<n_mu;i_mu++) muvec[i_mu]=singularities.determine_fermi(dopingvec[i_mu],i_mu);
-        Vg+=std::accumulate(muvec,muvec+n_mu,0.0)/n_mu-singularities.energy_cb;
+        double mu_avg=std::accumulate(muvec,muvec+n_mu,0.0)/n_mu;
+        dV=(muvec[0]-muvec[1])/2.0;
+        Vg+=mu_avg-*min_element(singularities.energies_cb.begin(),singularities.energies_cb.end());
+        muvec[0]=mu_avg-Vs;
+        muvec[1]=mu_avg-Vd;
     }
 
+if (!iam) cout << "FERMI LEVEL LEFT " << muvec[0] << " RIGHT " << muvec[1] << endl;
 if (!iam) cout << "GATE POTENTIAL " << Vg << endl;
 
     std::vector<double> nuclearchargeperatom(FEM->NAtom,-(2.0*transport_params.n_occ)/FEM->NAtom);
@@ -122,7 +137,6 @@ if (!iam) cout << "GATE POTENTIAL " << Vg << endl;
     for (int IX=0;IX<FEM->NGrid;IX++) {
         double x=FEM->grid[3*IX]-FEM->grid[0];
         double dx_ramp = 1;
-        double dV= (muvec[0]-muvec[1])/2.0;
 
         if(x<(Ls-dx_ramp)){
             Vnew[IX] = -Vs-dV;
@@ -142,17 +156,24 @@ if (!iam) cout << "GATE POTENTIAL " << Vg << endl;
         if(x>=(Ls+Lc+dx_ramp)){
             Vnew[IX] = -Vd+dV;
         }
-        double bfac = 1.0/K_BOLTZMANN;
-//        Vnew[IX] = (Vs+Vg+Vd)*fermi(x-(Ls+Lc),0,bfac,0)*fermi(-x+Ls,0,bfac,0)-Vs*fermi(x-(Ls+Lc),0,bfac,0)-Vd*fermi(-x+Ls,0,bfac,0);
+        double bfac = 0.5/K_BOLTZMANN;
+//        Vnew[IX] = (Vs+Vg+Vd)*fermi(x-(Ls+Lc),0.0,bfac,0)*fermi(-x+Ls,0.0,bfac,0)-Vs*fermi(x-(Ls+Lc),0.0,bfac,0)-Vd*fermi(-x+Ls,0.0,bfac,0);
     }
     c_dcopy(FEM->NGrid,Vnew,1,Vold,1);
 
 if(!iam){
 stringstream mysstream;
-mysstream << "potfile" << 0;
+mysstream << "potgridfile" << 0;
 ofstream potfile(mysstream.str().c_str());
 for (int ig=0;ig<FEM->NGrid;ig++) potfile<<Vnew[ig]<<endl;
 potfile.close();
+}
+if(!iam){
+stringstream mysstream;
+mysstream << "potfile" << 0;
+ofstream rhofile(mysstream.str().c_str());
+for (int ig=0;ig<FEM->NAtom;ig++) rhofile<<Vnew[FEM->real_at_index[ig]]<<endl;
+rhofile.close();
 }
 
     double *Overlap_nnz = new double[Overlap->n_nonzeros];
@@ -173,14 +194,11 @@ potfile.close();
         TCSR<double> *Pot = new TCSR<double>(Overlap,Vbf);
         TCSR<double> *KohnShamPot = new TCSR<double>(1.0,KohnSham,1.0,Pot);
         delete Pot;
-        if (i_iter==1) {
-            Singularities singularities(transport_params,n_mu);
-            if ( singularities.Execute(KohnShamPot,Overlap,contactvec) ) return (LOGCERR, EXIT_FAILURE);
-            for (int i_mu=0;i_mu<n_mu;i_mu++) muvec[i_mu]=singularities.determine_fermi(dopingvec[i_mu],i_mu);
+        for (int ia=0;ia<FEM->NAtom;ia++) {
+            Vbf[ia]=Vm+Vnew[FEM->real_at_index[ia]];
         }
-
         Energyvector energyvector;
-        if (energyvector.Execute(Overlap,KohnShamPot,n_mu,muvec,contactvec,rho_atom,drho_atom_dV,FEM->NAtom,atom_of_bf,transport_params)) return (LOGCERR, EXIT_FAILURE);
+        if (energyvector.Execute(Overlap,KohnShamPot,n_mu,muvec,contactvec,rho_atom,drho_atom_dV,Vbf,FEM->NAtom,atom_of_bf,transport_params)) return (LOGCERR, EXIT_FAILURE);
         delete KohnShamPot;
 
         if (!iam) cout << "TIME FOR SCHROEDINGER " << get_time(sabtime) << endl;
@@ -220,6 +238,11 @@ rgfile.close();
 
         if (transport_params.n_abscissae) c_daxpy(FEM->NAtom,1.0,&nuclearchargeperatom[0],1,rho_atom,1);
 
+/*
+double offsetminval=*min_element(rho_atom,rho_atom+FEM->NAtom);
+for (int i=0;i<FEM->NAtom;i++) rho_atom[i]+=-offsetminval+0.1;
+*/
+
 if(!iam){
 stringstream mysstream;
 mysstream << "rhofile" << i_iter;
@@ -228,7 +251,7 @@ for (int ig=0;ig<FEM->NAtom;ig++) rhofile<<rho_atom[ig]<<endl;
 rhofile.close();
 }
 
-        density_new=std::accumulate(rho_atom,rho_atom+FEM->NAtom,0.0);
+        density_new=c_dasum(FEM->NAtom,rho_atom,1);
         if (abs(density_new-density_old)<density_criterion && residual<parameter->poisson_inner_criterion) {
             if (!iam) cout << "DENSITY CONVERGED" << endl;
             return 0;
@@ -255,10 +278,17 @@ rhofile.close();
 
 if(!iam){
 stringstream mysstream;
-mysstream << "potfile" << i_iter;
+mysstream << "potgridfile" << i_iter;
 ofstream potfile(mysstream.str().c_str());
 for (int ig=0;ig<FEM->NGrid;ig++) potfile<<Vnew[ig]<<endl;
 potfile.close();
+}
+if(!iam){
+stringstream mysstream;
+mysstream << "potfile" << i_iter;
+ofstream rhofile(mysstream.str().c_str());
+for (int ig=0;ig<FEM->NAtom;ig++) rhofile<<Vnew[FEM->real_at_index[ig]]<<endl;
+rhofile.close();
 }
 
     }

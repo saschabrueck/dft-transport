@@ -1,10 +1,8 @@
 #ifndef CP2K_OMENDFT_TRANSPORT_QUADRATURE_H_
 #define CP2K_OMENDFT_TRANSPORT_QUADRATURE_H_
 
-#include "cxx11_check.H"
 #include "Types.H"
 #include <vector>
-#include <complex>
 
 /** \enum quadrature_type
  *
@@ -16,13 +14,11 @@ enum quadrature_type {
   NONE=0,
   CCGL=1,   // Complex Contour Gauss-Legendre
   GL=2,     // Gauss-Legendre
-  ANPS=3,   // Areshkin-Nikolic Pole Summation
-  GC=4,     // Gauss-Chebychev
-  TS=5,     // Tanh-sinh
-  TR=6,     // Trapezoidal Rule
+  GC=3,     // Gauss-Chebychev
+  TS=4,     // Tanh-sinh
+  TR=5,     // Trapezoidal Rule
+  CCMR=6,   // Complex Contour Midpoint Rule
   MR=7,     // Midpoint Rule
-  CCMR=8,   // Complex Contour Midpoint Rule
-  RCMR=9    // Rectangular Contour Midpoint Rule
 };
 } // namespace
 
@@ -33,7 +29,6 @@ enum quadrature_type {
  *  The class implements quadrature types by providing access to abscissae and
  *  weights for quadrature
  *
- *  \author Mauro Calderara (originally)
  *  \version $Revision$
  *  \date $Date$
  */
@@ -41,16 +36,8 @@ class Quadrature {
  public:
   std::vector<CPX> abscissae;    ///< Vector containing the abscissae
   std::vector<CPX> weights; ///< Vector containing the corresponding weights
-  Quadrature(quadrature_types::quadrature_type, double, double, 
-      unsigned int, double = 0.0, double = 0.0);
+  Quadrature(quadrature_types::quadrature_type, double, double, int);
 
- private:
-  double band_start;
-  double band_end;
-  quadrature_types::quadrature_type my_type;
 };
-
-/// \exception Generic fault in Quadrature
-class excQuadrature;
 
 #endif

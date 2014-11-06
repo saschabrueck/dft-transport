@@ -251,19 +251,14 @@ inline CPX convert(double val)
 /************************************************************************************************/
 
 template <typename T>
-T fermi(T E,double mu,double temp,int mode)
+T fermi(T E,T mu,double temp,int mode)
 {
     double k_b=K_BOLTZMANN;
     if (mode==0) {
         if (temp<=0.0) {
-            if (real(E)<=mu) {
-                return 1.0;
-            } else {
-                return 0.0;
-            }
-        } else {
-            return 1.0/(1.0+exp((E-mu)/(k_b*temp)));
+            temp=1.0E-8;
         }
+        return 1.0/(1.0+exp((E-mu)/(k_b*temp)));
     } else if (mode==1) {
         if (temp<=0.0) {
             return 0.0;
@@ -271,10 +266,11 @@ T fermi(T E,double mu,double temp,int mode)
             return log(1.0+exp(-(E-mu)/(k_b*temp)));
         }
     } else if (mode==2) {
-        if (temp<=0.0 || abs(E-mu)>10.0) { // CHECK WHY -nan FOR >10.0
+        if (temp<=0.0) {
             return 0.0;
         } else {
-            return exp((E-mu)/(k_b*temp))/(k_b*temp)/pow(1.0+exp((E-mu)/(k_b*temp)),2);
+//            return exp((E-mu)/(k_b*temp))/(k_b*temp)/pow(1.0+exp((E-mu)/(k_b*temp)),2); // FOR abs(E-mu)>10.0 inf/inf^2
+            return 1.0/(k_b*temp)/(2.0+exp((E-mu)/(k_b*temp))+1.0/exp((E-mu)/(k_b*temp)));
         }
     } else if (mode==3) {
         if (temp<=0.0) {
