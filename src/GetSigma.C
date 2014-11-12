@@ -507,6 +507,19 @@ if (!worldrank) cout << "TIME FOR SYMMETRIZATION " << get_time(sabtime) << endl;
         sabtime=get_time(d_zer);
         n_propagating=nprotra;
         c_dscal(nprotra*ntriblock,-d_one,((double*)Vref)+1,2);
+        for (int i=0;i<nprotra;i++) {
+            int degeneracy=1;
+            for (int j=0;j<i;j++) {
+                if (abs(lambdaref[i]-lambdaref[j])<1E-12 && abs(velref[i]-velref[j])<1E-12) {
+                    degeneracy++;
+                    CPX prod=c_zdotc(ntriblock,&Vref[i*ntriblock],1,&Vref[j*ntriblock],1);
+                    c_zaxpy(ntriblock,-prod,&Vref[i*ntriblock],1,&Vref[j*ntriblock],1);
+                    CPX norm=CPX(d_one/c_dznrm2(ntriblock,&Vref[j*ntriblock],1),d_zer);
+                    c_zscal(ntriblock,norm,&Vref[j*ntriblock],1);
+                }
+            }
+            if (degeneracy>2) return (LOGCERR, EXIT_FAILURE);
+        }
         inj = new CPX[ntriblock*nprotra];
         lambdapro = new CPX[nprotra];
         for (int ipro=0;ipro<nprotra;ipro++) {
