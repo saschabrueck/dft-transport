@@ -159,7 +159,6 @@ if (!iam) cout << "GATE POTENTIAL " << Vg << endl;
         double bfac = 0.5/K_BOLTZMANN;
 //        Vnew[IX] = (Vs+Vg+Vd)*fermi(x-(Ls+Lc),0.0,bfac,0)*fermi(-x+Ls,0.0,bfac,0)-Vs*fermi(x-(Ls+Lc),0.0,bfac,0)-Vd*fermi(-x+Ls,0.0,bfac,0);
     }
-    c_dcopy(FEM->NGrid,Vnew,1,Vold,1);
 
 if(!iam){
 stringstream mysstream;
@@ -272,6 +271,7 @@ rhofile.close();
         c_daxpy(2*NAtom_work,mixing_parameter,rho_atom,1,rho_atom_previous,1);
         c_daxpy(2*NAtom_work,mixing_parameter,drho_atom_dV,1,drho_atom_dV_previous,1);
 
+        c_dcopy(FEM->NGrid,Vnew,1,Vold,1);
         OMEN_Poisson_Solver->solve(Vnew,Vold,rho_atom_previous,drho_atom_dV_previous,1,NULL,FEM,Wire,Temp,&Vg,Vs,Vs,Vd,&residual,parameter->poisson_inner_criterion,parameter->poisson_inner_iteration,1,1,newcomm,MPI_COMM_WORLD,1,MPI_COMM_WORLD,0);
 //        OMEN_Poisson_Solver->solve(Vnew,Vold,rho_atom,drho_atom_dV,1,NULL,FEM,Wire,Temp,&Vg,Vs,Vs,Vd,&residual,parameter->poisson_inner_criterion,parameter->poisson_inner_iteration,1,1,newcomm,MPI_COMM_WORLD,1,MPI_COMM_WORLD,0);
 
