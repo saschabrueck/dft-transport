@@ -7,11 +7,12 @@
 !> \brief CP2K transport environment and its C-interoperable version
 !> \par History
 !>       07.2013 created [Hossein Bani-Hashemian]
-!> \author Hossein Bani-Hashemian
+!> \author Mohammad Hossein Bani-Hashemian
 ! *****************************************************************************
 MODULE transport_types
   USE ISO_C_BINDING,                   ONLY: C_DOUBLE,&
                                              C_INT,&
+                                             C_BOOL,&
                                              c_funptr
   USE kinds,                           ONLY: dp
   USE timings,                         ONLY: timeset,&
@@ -27,22 +28,28 @@ MODULE transport_types
   PUBLIC :: transport_type, c_transport_type
 
   TYPE transport_type
-     TYPE(c_funptr)        :: ext_method_ptr
-     INTEGER               :: method, bandwidth, n_cells,&
-                              n_abscissae, n_kpoint,&
-                              extra_int_param1, extra_int_param2, extra_int_param3
-     REAL(dp)              :: colzero_threshold,&
-                              eps_limit, eps_decay, eps_singularities,&
-                              extra_param1, extra_param2, extra_param3
+     TYPE(c_funptr)    :: ext_c_method_ptr
+     INTEGER           :: method, bandwidth, n_cells,&
+                          n_abscissae, n_kpoint,&
+                          num_interval, num_contacts, ndof, tasks_per_point
+     LOGICAL           :: real_axis 
+     REAL(dp)          :: colzero_threshold,&
+                          eps_limit, eps_decay, eps_singularity_curvatures, &
+                          eps_mu, eps_eigval_degen, energy_interval, min_interval,&
+                          temperature
   END TYPE transport_type
 
   TYPE, BIND(C) :: c_transport_type
-     INTEGER(C_INT)    :: method, bandwidth, n_cells, n_occ,&
+     INTEGER(C_INT)    :: n_occ, n_atoms
+     REAL(C_DOUBLE)    :: evoltfactor
+     INTEGER(C_INT)    :: method, bandwidth, n_cells,&
                           n_abscissae, n_kpoint,&
-                          extra_int_param1, extra_int_param2, extra_int_param3
-     REAL(C_DOUBLE)    :: evoltfactor, colzero_threshold,&
-                          eps_limit, eps_decay, eps_singularities, &
-                          extra_param1, extra_param2, extra_param3
+                          num_interval, num_contacts, ndof, tasks_per_point
+     LOGICAL(C_BOOL)   :: real_axis 
+     REAL(C_DOUBLE)    :: colzero_threshold,&
+                          eps_limit, eps_decay, eps_singularity_curvatures, &
+                          eps_mu, eps_eigval_degen, energy_interval, min_interval,&
+                          temperature
   END TYPE c_transport_type
 
   PUBLIC :: transport_env_release

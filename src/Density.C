@@ -346,7 +346,7 @@ if (!worldrank) cout << "TIME FOR WAVEFUNCTION SPARSE SOLVER WITH "<< ncells <<"
             }
         }
         delete[] lambda;
-        double Temp=parameter_sab.extra_param3;
+        double Temp=parameter_sab.temperature;
         double fermil=0.0;
         double fermir=0.0;
         if (!parameter_sab.n_abscissae) {

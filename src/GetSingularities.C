@@ -2,12 +2,12 @@
 
 Singularities::Singularities(c_transport_type parameter_sab,int pn_mu)
 {
-    eps_singularities=parameter_sab.eps_singularities;
+    eps_singularities=parameter_sab.eps_singularity_curvatures;
     n_k=parameter_sab.n_kpoint;
     n_cells=parameter_sab.n_cells;
     bandwidth=parameter_sab.bandwidth;
     noccunitcell=parameter_sab.n_occ/parameter_sab.n_cells; // THIS IS AN INTEGER DIVISION
-    Temp=parameter_sab.extra_param3;
+    Temp=parameter_sab.temperature;
 
     n_mu=pn_mu;
 

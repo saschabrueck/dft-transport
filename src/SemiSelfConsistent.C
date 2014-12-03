@@ -1,16 +1,4 @@
-#include "FEMGrid.H"
-#include "Poisson.H"
-#include "GetSingularities.H"
-#include "EnergyVector.H"
-#include <numeric>
-#include <iterator>
-
-extern WireStructure *nanowire;
-extern WireGenerator* Wire;
-extern Poisson *OMEN_Poisson_Solver;
-extern FEMGrid *FEM;
-extern PARAM *parameter;
-extern VOLTAGE *voltage;
+#include "SemiSelfConsistent.H"
  
 int semiselfconsistent(TCSR<double> *Overlap,TCSR<double> *KohnSham,c_transport_type transport_params)
 {
@@ -30,19 +18,24 @@ int semiselfconsistent(TCSR<double> *Overlap,TCSR<double> *KohnSham,c_transport_
             paramoutfile << transport_params.bandwidth << endl;
             paramoutfile << transport_params.n_cells << endl;
             paramoutfile << transport_params.n_occ << endl;
+            paramoutfile << transport_params.n_atoms << endl;
             paramoutfile << transport_params.n_abscissae << endl;
             paramoutfile << transport_params.n_kpoint << endl;
-            paramoutfile << transport_params.extra_int_param1 << endl;
-            paramoutfile << transport_params.extra_int_param2 << endl;
-            paramoutfile << transport_params.extra_int_param3 << endl;
+            paramoutfile << transport_params.num_interval << endl;
+            paramoutfile << transport_params.num_contacts << endl;
+            paramoutfile << transport_params.ndof << endl;
+            paramoutfile << transport_params.tasks_per_point << endl;
+            paramoutfile << transport_params.real_axis << endl;
             paramoutfile << transport_params.evoltfactor << endl;
             paramoutfile << transport_params.colzero_threshold << endl;
             paramoutfile << transport_params.eps_limit << endl;
             paramoutfile << transport_params.eps_decay << endl;
-            paramoutfile << transport_params.eps_singularities << endl;
-            paramoutfile << transport_params.extra_param1 << endl;
-            paramoutfile << transport_params.extra_param2 << endl;
-            paramoutfile << transport_params.extra_param3 << endl;
+            paramoutfile << transport_params.eps_singularity_curvatures << endl;
+            paramoutfile << transport_params.eps_mu << endl;
+            paramoutfile << transport_params.eps_eigval_degen << endl;
+            paramoutfile << transport_params.energy_interval << endl;
+            paramoutfile << transport_params.min_interval << endl;
+            paramoutfile << transport_params.temperature << endl;
             paramoutfile.close();
         }
         MPI_Barrier(MPI_COMM_WORLD);
@@ -51,7 +44,7 @@ int semiselfconsistent(TCSR<double> *Overlap,TCSR<double> *KohnSham,c_transport_
 
     int do_semiself=0;
     if (transport_params.method==3) do_semiself=1;
-    int NAtom_work=transport_params.extra_int_param3;
+    int NAtom_work=transport_params.n_atoms;
     if (do_semiself) NAtom_work=FEM->NAtom;
 
 if (!iam) cout << "N_ATOMS " << NAtom_work << endl;
@@ -91,7 +84,7 @@ rhofile.close();
         return 0;
     }
 
-    double Temp=transport_params.extra_param3;
+    double Temp=transport_params.temperature;
     double *Vnew = new double[FEM->NGrid]();
     double *Vold = new double[FEM->NGrid];
     double *doping_atom = new double[FEM->NAtom];

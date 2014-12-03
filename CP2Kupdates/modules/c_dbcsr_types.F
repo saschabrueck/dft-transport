@@ -8,7 +8,7 @@
 !>
 !> \par History
 !>       05.2013 created [Hossein Bani-Hashemian]
-!> \author Hossein Bani-Hashemian
+!> \author Mohammad Hossein Bani-Hashemian
 ! *****************************************************************************
 MODULE c_dbcsr_types
 

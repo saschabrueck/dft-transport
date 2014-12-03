@@ -1,5 +1,4 @@
-#include "ScaLapack.H"
-#include "array_tools.H"
+#include "DiagScaLapack.H"
 
 int diagscalapack(TCSR<double> *Overlap,TCSR<double> *KohnSham,c_transport_type parameters_transport)
 {

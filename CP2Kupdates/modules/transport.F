@@ -7,7 +7,7 @@
 !> \brief routines for the transport environment and its C-interoperable version  
 !> \par History
 !>       07.2013 created [Hossein Bani-Hashemian]
-!> \author Hossein Bani-Hashemian
+!> \author Mohammad Hossein Bani-Hashemian
 ! *****************************************************************************
 MODULE transport
 
@@ -93,16 +93,21 @@ CONTAINS
     CALL section_vals_val_get(transport_section,"N_CELLS",i_val=transport_env%n_cells,error=error)
     CALL section_vals_val_get(transport_section,"N_ABSCISSAE",i_val=transport_env%n_abscissae,error=error)
     CALL section_vals_val_get(transport_section,"N_KPOINTS",i_val=transport_env%n_kpoint,error=error)
-    CALL section_vals_val_get(transport_section,"EXTRA_INT_PARAM1",i_val=transport_env%extra_int_param1,error=error)
-    CALL section_vals_val_get(transport_section,"EXTRA_INT_PARAM2",i_val=transport_env%extra_int_param2,error=error)
-    CALL section_vals_val_get(transport_section,"EXTRA_INT_PARAM3",i_val=transport_env%extra_int_param3,error=error)
+    CALL section_vals_val_get(transport_section,"NUM_INTERVAL",i_val=transport_env%num_interval,error=error)
+    CALL section_vals_val_get(transport_section,"NUM_CONTACTS",i_val=transport_env%num_contacts,error=error)
+    CALL section_vals_val_get(transport_section,"N_DOF",i_val=transport_env%ndof,error=error)
+    CALL section_vals_val_get(transport_section,"TASKS_PER_POINT",i_val=transport_env%tasks_per_point,error=error)
+    CALL section_vals_val_get(transport_section,"REAL_AXIS",l_val=transport_env%real_axis,error=error)
     CALL section_vals_val_get(transport_section,"COLZERO_THRESHOLD",r_val=transport_env%colzero_threshold,error=error)
     CALL section_vals_val_get(transport_section,"EPS_LIMIT",r_val=transport_env%eps_limit,error=error)
     CALL section_vals_val_get(transport_section,"EPS_DECAY",r_val=transport_env%eps_decay,error=error)
-    CALL section_vals_val_get(transport_section,"EPS_SINGULARITIES",r_val=transport_env%eps_singularities,error=error)
-    CALL section_vals_val_get(transport_section,"EXTRA_PARAM1",r_val=transport_env%extra_param1,error=error)
-    CALL section_vals_val_get(transport_section,"EXTRA_PARAM2",r_val=transport_env%extra_param2,error=error)
-    CALL section_vals_val_get(transport_section,"EXTRA_PARAM3",r_val=transport_env%extra_param3,error=error)
+    CALL section_vals_val_get(transport_section,"EPS_SINGULARITY_CURVATURES",&
+                                                r_val=transport_env%eps_singularity_curvatures,error=error)
+    CALL section_vals_val_get(transport_section,"EPS_MU",r_val=transport_env%eps_mu,error=error)
+    CALL section_vals_val_get(transport_section,"EPS_EIGVAL_DEGEN",r_val=transport_env%eps_eigval_degen,error=error)
+    CALL section_vals_val_get(transport_section,"ENERGY_INTERVAL",r_val=transport_env%energy_interval,error=error)
+    CALL section_vals_val_get(transport_section,"MIN_INTERVAL",r_val=transport_env%min_interval,error=error)
+    CALL section_vals_val_get(transport_section,"TEMPERATURE",r_val=transport_env%temperature,error=error)
 
     SELECT CASE(transport_env%method)
     CASE(misc_method)
@@ -118,9 +123,9 @@ CONTAINS
 
   END SUBROUTINE transport_init_read_input
 
-  SUBROUTINE c_transport_type_init(transport_env, n_occupied, c_transport_env, error)
+  SUBROUTINE c_transport_type_init(transport_env, n_occupied, natoms, c_transport_env, error)
     TYPE(transport_type), POINTER            :: transport_env
-    INTEGER                                  :: n_occupied
+    INTEGER, INTENT(IN)                      :: n_occupied, natoms
     TYPE(c_transport_type), INTENT(INOUT)    :: c_transport_env
     TYPE(cp_error_type), INTENT(INOUT)       :: error
 
@@ -136,18 +141,23 @@ CONTAINS
     c_transport_env%n_cells=transport_env%n_cells
     c_transport_env%n_abscissae=transport_env%n_abscissae
     c_transport_env%n_kpoint=transport_env%n_kpoint
-    c_transport_env%extra_int_param1=transport_env%extra_int_param1
-    c_transport_env%extra_int_param2=transport_env%extra_int_param2
-    c_transport_env%extra_int_param3=transport_env%extra_int_param3
+    c_transport_env%num_interval=transport_env%num_interval
+    c_transport_env%num_contacts=transport_env%num_contacts
+    c_transport_env%ndof=transport_env%ndof
+    c_transport_env%tasks_per_point=transport_env%tasks_per_point
+    c_transport_env%real_axis=transport_env%real_axis
     c_transport_env%colzero_threshold=transport_env%colzero_threshold
     c_transport_env%eps_limit=transport_env%eps_limit
     c_transport_env%eps_decay=transport_env%eps_decay
-    c_transport_env%eps_singularities=transport_env%eps_singularities
-    c_transport_env%extra_param1=transport_env%extra_param1
-    c_transport_env%extra_param2=transport_env%extra_param2
-    c_transport_env%extra_param3=transport_env%extra_param3
+    c_transport_env%eps_singularity_curvatures=transport_env%eps_singularity_curvatures
+    c_transport_env%eps_mu=transport_env%eps_mu
+    c_transport_env%eps_eigval_degen=transport_env%eps_eigval_degen
+    c_transport_env%energy_interval=transport_env%energy_interval
+    c_transport_env%min_interval=transport_env%min_interval
+    c_transport_env%temperature=transport_env%temperature
  
     c_transport_env%n_occ = n_occupied
+    c_transport_env%n_atoms = natoms
     c_transport_env%evoltfactor = evolt
 
     CALL timestop(handle)

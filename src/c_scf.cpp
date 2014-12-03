@@ -1,13 +1,5 @@
 #include "c_scf.H"
 
-int kpointintegration(TCSR<double>*,TCSR<double>*,c_transport_type);
-int diagscalapack(TCSR<double>*,TCSR<double>*,c_transport_type);
-int semiselfconsistent(TCSR<double>*,TCSR<double>*,c_transport_type);
-
-struct SCF_Exception{
-    SCF_Exception(const int line,const char* file) {std::cerr<<"Error in line "<<line<<" of file "<<file<<std::endl;}
-};
-
 void c_scf_method(c_transport_type transport_env_params, c_DBCSR S, c_DBCSR KS, c_DBCSR * P)
 {
    Vector1D<int> row_block_size, col_block_size, local_rows, row_dist, col_dist, 
