@@ -1,9 +1,9 @@
 LEX           = flex
 YACC          = bison
 
-GFORTL       = /home/mauro/sw/gcc/4.8.1/lib64
+GFORTL       = /home/nanotcad/sw/gcc/4.8.2/dahu/lib64
 
-LIB_TOP       = /usr/ela/home/bruecks/GreenSolver
+LIB_TOP       = /usr/ela/home/bruecks/GreenSolver_Intel
 
 # MKL library paths
 MKLLIB       = /usr/pack/intel_compiler-11.1.075-af/Linux-x86_64/mkl/lib/em64t
@@ -35,9 +35,9 @@ QHULLLIB      = $(LIB_TOP)/QHULL/src/libqhull.a
 UMFPACKLIB    = $(LIB_TOP)/UMFPACK/Lib/libumfpack.a
 
 # CP2K library path
-CP2KLIB = /usr/ela/home/bruecks/cp2k1/lib/iis_gcc_mkl/psmp
+CP2KLIB = /usr/ela/home/bruecks/cp2k/lib/iis_gcc_mkl/psmp
 
-CPP = /usr/local/mpich2-1.5/gcc/bin/mpicxx
+CPP = /home/nanotcad/sw/mpich/3.1-gcc-4.8.2/dahu/bin/mpicxx
 GCC = icc
 
 CFLAGS = -g -fopenmp
@@ -47,13 +47,11 @@ LFLAGS = -L$(CP2KLIB) -L$(MKLLIB) -L$(INTLIB)
 
 DFLAGS = -DAdd_ -DMPICH_IGNORE_CXX_SEEK
 
-PARDISO_SO = -L/usr/ela/home/bruecks/Downloads -lpardiso500-MPI-GNU472-X86-64 -Wl,-rpath=/usr/ela/home/bruecks/Downloads
-
 LINLIN = /home/bruecks/CSelInv/EXAMPLES/C2Finterface.o /home/bruecks/CSelInv/LIB/libcsupldlt.a
 
 INCLUDES = -I$(MKLINC) $(INCSLU) $(INCUFC) $(INCUMF) $(INCMPS) $(INCPOR) $(INCAMD) $(INCAZT) $(INCQHU)
 
-LIBS = -lcp2k_lib -lcp2k_base_lib -lcp2k_dbcsr_lib -lcp2k_fft_lib -lcp2k_ma_lib -lcp2k_elpa_lib \
+LIBS = -lcp2k \
 	$(UMFPACKLIB) $(AMDLIB) $(MUMPSLIB) $(MUMPDLIB) $(MUMPSCOM) $(PORDLIB) $(METISLIB) $(AZTECLIB) $(QHULLLIB) $(ARPACKLIB) \
         -Wl,-rpath,$(MKLLIB) -lmkl_scalapack_lp64 -lmkl_intel_lp64 -lmkl_core -lmkl_intel_thread -lmkl_blacs_intelmpi_lp64 \
 	-Wl,-rpath,$(INTLIB) -lifcore -lifport -limf -lsvml -lintlc -liomp5 -lpthread \
