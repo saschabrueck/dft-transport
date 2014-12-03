@@ -20,7 +20,7 @@ int Energyvector::Execute(TCSR<double> *Overlap,TCSR<double> *KohnSham,int n_mu,
 {
     double sabtime;
     if ( Overlap->size_tot%transport_params.n_cells || transport_params.bandwidth<1 ) return (LOGCERR, EXIT_FAILURE);
-    int tasks_per_point=transport_params.extra_int_param2;
+    int tasks_per_point=transport_params.tasks_per_point;
     if (!iam) cout << "Distributing matrix over " << tasks_per_point << " tasks" << endl;
     if ( nprocs%tasks_per_point ) {
         if (!iam) cout << "Choose number of tasks per energy point as a divider of total number of tasks" << endl;
@@ -164,7 +164,7 @@ int Energyvector::Execute(TCSR<double> *Overlap,TCSR<double> *KohnSham,int n_mu,
 int Energyvector::determine_energyvector(std::vector<CPX> &energyvector,std::vector<CPX> &stepvector,std::vector<transport_methods::transport_method> &methodvector,std::vector< std::vector<int> > &propagating_sizes,TCSR<double> *KohnSham,TCSR<double> *Overlap,double *muvec,int *contactvec,c_transport_type transport_params,int n_mu)
 {
     double sabtime=get_time(0.0);
-    double Temp=transport_params.extra_param3;
+    double Temp=transport_params.temperature;
     Singularities singularities(transport_params,n_mu);
     if ( singularities.Execute(KohnSham,Overlap,contactvec) ) return (LOGCERR, EXIT_FAILURE);
     if (!iam) cout << "TIME FOR SINGULARITIES " << get_time(sabtime) << endl;
@@ -251,13 +251,13 @@ void Energyvector::add_real_axis_energies(double nonequi_start,double nonequi_en
     MPI_Bcast(&n_energies,1,MPI_INT,0,MPI_COMM_WORLD);
     energylist.resize(n_energies);
     MPI_Bcast(&energylist[0],n_energies,MPI_DOUBLE,0,MPI_COMM_WORLD);
-    double smallest_energy_distance=transport_params.extra_param2;
+    double smallest_energy_distance=transport_params.min_interval;
     if (!iam) cout<<"Smallest enery distance "<<smallest_energy_distance<<endl;
-    if (!iam) cout<<"Max number of points per small interval "<<transport_params.extra_int_param1<<endl;
-    if (!iam) cout<<"Average distance for big intervals "<<transport_params.extra_param1<<endl;
+    if (!iam) cout<<"Max number of points per small interval "<<transport_params.num_interval<<endl;
+    if (!iam) cout<<"Average distance for big intervals "<<transport_params.energy_interval<<endl;
     if (!iam) cout<<"Singularities in range "<< n_energies-2 << endl;
     for (uint i_energies=1;i_energies<energylist.size();i_energies++) {
-        int num_points_per_interval=max(transport_params.extra_int_param1,int(ceil(abs(energylist[i_energies]-energylist[i_energies-1])/transport_params.extra_param1)));
+        int num_points_per_interval=max(transport_params.num_interval,int(ceil(abs(energylist[i_energies]-energylist[i_energies-1])/transport_params.energy_interval)));
         while ((energylist[i_energies]-energylist[i_energies-1])/2.0*(1.0-cos(M_PI/(2.0*num_points_per_interval)))<smallest_energy_distance && num_points_per_interval>1)
 //        while ((energylist[i_energies]-energylist[i_energies-1])/2.0*(1.0-tanh(M_PI/2.0*sinh(3.0)))<smallest_energy_distance && num_points_per_interval>1)
             --num_points_per_interval;
@@ -272,7 +272,7 @@ void Energyvector::add_real_axis_energies(double nonequi_start,double nonequi_en
 
 void Energyvector::add_cmpx_cont_energies(double start,double end,double mu,std::vector<CPX> &energyvector,std::vector<CPX> &stepvector,std::vector<transport_methods::transport_method> &methodvector,c_transport_type transport_params,int n_mu)
 {
-    double Temp=transport_params.extra_param3;
+    double Temp=transport_params.temperature;
     enum choose_method {do_pexsi,do_pole_summation,do_contour,do_line};
     choose_method method=do_pexsi;
     if (method==do_pexsi) {

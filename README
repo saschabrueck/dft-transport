@@ -9,7 +9,8 @@ Update CP2K:
 2-2) copy the rest of the files in the "CP2Kupdates/modules/" directory to "cp2k/cp2k/src" 
 3) copy "CP2Kupdates/patchfiles/patch.interface_[date].diff" to the src directory of CP2K
 4) in the src directory of CP2K run : "patch -p0 < patch.interface_[date].diff"
-5) compile CP2K with popt or pdbg and make sure it works with an arbitray input file
+5) compile CP2K with popt or pdbg with target libcp2k : "make -j ARCH=...  VERSION=pdbg libcp2k"
+   and make sure it works with an arbitray input file
 
 Compile and run:
 6) cd to makefiles/ and using the sample .mk file (arch1.mk) write a .mk file (say, myarch.mk) according to your local installations.
@@ -33,20 +34,25 @@ DENSITY_MATRIX_CONSTRUCTION_METHOD
    EXPER        experimental code                                            3
    TRANSPORT    transport code                                               4 
    MISC         miscellaneous method                                         0 
-BANDWIDTH             INTEGER (int)        default value 2
-N_CELLS               INTEGER (int)        default value 5
-N_ABSCISSAE           INTEGER (int)        default value 10
-N_KPOINTS             INTEGER (int)        default value 10
-COLZERO_THRESHOLD     REAL    (double)     default value 1.0E-12
-EPS_LIMIT             REAL    (double)     default value 1.0E-6
-EPS_DECAY             REAL    (double)     default value 1.0E-6
-EPS_SINGULARITIES     REAL    (double)     default value 1.0E-3
-EXTRA_INT_PARAM1      INTEGER (int)        default value 0
-EXTRA_INT_PARAM2      INTEGER (int)        default value 0
-EXTRA_INT_PARAM3      INTEGER (int)        default value 0
-EXTRA_PARAM1          REAL    (double)     default value 0.0
-EXTRA_PARAM2          REAL    (double)     default value 0.0
-EXTRA_PARAM3          REAL    (double)     default value 0.0
+BANDWIDTH                   INTEGER (int)        default value 2
+N_CELLS                     INTEGER (int)        default value 5
+N_ABSCISSAE                 INTEGER (int)        default value 10
+N_KPOINTS                   INTEGER (int)        default value 10
+NUM_INTERVAL                INTEGER (int)        default value 0 (**)
+NUM_CONTACTS                INTEGER (int)        default value 2
+N_DOF                       INTEGER (int)        default value 0 (**)
+TASKS_PER_POINT             INTEGER (int)        default value 0 (**)
+REAL_AXIS                   LOGICAL (bool)       default value true (**)
+COLZERO_THRESHOLD           REAL    (double)     default value 1.0E-12
+EPS_LIMIT                   REAL    (double)     default value 1.0E-6
+EPS_DECAY                   REAL    (double)     default value 1.0E-6
+EPS_SINGULARITY_CURVATURES  REAL    (double)     default value 1.0E-3
+EPS_MU                      REAL    (double)     default value 0.0 (**)
+EPS_EIGVAL_DEGEN            REAL    (double)     default value 0.0 (**)
+ENERGY_INTERVAL             REAL    (double)     default value 0.0 (**)
+MIN_INTERVAL                REAL    (double)     default value 0.0 (**)
+TEMPERATURE                 REAL    (double)     default value 300.0 (**)
 
-(*)TO DO: keywords to be defined as constants to avoid confusion  
+(*)  TO DO: keywords to be defined as constants to avoid confusion  
+(**) TO DO: default values to be changed
 

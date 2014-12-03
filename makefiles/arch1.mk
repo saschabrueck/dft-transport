@@ -1,13 +1,14 @@
 LEX      = flex
 YACC     = bison
 
-CPP      = mpicxx
+CPP      = mpic++ 
 GCC      = gcc 
 
 CFLAGS   = -g -Wall -fopenmp 
 CXXFLAGS = -std=c++11 $(CFLAGS)
 
-TOP_DIR  = /data/seyedb
+TOP_DIR        = /data/seyedb
+TOOLCHAINi_DIR = /data/vjoost/toolchain-gcc492/install
 
 # Common include paths
 IAZTEC       = $(TOP_DIR)/Aztec2.1.1.0/lib/
@@ -20,6 +21,7 @@ ISLU         = $(TOP_DIR)/SuperLU_DIST_3.3/SRC
 
 # Common library paths
 LAZTEC       = $(TOP_DIR)/Aztec2.1.1.0/lib
+LSLUD        = $(TOP_DIR)/SuperLU_DIST_3.3/lib
 LMETIS       = $(TOP_DIR)/parmetis-4.0.2/build/Linux-x86_64/libmetis 
 LPARMETIS    = $(TOP_DIR)/parmetis-4.0.2/build/Linux-x86_64/libparmetis
 LESMUMPS     = $(TOP_DIR)/scotch_6.0.0_esmumps/lib
@@ -28,31 +30,33 @@ LSPARSE      = $(TOP_DIR)/SuiteSparse_config/lib
 LSUITESPARSE = $(TOP_DIR)/SuiteSparse_config 
 LQHULL       = $(TOP_DIR)/qhull-2012.1/lib 
 LARPACK      = $(TOP_DIR)/ARPACK
-LIBINT       = /data/vjoost/libint_ham/install/lib/ 
-LIBXC        = /data/vjoost/libxc-2.0.1/install/lib/
-
-SCALAPACK = $(TOP_DIR)/scalapack/install/lib/ 
+LIBPEXSI     = $(TOP_DIR)/pexsi_v0.5.5/src
+#LIBPEXSI     = $(TOP_DIR)/pexsi_v0.7.0/src
+#LIBPEXSI     = $(TOP_DIR)/pexsi/src
+LIBINT       = $(TOOLCHAIN_DIR)/lib/ 
+LIBXC        = $(TOOLCHAIN_DIR)/lib/
+SCALAPACK    = $(TOOLCHAIN_DIR)/lib/ 
 
 # CP2K library path
-CP2KLIB  = $(TOP_DIR)/cp2k/cp2k/lib/Linux-x86-64-gfortran/pdbg/
+CP2KLIB  = $(TOP_DIR)/wrk_cp2k/cp2k/cp2k/lib/local/pdbg/
 
-LFLAGS   = -L$(CP2KLIB) -L$(SCALAPACK) -L$(LAZTEC) -L$(LMETIS) -L$(LPARMETIS) -L$(LESMUMPS) \
-           -L$(LMUMPS) -L$(LSPARSE) -L$(LSUITESPARSE) -L$(LQHULL) -L$(LARPACK) -L$(LIBINT) -L$(LIBXC)
+LFLAGS   = -L$(CP2KLIB) -L$(SCALAPACK) -L$(LAZTEC) -L$(LMETIS) -L$(LPARMETIS) -L$(LSLUD) -L$(LESMUMPS) \
+           -L$(LMUMPS) -L$(LSPARSE) -L$(LSUITESPARSE) -L$(LQHULL) -L$(LARPACK) \
+           -L$(LIBINT) -L$(LIBXC) -L$(LIBPEXSI)
 
 DFLAGS   = -DAdd_
 
 PARDISO_SO = -L$(TOP_DIR)/pardiso/lib -lpardiso500-MPI-GNU472-X86-64 
 
 LIBS     = -lm -lgfortran -lstdc++ \
-           -lcp2kstart -lcp2k -lcp2kinput -lcp2kbase -lcp2kmpiwrap -lcp2kpw -lcp2kdbcsrwrap -ldbcsr -lcp2kacc \
-           -lcp2kfm -lcp2kcommon -lcp2ktmc -lcp2kao -lcp2kxc -lcp2kma -lcp2kfft -lcp2kgrid -lcp2kmetadyn_tools -lcp2kmachine \
-           -lfftw3 -laztec \
+           -lcp2k \
+           -lfftw3 -laztec -lpexsi \
            -lzmumps -ldmumps -lmumps_common -lpord \
            -lumfpack -lamd -lccolamd -lcholmod -lcolamd -lcamd -lccolamd \
-           -lparmetis -lmetis -lesmumps -lscotch -lscotcherr \
+           -lparmetis -lmetis -lesmumps -lsuperlu_dist_3.3 -lscotch -lscotcherr \
            -lscalapack -lreflapack -lrefblas \
            -lsuitesparseconfig \
-           -lqhull -larpack -lderiv -lint -lxc
+           -lqhullstatic -larpack -lderiv -lint -lxc -lmpifort
        
 INCLUDES = -I$(IAZTEC) -I$(IPORD) -I$(IMUMPS) -I$(ISPARSE) -I$(ISUITESPARSE) -I$(IQHULL) -I$(ISLU)
 

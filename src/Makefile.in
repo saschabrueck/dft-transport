@@ -53,4 +53,4 @@ $(MYEXECUTABLE): $(MYMAIN:.cc=.o) $(OBJECTS_MYMAIN)
 
 .PHONY: clean
 clean:
-	rm -rf *.o lex.yy.c y.tab.c $(EXECUTABLE) $(MYEXECUTABLE) $(INP_DIR)/output.out csr.*
+	rm -rf *.o lex.yy.c y.tab.c $(EXECUTABLE) $(MYEXECUTABLE) $(INP_DIR)/*.out csr.*

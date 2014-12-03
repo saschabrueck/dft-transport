@@ -1,7 +1,7 @@
 #include <string.h>
 #include <mpi.h>
 #include <assert.h>
-#include "c_scf.H"
+#include "libcp2k.H"
 
 // OMEN INPUT
 #include "Types.H"
@@ -13,7 +13,7 @@
 // WRITE IN MATRIX
 #include "CSR.H"
 
-int semiselfconsistent(TCSR<double>*,TCSR<double>*,c_transport_type);
+#include "SemiSelfConsistent.H"
 
 extern "C" {
     void yyrestart(FILE *);
@@ -29,29 +29,6 @@ VOLTAGE *voltage;
 WireGenerator* Wire;
 FEMGrid *FEM;
 Poisson *OMEN_Poisson_Solver;
-
-// CP2K LIBRARY ROUTINES
-extern "C"
-{
-   void cp_c_init_cp2k(int *init_mpi, int *ierr);
-   void cp_c_finalize_cp2k(int *finalize_mpi, int *ierr);
-   void cp_c_create_fenv(int *new_env_id, char *input_file_path, char *output_file_path, int *ierr);
-   void cp_c_create_fenv_comm(int *new_env_id, char *input_file_path, char *output_file_path, int *mpi_comm, int *ierr);
-   void cp_c_destroy_fenv(int *env_id, int *ierr);
-
-   void cp_c_get_natom(int *env_id, int *natom, int *ierr);
-   void cp_c_get_nparticle(int *env_id, int *nparticle, int *ierr);
-   void cp_c_get_energy(int *env_id, double *e_pot, int *ierr);
-   void cp_c_get_force(int *env_id, double force[], int *n_el, int *ierr);
-   void cp_c_get_pos(int *env_id, double pos[], int *n_el, int *ierr);
-
-   void cp_c_calc_energy_force(int *env_id, int *calc_force, int *ierr);
-
-   void cp_c_run_input(char *input_file_path, char *output_file_path, int *ierr);
-   void cp_c_run_input_comm(char *input_file_path, char *output_file_path, int *mpi_comm, int *ierr);
-
-   void cp_c_ext_scf_set_ptr(int *f_env_id, ptr2function, int *ierr);
-}
 
 int main (int argc, char **argv)
 {
@@ -97,7 +74,7 @@ int main (int argc, char **argv)
    if (run_cp2k) {
       cp_c_init_cp2k(&init_mpi, &error);
       cp_c_create_fenv_comm(&f_env_id, input_file, output_file, &fcomm, &error);
-      cp_c_ext_scf_set_ptr(&f_env_id, &c_scf_method, &error);
+      cp_c_ext_method_set_ptr(&f_env_id, &c_scf_method, &error);
       cp_c_get_natom(&f_env_id, &natom, &error);
    }
 
@@ -152,19 +129,24 @@ int main (int argc, char **argv)
       paraminfile >> transport_env_params.bandwidth;
       paraminfile >> transport_env_params.n_cells;
       paraminfile >> transport_env_params.n_occ;
+      paraminfile >> transport_env_params.n_atoms;
       paraminfile >> transport_env_params.n_abscissae;
       paraminfile >> transport_env_params.n_kpoint;
-      paraminfile >> transport_env_params.extra_int_param1;
-      paraminfile >> transport_env_params.extra_int_param2;
-      paraminfile >> transport_env_params.extra_int_param3;
+      paraminfile >> transport_env_params.num_interval;
+      paraminfile >> transport_env_params.num_contacts;
+      paraminfile >> transport_env_params.ndof;
+      paraminfile >> transport_env_params.tasks_per_point;
+      paraminfile >> transport_env_params.real_axis;
       paraminfile >> transport_env_params.evoltfactor;
       paraminfile >> transport_env_params.colzero_threshold;
       paraminfile >> transport_env_params.eps_limit;
       paraminfile >> transport_env_params.eps_decay;
-      paraminfile >> transport_env_params.eps_singularities;
-      paraminfile >> transport_env_params.extra_param1;
-      paraminfile >> transport_env_params.extra_param2;
-      paraminfile >> transport_env_params.extra_param3;
+      paraminfile >> transport_env_params.eps_singularity_curvatures;
+      paraminfile >> transport_env_params.eps_mu;
+      paraminfile >> transport_env_params.eps_eigval_degen;
+      paraminfile >> transport_env_params.energy_interval;
+      paraminfile >> transport_env_params.min_interval;
+      paraminfile >> transport_env_params.temperature;
       paraminfile.close();
       TCSR<double>* KohnSham = new TCSR<double>("KohnSham",w_size,w_rank);
       c_dscal(KohnSham->n_nonzeros,-1.0/transport_env_params.evoltfactor,KohnSham->nnz,1);

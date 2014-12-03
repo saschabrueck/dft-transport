@@ -8,7 +8,7 @@
 !>        
 !> \par History
 !>       05.2013 created [Hossein Bani-Hashemian]
-!> \author Hossein Bani-Hashemian
+!> \author Mohammad Hossein Bani-Hashemian
 ! *****************************************************************************
 MODULE c_dbcsr_methods
 
@@ -20,7 +20,7 @@ MODULE c_dbcsr_methods
        dbcsr_data_init, dbcsr_data_new, dbcsr_data_obj, &
        dbcsr_distribution_col_dist, dbcsr_distribution_init, &
        dbcsr_distribution_new, dbcsr_distribution_obj, &
-       dbcsr_distribution_row_dist, dbcsr_error_type, dbcsr_get_data, &
+       dbcsr_distribution_row_dist, dbcsr_error_type, &
        dbcsr_mp_obj
   USE kinds,                           ONLY: default_string_length,&
                                              dp
@@ -96,7 +96,8 @@ CONTAINS
     row_dist => array_data (r_dist_array)
     col_dist => array_data (c_dist_array)
 
-    CALL dbcsr_get_data (data_area, r_dp)
+!    CALL dbcsr_get_data (data_area, r_dp)
+    r_dp => data_area%d%r_dp
     c_blkdata => r_dp
     row_blk_size => array_data (rbs_array)
     col_blk_size => array_data (cbs_array)
@@ -253,7 +254,6 @@ CONTAINS
     TYPE(dbcsr_data_obj)                  :: data_area
     TYPE(dbcsr_distribution_obj)          :: brd_dist
     TYPE(dbcsr_mp_obj)                    :: mp_env_new
-    TYPE(dbcsr_error_type)                :: err
 
     CHARACTER(LEN=*), PARAMETER :: routineN = 'cDBCSR_to_dbcsr', &
         routineP = moduleN//':'//routineN
@@ -270,7 +270,7 @@ CONTAINS
                                  row_p, col_i, blk_p, local_rows, row_dist, col_dist, r_dp, error)
 
     ALLOCATE (pgrid(num_p,1))
-    pgrid = RESHAPE((/(i, i = 0, num_p-1),0/),(/num_p,1/))
+    pgrid(:,:) = RESHAPE((/(i, i = 0, num_p-1),0/),(/num_p,1/))
     mp_group = logger%para_env%group
     CALL cp_dbcsr_mp_new(mp_env_new, pgrid, mp_group, mynode, numnodes=num_p)
     CALL dbcsr_distribution_init(brd_dist)
@@ -283,8 +283,7 @@ CONTAINS
     CALL cp_dbcsr_init (dbcsr_mat_brd, error=error)
     CALL cp_dbcsr_create (dbcsr_mat_brd, "OMEN dbcsr_brd", brd_dist, matrix_type, &
                           row_blk_size, col_blk_size, error=error)
-!    CALL dbcsr_fill (data_area, row_p, col_i, blk_p, nblks, data_block_size, dbcsr_mat_brd%matrix, err)
-    CALL cp_dbcsr_fill (data_area, row_p, col_i, blk_p, nblks, data_block_size, dbcsr_mat_brd, error)
+    CALL cp_dbcsr_fill (data_area, row_p, col_i, blk_p, dbcsr_mat_brd, error)
 
     CALL cp_dbcsr_create(dbcsr_mat, TRIM(matrix_name)//" OMEN", distribution, matrix_type, &
                          row_blk_size, col_blk_size, error=error)

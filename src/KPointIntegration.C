@@ -1,4 +1,4 @@
-#include "ScaLapack.H"
+#include "KPointIntegration.H"
 
 int kpointintegration(TCSR<double> *Overlap,TCSR<double> *KohnSham,c_transport_type trans_params)
 {

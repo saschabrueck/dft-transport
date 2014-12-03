@@ -13,139 +13,6 @@
 #define unused(x) ((void)(x))
 
 /*===============================================================
-this routine might be obsolete. Let me know if you need to use it ..
-===============================================================*/
-template <class T>
-void cDBCSR_to_CSR_triu(c_DBCSR& dbcsr_mat, TCSR<T>* csr_mat)
-{
-   int m, n, mn, bc, block_p, fm_i, fm_j,
-       nze_counter, nze_blk_row,
-       old_row, new_row,
-       N, n_nnz, fortran_index;
-
-   T mat_element;
-   T *block, *nnz_arr;
-   int *edge_i_arr, *index_i_arr, *index_j_arr; 
-
-   unused(fm_i);
-
-   Vector1D<int> edge_i_blkr_tmp, edge_i_block, edge_i, index_j, index_i_vec;
-   Vector1D<T> data_block, nnz;
-   Vector2D<int> index_j_blkr;
-   Vector2D<T> nnz_blkr;
-
-//int chosen_rank = 0;
-
-   data_block.assign(dbcsr_mat.dblock, dbcsr_mat.dblock + dbcsr_mat.dblksize);
-   edge_i.push_back(0);
-   for(int br = 0; br < dbcsr_mat.nblkrows_total; br++){
-      m = dbcsr_mat.row_blk_size[br];
-      initialize_Vector2D (index_j_blkr, m);
-      initialize_Vector2D (nnz_blkr, m);
-      for(int blk = dbcsr_mat.row_p[br]+1; blk <= dbcsr_mat.row_p[br+1]; blk++){
-         bc = dbcsr_mat.col_i[blk-1];
-         n = dbcsr_mat.col_blk_size[bc-1];
-         mn = m*n;
-         block_p = abs(dbcsr_mat.blk_p[blk-1]);
-         if(block_p != 0){
-            block = new T[mn];
-            for(int i=0; i<=mn-1; i++)
-               block[i] = data_block[block_p+i-1];
-if (br == bc - 1){
-            nze_counter = -1;
-            old_row = 0;
-            for(int r = 0; r < m; r++){
-               for(int c = 0; c < n; c++){
-                  if(c >= r){
-                  nze_counter = nze_counter + 1;
-                  fm_i = r+dbcsr_mat.row_blk_offset[br]-1;
-                  fm_j = c+dbcsr_mat.col_blk_offset[bc-1]-1;
-                  mat_element = block[r+c*m];
-                  new_row = fm_i+1;
-
-                  index_j_blkr[r].push_back(fm_j);
-                  nnz_blkr[r].push_back(mat_element);
-                  if (new_row != old_row) edge_i_block.push_back(nze_counter); 
-                  old_row = new_row;
-                  }; //if 
-               }; //r row
-            }; //c column
-            edge_i_block.push_back(nze_counter+1);
-}
-else if (bc - 1 > br)
-{
-            nze_counter = -1;
-            old_row = 0;
-            for(int r = 0; r < m; r++){
-               for(int c = 0; c < n; c++){
-                  nze_counter = nze_counter + 1;
-                  fm_i = r+dbcsr_mat.row_blk_offset[br]-1;
-                  fm_j = c+dbcsr_mat.col_blk_offset[bc-1]-1;
-                  mat_element = block[r+c*m];
-                  new_row = fm_i+1;
-
-                  index_j_blkr[r].push_back(fm_j);
-                  nnz_blkr[r].push_back(mat_element);
-                  if (new_row != old_row) edge_i_block.push_back(nze_counter); 
-                  old_row = new_row;
-               }; //r row
-            }; //c column
-            edge_i_block.push_back(nze_counter+1);
-}
-            edge_i_blkr_tmp.resize(edge_i_block.size()); 
-            std::transform (edge_i_blkr_tmp.begin(), edge_i_blkr_tmp.end(), edge_i_block.begin(), edge_i_blkr_tmp.begin(), std::plus<int>());
-            edge_i_block.clear();
-            delete [] block;
-         }; //if
-      }; //blk blocks
-      nze_blk_row = edge_i.back();
-      std::transform(edge_i_blkr_tmp.begin(), edge_i_blkr_tmp.end(), edge_i_blkr_tmp.begin(), bind2nd(std::plus<int>(), nze_blk_row));
-
-      if (!edge_i_blkr_tmp.empty()) 
-         edge_i.insert(edge_i.end(), edge_i_blkr_tmp.begin()+1, edge_i_blkr_tmp.end());
-      convert_Vector2D_to_Vector1D(index_j_blkr, index_j);
-      convert_Vector2D_to_Vector1D(nnz_blkr, nnz);
-      index_j_blkr.clear();
-      nnz_blkr.clear();
-      edge_i_blkr_tmp.clear(); 
-   }; //br block row
-  
-   N = edge_i.size()-1;
-   n_nnz = nnz.size();
-
-   edge_i_arr = new int[N+1];
-   index_i_arr = new int[N];
-   index_j_arr = new int[n_nnz];
-   nnz_arr = new T[n_nnz];
-
-   index_i_vec.resize(edge_i.size());
-   adjacent_difference(edge_i.begin(), edge_i.end(), index_i_vec.begin());
-   index_i_vec.erase(index_i_vec.begin());
-   Vector1D_abs(index_i_vec);
-
-   std::copy(edge_i.begin(),edge_i.end(),edge_i_arr);
-   std::copy(index_i_vec.begin(),index_i_vec.end(),index_i_arr);
-   std::copy(index_j.begin(),index_j.end(),index_j_arr);
-   std::copy(nnz.begin(),nnz.end(),nnz_arr);
-
-   csr_mat->set_nnz(n_nnz,nnz_arr);
-   csr_mat->set_index_i(N,index_i_arr);
-   csr_mat->set_index_j(n_nnz,index_j_arr);
-   csr_mat->set_edge_i(N,edge_i_arr);
-
-   edge_i.clear(); 
-   index_j.clear();
-   data_block.clear(); 
-   nnz.clear();
-   index_i_vec.clear();
-
-   delete [] edge_i_arr;
-   delete [] index_i_arr;
-   delete [] index_j_arr;
-   delete [] nnz_arr;
-}
-
-/*===============================================================
 edge_i_block: row pointer vector for every block
 edge_i_blkr_tmp: sum over edge_i_block for every block row
 =================================================================*/
@@ -247,7 +114,7 @@ void cDBCSR_to_CSR(c_DBCSR& dbcsr_mat, TCSR<T>* csr_mat)
    delete [] index_i_arr;
    delete [] index_j_arr;
    delete [] nnz_arr;
-}
+};
 
 /*===================================================================================================
 outer for loop over the local block rows , 
@@ -457,6 +324,6 @@ void CSR_to_cDBCSR(TCSR<T>* csr_mat, c_DBCSR& dbcsr_mat,
    int data_type = 3; /* dbcsr_types : dbcsr_type_real_8 = 3 */
    c_DBCSR_create (dbcsr_mat, rank, nblkrows_local, data_type, rbs, cbs, rbo, cbo, 
                    row_p, col_i, blk_p, local_rows, dblock, row_dist, col_dist);
-}  
+}; 
 
 #endif

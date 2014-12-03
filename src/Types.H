@@ -429,12 +429,15 @@ struct VOLTAGE
 extern "C"
 {
     typedef struct{
-           int method, bandwidth, n_cells, n_occ, n_abscissae,
-               n_kpoint,
-               extra_int_param1, extra_int_param2, extra_int_param3;
-           double  evoltfactor, colzero_threshold,
-                   eps_limit, eps_decay, eps_singularities,
-                   extra_param1, extra_param2, extra_param3;
+           int n_occ, n_atoms;
+           double evoltfactor;
+           int method, bandwidth, n_cells, n_abscissae,
+               n_kpoint, num_interval, num_contacts, ndof, tasks_per_point;
+           bool real_axis;
+           double  colzero_threshold,
+                   eps_limit, eps_decay, eps_singularity_curvatures,
+                   eps_mu, eps_eigval_degen, energy_interval, min_interval,
+                   temperature; 
            } c_transport_type;
 };
 
