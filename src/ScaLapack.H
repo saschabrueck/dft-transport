@@ -60,11 +60,17 @@ extern "C" {
     void fortran_name(pzgetrs,PZGETRS)(char*,int*,int*,CPX*,int*,int*,int*,int*,CPX*,int*,\
                                        int*,int*,int*);
     void fortran_name(pdgeadd,PDGEADD)(char*,int*,int*,double*,double*,int*,int*,int*,double*,double*,int*,int*,int*);
+    void fortran_name(pzgeadd,PZGEADD)(char*,int*,int*,CPX*,CPX*,int*,int*,int*,CPX*,CPX*,int*,int*,int*);
     void fortran_name(pdsygvx,PDSYGVX)(int *,char *,char *,char *,int *,double *,\
                                        int *, int *, int *, double *, int *, int *, int *,\
                                        double *, double *, int *, int *, double *, int *,\
                                        int *, double *, double *, double *, int *, int *, int *,\
                                        double *, int *, int *, int *, int *, int *, double *, int *);
+    void fortran_name(pzhegvx,PZHEGVX)(int *,char *,char *,char *,int *,CPX *,\
+                                       int *, int *, int *, CPX *, int *, int *, int *,\
+                                       double *, double *, int *, int *, double *, int *,\
+                                       int *, double *, double *, CPX *, int *, int *, int *,\
+                                       CPX *, int *, double *, int *, int *, int *, int *, int *, double *, int *);
 
 
     void fortran_name(blacs_pinfo,BLACS_pinfo)(int*,int*);
@@ -330,16 +336,38 @@ inline void c_pdgeadd(char TRANS,int M,int N,double ALPHA,double *A,int IA,int J
 
 /************************************************************************************************/
 
+inline void c_pzgeadd(char TRANS,int M,int N,CPX ALPHA,CPX *A,int IA,int JA,int *DESCA,\
+                      CPX BETA,CPX *C,int IC,int JC,int *DESCC)
+{
+    fortran_name(pzgeadd,PZGEADD)(&TRANS,&M,&N,&ALPHA,A,&IA,&JA,DESCA,&BETA,C,&IC,&JC,DESCC);
+}
+
+/************************************************************************************************/
+
 inline void c_pdsygvx(int ibtype, char jobz, char range, char uplo, int n, double *a,\
                       int ia, int ja, int *desca, double *b, int ib, int jb, int *descb,\
                       double vl, double vu, int il, int iu, double abstol, int *m,\
                       int *nz, double *w, double orfac, double *z, int iz, int jz, int *descz,\
-                      double *work, int lwork, int *iwork, int liwork, int *ifail,\
-                      int *iclustr, double *gap, int *info)
+                      double *work, int lwork, int *iwork, int liwork,\
+                      int *ifail, int *iclustr, double *gap, int *info)
 {
     fortran_name(pdsygvx,PDSYGVX)(&ibtype,&jobz,&range,&uplo,&n,a,&ia,&ja,desca,b,&ib,&jb,descb,\
                                   &vl,&vu,&il,&iu,&abstol,m,nz,w,&orfac,z,&iz,&jz,descz,\
                                   work,&lwork,iwork,&liwork,ifail,iclustr,gap,info);
+}
+
+/************************************************************************************************/
+
+inline void c_pzhegvx(int ibtype, char jobz, char range, char uplo, int n, CPX *a,\
+                      int ia, int ja, int *desca, CPX *b, int ib, int jb, int *descb,\
+                      double vl, double vu, int il, int iu, double abstol, int *m,\
+                      int *nz, double *w, double orfac, CPX *z, int iz, int jz, int *descz,\
+                      CPX *work, int lwork, double *rwork, int lrwork, int *iwork, int liwork,\
+                      int *ifail, int *iclustr, double *gap, int *info)
+{
+    fortran_name(pzhegvx,PZHEGVX)(&ibtype,&jobz,&range,&uplo,&n,a,&ia,&ja,desca,b,&ib,&jb,descb,\
+                                  &vl,&vu,&il,&iu,&abstol,m,nz,w,&orfac,z,&iz,&jz,descz,\
+                                  work,&lwork,rwork,&lrwork,iwork,&liwork,ifail,iclustr,gap,info);
 }
 
 /*Blacs******************************************************************************************/
