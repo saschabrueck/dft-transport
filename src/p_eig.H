@@ -3,7 +3,7 @@
 
 #include "ScaLapack.H"
 
-int p_eig(double *KSfull,double *OVfull,double *eigval,int nvec,MPI_Comm p_eig_comm)
+inline int p_eig(double *KSfull,double *OVfull,double *eigval,int nvec,MPI_Comm p_eig_comm)
 {
     int iam, nprocs;
     MPI_Comm_size(p_eig_comm,&nprocs);
@@ -87,7 +87,7 @@ int p_eig(double *KSfull,double *OVfull,double *eigval,int nvec,MPI_Comm p_eig_c
     return 0;
 }
 
-int p_eig(CPX *KSfull,CPX *OVfull,double *eigval,int nvec,MPI_Comm p_eig_comm)
+inline int p_eig(CPX *KSfull,CPX *OVfull,double *eigval,int nvec,MPI_Comm p_eig_comm)
 {
     int iam, nprocs;
     MPI_Comm_size(p_eig_comm,&nprocs);
