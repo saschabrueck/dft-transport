@@ -15,7 +15,7 @@
 
 class Singularities {
 public:
-Singularities(c_transport_type,int);
+Singularities(transport_parameters*,int);
 int Execute(TCSR<double>*,TCSR<double>*,int*);
 double determine_fermi(double,int);
 void write_bandstructure(int);

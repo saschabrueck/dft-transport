@@ -487,7 +487,7 @@ void pdsyev_driver(char jobz,char uplo,int n,double *a, double *lambda,double *z
     int anr_loc,anc_loc,aROWMAX,aCOLMAX,lda;
     int znr_loc,znc_loc,zROWMAX,zCOLMAX,ldz;
     int desca[9],descz[9];
-    int lwork
+    int lwork;
     double *aloc,*zloc;
     double *work;
 
@@ -513,13 +513,13 @@ void pdsyev_driver(char jobz,char uplo,int n,double *a, double *lambda,double *z
     zCOLMAX      = (n-1)/(NPCOL*NB)+1;
     zloc         = new double[znr_loc*znc_loc];
 
-    distribute(myrow,mycol,ldb,n,znr_loc,MB,NB,NPROW,NPCOL,zROWMAX,zCOLMAX,z,zloc);
+    distribute(myrow,mycol,ldz,n,znr_loc,MB,NB,NPROW,NPCOL,zROWMAX,zCOLMAX,z,zloc);
     c_descinit(descz,ldz,n,MB,NB,0,0,ictxt,znr_loc,&info);
 
     lwork        = 20*n;
     work         = new double[lwork];
 
-    c_pdsyev(jobz,uplo,n,a_loc,1,1,desca,lambda,z,1,1,descz,work,lwork,&info);
+    c_pdsyev(jobz,uplo,n,aloc,1,1,desca,lambda,z,1,1,descz,work,lwork,&info);
 
     receive(myrow,mycol,ldz,n,znr_loc,znc_loc,MB,NB,NPROW,NPCOL,zROWMAX,zCOLMAX,z,zloc,comm);
 

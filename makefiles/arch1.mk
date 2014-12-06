@@ -4,11 +4,11 @@ YACC     = bison
 CPP      = mpic++ 
 GCC      = gcc 
 
-CFLAGS   = -g -Wall -fopenmp 
+CFLAGS   = -g -w -Wall -fopenmp 
 CXXFLAGS = -std=c++11 $(CFLAGS)
 
 TOP_DIR        = /data/seyedb
-TOOLCHAINi_DIR = /data/vjoost/toolchain-gcc492/install
+TOOLCHAIN_DIR = /data/vjoost/toolchain-gcc492/install
 
 # Common include paths
 IAZTEC       = $(TOP_DIR)/Aztec2.1.1.0/lib/
@@ -31,14 +31,13 @@ LSUITESPARSE = $(TOP_DIR)/SuiteSparse_config
 LQHULL       = $(TOP_DIR)/qhull-2012.1/lib 
 LARPACK      = $(TOP_DIR)/ARPACK
 LIBPEXSI     = $(TOP_DIR)/pexsi_v0.5.5/src
-#LIBPEXSI     = $(TOP_DIR)/pexsi_v0.7.0/src
 #LIBPEXSI     = $(TOP_DIR)/pexsi/src
 LIBINT       = $(TOOLCHAIN_DIR)/lib/ 
 LIBXC        = $(TOOLCHAIN_DIR)/lib/
 SCALAPACK    = $(TOOLCHAIN_DIR)/lib/ 
 
 # CP2K library path
-CP2KLIB  = $(TOP_DIR)/wrk_cp2k/cp2k/cp2k/lib/local/pdbg/
+CP2KLIB  = $(TOP_DIR)/cp2k-omen/cp2k/cp2k/lib/local/pdbg/
 
 LFLAGS   = -L$(CP2KLIB) -L$(SCALAPACK) -L$(LAZTEC) -L$(LMETIS) -L$(LPARMETIS) -L$(LSLUD) -L$(LESMUMPS) \
            -L$(LMUMPS) -L$(LSPARSE) -L$(LSUITESPARSE) -L$(LQHULL) -L$(LARPACK) \

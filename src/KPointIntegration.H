@@ -3,6 +3,6 @@
 
 #include "ScaLapack.H"
 
-int kpointintegration(TCSR<double>* , TCSR<double>*, c_transport_type);
+int kpointintegration(TCSR<double>* , TCSR<double>*, transport_parameters*);
 
 #endif

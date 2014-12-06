@@ -29,7 +29,7 @@ int ldlt_free__(int *);
 int ldlt_blkselinv__(int *, int*, int*, CPX *, int*);
 }
 
-int density(TCSR<double> *KohnSham,TCSR<double> *Overlap,TCSR<double> *OverlapPBC,TCSR<double> *Ps,CPX energy,CPX weight,transport_methods::transport_method method,int n_mu,double *muvec,int *contactvec,double &current,double &transm,double &dos,std::vector<int> propnum,int *atom_of_bf,double *erhoperatom,double *drhoperatom,double *Vatom,c_transport_type parameter_sab,int distribute_pmat,int evecpos,MPI_Comm matrix_comm)
+int density(TCSR<double> *KohnSham,TCSR<double> *Overlap,TCSR<double> *OverlapPBC,TCSR<double> *Ps,CPX energy,CPX weight,transport_methods::transport_method method,int n_mu,double *muvec,int *contactvec,double &current,double &transm,double &dos,std::vector<int> propnum,int *atom_of_bf,double *erhoperatom,double *drhoperatom,double *Vatom,transport_parameters *parameter_sab,int distribute_pmat,int evecpos,MPI_Comm matrix_comm)
 {
     double d_one=1.0;
     double d_zer=0.0;
@@ -51,9 +51,9 @@ int density(TCSR<double> *KohnSham,TCSR<double> *Overlap,TCSR<double> *OverlapPB
 int worldrank; MPI_Comm_rank(MPI_COMM_WORLD,&worldrank);
 // get parameters always at the beginning of a subroutine (or maybe even better in the constructor) to make it independent of the structure containing the parameters
 // but ndof bandwidth etc will be included in contactvec, which will become a more complicated structure
-    int ncells=parameter_sab.n_cells;
-    int bandwidth=parameter_sab.bandwidth;
-    int ndof=Overlap->size_tot/parameter_sab.n_cells;
+    int ncells=parameter_sab->n_cells;
+    int bandwidth=parameter_sab->bandwidth;
+    int ndof=Overlap->size_tot/parameter_sab->n_cells;
     int ntriblock=bandwidth*ndof;
     {
         TCSR<CPX> *SumHamC = new TCSR<CPX>(z_one,KohnSham,-energy,Overlap);
@@ -346,10 +346,10 @@ if (!worldrank) cout << "TIME FOR WAVEFUNCTION SPARSE SOLVER WITH "<< ncells <<"
             }
         }
         delete[] lambda;
-        double Temp=parameter_sab.temperature;
+        double Temp=parameter_sab->temperature;
         double fermil=0.0;
         double fermir=0.0;
-        if (!parameter_sab.n_abscissae) {
+        if (!parameter_sab->n_abscissae) {
             fermil=fermi(real(energy),muvec[0],Temp,0);
             fermir=fermi(real(energy),muvec[1],Temp,0);
         } else if (muvec[0]>muvec[1]) {
@@ -367,7 +367,7 @@ if (!worldrank) cout << "TIME FOR WAVEFUNCTION SPARSE SOLVER WITH "<< ncells <<"
 //            dos=Overlap->psipsidagger(Sol,nprol);
 //            dos=Overlap->psipsidagger(&Sol[Ps->size_tot*nprol],npror);
 /*
-if (parameter_sab.n_abscissae) {
+if (parameter_sab->n_abscissae) {
 */
             Overlap->psipsidagger(Sol,nprol,+2.0*weight*fermil,atom_of_bf,erhoperatom);
             OverlapPBC->psipsidagger(Sol,Soll,nprol,+2.0*weight*fermil,atom_of_bf,erhoperatom);

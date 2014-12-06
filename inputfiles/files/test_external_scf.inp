@@ -31,7 +31,7 @@
 !      &END
     &END
     &LS_SCF
-      MAX_SCF    20
+      MAX_SCF    30
       EPS_FILTER 1.0E-7
       EPS_SCF    1.0E-6
       MU        -0.20
@@ -39,6 +39,7 @@
       REPORT_ALL_SPARSITIES OFF
       PERFORM_MU_SCAN OFF
       PURIFICATION_METHOD TRS4
+      S_PRECONDITIONER ATOMIC
     &END
     &TRANSPORT
       DENSITY_MATRIX_CONSTRUCTION_METHOD   DIAG
@@ -46,20 +47,20 @@
 !      N_KPOINTS      10
 !      BANDWIDTH      2
 !      N_CELLS        5
-!      NUM_INTERVAL              
+!      NUM_INTERVAL   10           
 !      NUM_CONTACTS   2           
-!      N_DOF           
-!      TASKS_PER_POINT          
-!      REAL_AXIS          
+!      N_DOF          0 
+!      TASKS_PER_POINT    1         
+!      CORES_PER_NODE     1    
 !      COLZERO_THRESHOLD  1.0E-12
 !      EPS_LIMIT          1.0E-6
 !      EPS_DECAY          1.0E-6
 !      EPS_SINGULARITY_CURVATURES  1.0E-3
-!      EPS_MU             
-!      EPS_EIGVAL_DEGEN
-!      ENERGY_INTERVAL             
-!      MIN_INTERVAL
-!      TEMPERATURE
+!      EPS_MU             1.0E-4
+!      EPS_EIGVAL_DEGEN   0.0
+!      ENERGY_INTERVAL    1.0E-2      
+!      MIN_INTERVAL       1.0E-4
+!      TEMPERATURE        300.0
     &END
     &SCF
       MAX_SCF    30
@@ -96,9 +97,9 @@
    O       2.280398       9.146539       5.088696 H2O
    H       1.762019       9.820429       5.528454 H2O
    H       3.095987       9.107088       5.588186 H2O
-!   O       1.251703       2.406261       7.769908 H2O
-!   H       0.554129       2.982634       8.082024 H2O
-!   H       1.771257       2.954779       7.182181 H2O
+!  O       1.251703       2.406261       7.769908 H2O
+!  H       0.554129       2.982634       8.082024 H2O
+!  H       1.771257       2.954779       7.182181 H2O
 !  O       1.596302       6.920128       0.656695 H2O
 !  H       2.112148       6.126321       0.798136 H2O
 !  H       1.776389       7.463264       1.424030 H2O

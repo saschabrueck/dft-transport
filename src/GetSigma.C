@@ -72,7 +72,7 @@ int BoundarySelfEnergy::Set_master(MPI_Comm matrix_comm,MPI_Comm boundary_comm)
     return 0;
 }
 
-int BoundarySelfEnergy::Cutout(TCSR<CPX> *SumHamC,int pcontact,CPX penergy,transport_methods::transport_method method,c_transport_type parameter_sab,MPI_Comm matrix_comm)
+int BoundarySelfEnergy::Cutout(TCSR<CPX> *SumHamC,int pcontact,CPX penergy,transport_methods::transport_method method,transport_parameters *parameter_sab,MPI_Comm matrix_comm)
 {
     energy=penergy;
     if (method==transport_methods::WF) compute_inj=1;
@@ -85,14 +85,14 @@ int BoundarySelfEnergy::Cutout(TCSR<CPX> *SumHamC,int pcontact,CPX penergy,trans
         inj_sign=-1;
     }
 
-    n_cells=parameter_sab.n_cells;
+    n_cells=parameter_sab->n_cells;
     ndof=SumHamC->size_tot/n_cells;
-    bandwidth=parameter_sab.bandwidth;
+    bandwidth=parameter_sab->bandwidth;
     int ntriblock=bandwidth*ndof;
 
-    colzerothr=parameter_sab.colzero_threshold;
-    eps_limit=parameter_sab.eps_limit;
-    eps_decay=parameter_sab.eps_decay;
+    colzerothr=parameter_sab->colzero_threshold;
+    eps_limit=parameter_sab->eps_limit;
+    eps_decay=parameter_sab->eps_decay;
 
     int iam,nprocs;
     MPI_Comm_size(matrix_comm,&nprocs);

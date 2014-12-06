@@ -123,33 +123,33 @@ int main (int argc, char **argv)
       cp_c_destroy_fenv(&f_env_id, &error);
       cp_c_finalize_cp2k(&finalize_mpi, &error);
    } else {
-      c_transport_type transport_env_params;
+      transport_parameters* transport_env_params = new transport_parameters();
       ifstream paraminfile("TransportParams");
-      paraminfile >> transport_env_params.method;
-      paraminfile >> transport_env_params.bandwidth;
-      paraminfile >> transport_env_params.n_cells;
-      paraminfile >> transport_env_params.n_occ;
-      paraminfile >> transport_env_params.n_atoms;
-      paraminfile >> transport_env_params.n_abscissae;
-      paraminfile >> transport_env_params.n_kpoint;
-      paraminfile >> transport_env_params.num_interval;
-      paraminfile >> transport_env_params.num_contacts;
-      paraminfile >> transport_env_params.ndof;
-      paraminfile >> transport_env_params.tasks_per_point;
-      paraminfile >> transport_env_params.real_axis;
-      paraminfile >> transport_env_params.evoltfactor;
-      paraminfile >> transport_env_params.colzero_threshold;
-      paraminfile >> transport_env_params.eps_limit;
-      paraminfile >> transport_env_params.eps_decay;
-      paraminfile >> transport_env_params.eps_singularity_curvatures;
-      paraminfile >> transport_env_params.eps_mu;
-      paraminfile >> transport_env_params.eps_eigval_degen;
-      paraminfile >> transport_env_params.energy_interval;
-      paraminfile >> transport_env_params.min_interval;
-      paraminfile >> transport_env_params.temperature;
+      paraminfile >> transport_env_params->method;
+      paraminfile >> transport_env_params->bandwidth;
+      paraminfile >> transport_env_params->n_cells;
+      paraminfile >> transport_env_params->n_occ;
+      paraminfile >> transport_env_params->n_atoms;
+      paraminfile >> transport_env_params->n_abscissae;
+      paraminfile >> transport_env_params->n_kpoint;
+      paraminfile >> transport_env_params->num_interval;
+      paraminfile >> transport_env_params->num_contacts;
+      paraminfile >> transport_env_params->ndof;
+      paraminfile >> transport_env_params->tasks_per_point;
+      paraminfile >> transport_env_params->cores_per_node;
+      paraminfile >> transport_env_params->evoltfactor;
+      paraminfile >> transport_env_params->colzero_threshold;
+      paraminfile >> transport_env_params->eps_limit;
+      paraminfile >> transport_env_params->eps_decay;
+      paraminfile >> transport_env_params->eps_singularity_curvatures;
+      paraminfile >> transport_env_params->eps_mu;
+      paraminfile >> transport_env_params->eps_eigval_degen;
+      paraminfile >> transport_env_params->energy_interval;
+      paraminfile >> transport_env_params->min_interval;
+      paraminfile >> transport_env_params->temperature;
       paraminfile.close();
       TCSR<double>* KohnSham = new TCSR<double>("KohnSham",w_size,w_rank);
-      c_dscal(KohnSham->n_nonzeros,-1.0/transport_env_params.evoltfactor,KohnSham->nnz,1);
+      c_dscal(KohnSham->n_nonzeros,-1.0/transport_env_params->evoltfactor,KohnSham->nnz,1);
       TCSR<double>* Overlap;
       if (FILE *ovlfile = fopen("Overlap","r")) {
          fclose(ovlfile);
@@ -166,6 +166,7 @@ int main (int argc, char **argv)
       semiselfconsistent(Overlap,KohnSham,transport_env_params);
       delete Overlap;
       delete KohnSham;
+      delete transport_env_params;
    }
 
    if (do_omen_poisson) {

@@ -20,7 +20,11 @@ Compile and run:
    > make 
 8) to run 
    > cd ../inputfiles/files/ 
-   > mpirun -np N ../../src/interface test_external_scf.inp
+   > mpirun -np N ../../src/transport test_external_scf
+
+Extra functionalities: 
+9) to use PARDISO run 
+   > ./configure --with-pardiso
 
 ==========================================================================================================
 CP2K INPUT: (see test_external_scf.inp as an example)
@@ -30,29 +34,27 @@ DENSITY_MATRIX_CONSTRUCTION_METHOD
    keyword      description                                                in C++(*)  
    -------      ----------------------------------------------------       ------
    DIAG         diagonalization using ScaLapack routines   (default)         1
-   KPOINT       k-point integration method                                   2 
-   EXPER        experimental code                                            3
-   TRANSPORT    transport code                                               4 
+   EXPER        experimental code                                            2
+   TRANSPORT    transport code                                               3 
    MISC         miscellaneous method                                         0 
 BANDWIDTH                   INTEGER (int)        default value 2
 N_CELLS                     INTEGER (int)        default value 5
-N_ABSCISSAE                 INTEGER (int)        default value 10
-N_KPOINTS                   INTEGER (int)        default value 10
-NUM_INTERVAL                INTEGER (int)        default value 0 (**)
+N_ABSCISSAE                 INTEGER (int)        default value 0
+N_KPOINTS                   INTEGER (int)        default value 64
+NUM_INTERVAL                INTEGER (int)        default value 10 
 NUM_CONTACTS                INTEGER (int)        default value 2
-N_DOF                       INTEGER (int)        default value 0 (**)
-TASKS_PER_POINT             INTEGER (int)        default value 0 (**)
-REAL_AXIS                   LOGICAL (bool)       default value true (**)
+N_DOF                       INTEGER (int)        default value 0 
+TASKS_PER_POINT             INTEGER (int)        default value 1 
+CORES_PER_NODE              INTEGER (int)        default value 1 
 COLZERO_THRESHOLD           REAL    (double)     default value 1.0E-12
 EPS_LIMIT                   REAL    (double)     default value 1.0E-6
 EPS_DECAY                   REAL    (double)     default value 1.0E-6
-EPS_SINGULARITY_CURVATURES  REAL    (double)     default value 1.0E-3
-EPS_MU                      REAL    (double)     default value 0.0 (**)
-EPS_EIGVAL_DEGEN            REAL    (double)     default value 0.0 (**)
-ENERGY_INTERVAL             REAL    (double)     default value 0.0 (**)
-MIN_INTERVAL                REAL    (double)     default value 0.0 (**)
-TEMPERATURE                 REAL    (double)     default value 300.0 (**)
+EPS_SINGULARITY_CURVATURES  REAL    (double)     default value 1.0E-12
+EPS_MU                      REAL    (double)     default value 1.0E-4
+EPS_EIGVAL_DEGEN            REAL    (double)     default value 0.0
+ENERGY_INTERVAL             REAL    (double)     default value 1.0E-2
+MIN_INTERVAL                REAL    (double)     default value 1.0E-4
+TEMPERATURE                 REAL    (double)     default value 300.0
 
 (*)  TO DO: keywords to be defined as constants to avoid confusion  
-(**) TO DO: default values to be changed
 
