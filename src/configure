@@ -1797,11 +1797,11 @@ fi
 
 
 if test "x$with_pardiso" == "xyes"; then
-    { $as_echo "$as_me:$LINENO: Pardiso enabled." >&5
+   { $as_echo "$as_me:$LINENO: Pardiso enabled." >&5
 $as_echo "$as_me: Pardiso enabled." >&6;}
-    pardiso=Pardiso.C
+#   AC_SUBST(pardiso, Pardiso.C)
 
-    pardiso_so='$(PARDISO_SO)'
+   pardiso_so='$(PARDISO)'
 
 #elif test "$with_pardiso" != ""
 #then
@@ -1810,7 +1810,9 @@ $as_echo "$as_me: Pardiso enabled." >&6;}
 else
    { $as_echo "$as_me:$LINENO: No Pardiso." >&5
 $as_echo "$as_me: No Pardiso." >&6;}
+   pardiso=Pardiso.C
 
+#   AC_SUBST(pardiso,)
 
 fi
 

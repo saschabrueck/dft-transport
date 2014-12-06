@@ -16,11 +16,11 @@ Energyvector::~Energyvector()
 {
 }
 
-int Energyvector::Execute(TCSR<double> *Overlap,TCSR<double> *KohnSham,int n_mu,double* muvec, int* contactvec,double* electronchargeperatom,double* derivativechargeperatom,double *Vatom,int n_atoms,int* atom_of_bf,c_transport_type transport_params)
+int Energyvector::Execute(TCSR<double> *Overlap,TCSR<double> *KohnSham,int n_mu,double* muvec, int* contactvec,double* electronchargeperatom,double* derivativechargeperatom,double *Vatom,int n_atoms,int* atom_of_bf,transport_parameters *transport_params)
 {
     double sabtime;
-    if ( Overlap->size_tot%transport_params.n_cells || transport_params.bandwidth<1 ) return (LOGCERR, EXIT_FAILURE);
-    int tasks_per_point=transport_params.tasks_per_point;
+    if ( Overlap->size_tot%transport_params->n_cells || transport_params->bandwidth<1 ) return (LOGCERR, EXIT_FAILURE);
+    int tasks_per_point=transport_params->tasks_per_point;
     if (!iam) cout << "Distributing matrix over " << tasks_per_point << " tasks" << endl;
     if ( nprocs%tasks_per_point ) {
         if (!iam) cout << "Choose number of tasks per energy point as a divider of total number of tasks" << endl;
@@ -80,11 +80,11 @@ int Energyvector::Execute(TCSR<double> *Overlap,TCSR<double> *KohnSham,int n_mu,
     std::vector<double> dos_profile(energyvector.size(),0.0);
     double *eperatom = new double[n_atoms]();
     double *dperatom = new double[n_atoms]();
-    int n_cells=transport_params.n_cells;
+    int n_cells=transport_params->n_cells;
     int ndof=Overlap->size_tot/n_cells;
     TCSR<double> *OverlapCollectSave = new TCSR<double>(OverlapCollect);
-    KohnShamCollect->settozeropbc(transport_params.bandwidth,ndof);
-    OverlapCollect->settozeropbc(transport_params.bandwidth,ndof);
+    KohnShamCollect->settozeropbc(transport_params->bandwidth,ndof);
+    OverlapCollect->settozeropbc(transport_params->bandwidth,ndof);
     TCSR<double> *OverlapCollectPBC = new TCSR<double>(1.0,OverlapCollectSave,-1.0,OverlapCollect);
     delete OverlapCollectSave;
     int matrix_id, n_mat_comm;
@@ -161,10 +161,10 @@ int Energyvector::Execute(TCSR<double> *Overlap,TCSR<double> *KohnSham,int n_mu,
     return 0;
 }
 
-int Energyvector::determine_energyvector(std::vector<CPX> &energyvector,std::vector<CPX> &stepvector,std::vector<transport_methods::transport_method> &methodvector,std::vector< std::vector<int> > &propagating_sizes,TCSR<double> *KohnSham,TCSR<double> *Overlap,double *muvec,int *contactvec,c_transport_type transport_params,int n_mu)
+int Energyvector::determine_energyvector(std::vector<CPX> &energyvector,std::vector<CPX> &stepvector,std::vector<transport_methods::transport_method> &methodvector,std::vector< std::vector<int> > &propagating_sizes,TCSR<double> *KohnSham,TCSR<double> *Overlap,double *muvec,int *contactvec,transport_parameters *transport_params,int n_mu)
 {
     double sabtime=get_time(0.0);
-    double Temp=transport_params.temperature;
+    double Temp=transport_params->temperature;
     Singularities singularities(transport_params,n_mu);
     if ( singularities.Execute(KohnSham,Overlap,contactvec) ) return (LOGCERR, EXIT_FAILURE);
     if (!iam) cout << "TIME FOR SINGULARITIES " << get_time(sabtime) << endl;
@@ -178,9 +178,9 @@ int Energyvector::determine_energyvector(std::vector<CPX> &energyvector,std::vec
     double energy_vb=*max_element(singularities.energies_vb.begin(),singularities.energies_vb.end());
     double energy_cb=*min_element(singularities.energies_cb.begin(),singularities.energies_cb.end());
 
-    if (!transport_params.n_abscissae) {
+    if (!transport_params->n_abscissae) {
         add_real_axis_energies(energy_cb,nonequi_end,energyvector,stepvector,methodvector,singularities.energies_extremum,transport_params,n_mu);
-    } else if (transport_params.method==2) {
+    } else if (transport_params->method==2) {
         add_cmpx_cont_energies(singularities.energy_gs,singularities.energy_gs,muvec_min,energyvector,stepvector,methodvector,transport_params,n_mu); //FOR PEX ONLY MU AND EM
     } else {
 // all localized states with lowest fermi level corresponding to occupation of localized states in bandgap
@@ -234,7 +234,7 @@ int Energyvector::determine_energyvector(std::vector<CPX> &energyvector,std::vec
     return 0;
 }
 
-void Energyvector::add_real_axis_energies(double nonequi_start,double nonequi_end,std::vector<CPX> &energyvector,std::vector<CPX> &stepvector,std::vector<transport_methods::transport_method> &methodvector,const std::vector< std::vector<double> > &energies_extremum,c_transport_type transport_params,int n_mu)
+void Energyvector::add_real_axis_energies(double nonequi_start,double nonequi_end,std::vector<CPX> &energyvector,std::vector<CPX> &stepvector,std::vector<transport_methods::transport_method> &methodvector,const std::vector< std::vector<double> > &energies_extremum,transport_parameters *transport_params,int n_mu)
 {
     std::vector<double> energylist;
     int n_energies;
@@ -251,13 +251,13 @@ void Energyvector::add_real_axis_energies(double nonequi_start,double nonequi_en
     MPI_Bcast(&n_energies,1,MPI_INT,0,MPI_COMM_WORLD);
     energylist.resize(n_energies);
     MPI_Bcast(&energylist[0],n_energies,MPI_DOUBLE,0,MPI_COMM_WORLD);
-    double smallest_energy_distance=transport_params.min_interval;
+    double smallest_energy_distance=transport_params->min_interval;
     if (!iam) cout<<"Smallest enery distance "<<smallest_energy_distance<<endl;
-    if (!iam) cout<<"Max number of points per small interval "<<transport_params.num_interval<<endl;
-    if (!iam) cout<<"Average distance for big intervals "<<transport_params.energy_interval<<endl;
+    if (!iam) cout<<"Max number of points per small interval "<<transport_params->num_interval<<endl;
+    if (!iam) cout<<"Average distance for big intervals "<<transport_params->energy_interval<<endl;
     if (!iam) cout<<"Singularities in range "<< n_energies-2 << endl;
     for (uint i_energies=1;i_energies<energylist.size();i_energies++) {
-        int num_points_per_interval=max(transport_params.num_interval,int(ceil(abs(energylist[i_energies]-energylist[i_energies-1])/transport_params.energy_interval)));
+        int num_points_per_interval=max(transport_params->num_interval,int(ceil(abs(energylist[i_energies]-energylist[i_energies-1])/transport_params->energy_interval)));
         while ((energylist[i_energies]-energylist[i_energies-1])/2.0*(1.0-cos(M_PI/(2.0*num_points_per_interval)))<smallest_energy_distance && num_points_per_interval>1)
 //        while ((energylist[i_energies]-energylist[i_energies-1])/2.0*(1.0-tanh(M_PI/2.0*sinh(3.0)))<smallest_energy_distance && num_points_per_interval>1)
             --num_points_per_interval;
@@ -270,13 +270,13 @@ void Energyvector::add_real_axis_energies(double nonequi_start,double nonequi_en
     }
 }
 
-void Energyvector::add_cmpx_cont_energies(double start,double end,double mu,std::vector<CPX> &energyvector,std::vector<CPX> &stepvector,std::vector<transport_methods::transport_method> &methodvector,c_transport_type transport_params,int n_mu)
+void Energyvector::add_cmpx_cont_energies(double start,double end,double mu,std::vector<CPX> &energyvector,std::vector<CPX> &stepvector,std::vector<transport_methods::transport_method> &methodvector,transport_parameters *transport_params,int n_mu)
 {
-    double Temp=transport_params.temperature;
+    double Temp=transport_params->temperature;
     enum choose_method {do_pexsi,do_pole_summation,do_contour,do_line};
     choose_method method=do_pexsi;
     if (method==do_pexsi) {
-        int num_points_on_contour=transport_params.n_abscissae;
+        int num_points_on_contour=transport_params->n_abscissae;
         energyvector.resize(num_points_on_contour);
         stepvector.resize(num_points_on_contour);
         double EM=abs(mu-start); // Max|E-mu| for all Eigenvalues E of 
@@ -311,11 +311,11 @@ void Energyvector::add_cmpx_cont_energies(double start,double end,double mu,std:
             stepvector.push_back(CPX(2.0*M_PI*K_BOLTZMANN*Temp_i,0.0)*(fermi(zval,CPX(1.0,0.0)*mu,Temp,0)-fermi(zval,CPX(1.0,0.0)*mu_r,Temp_r,0)));
         }
     } else if (method==do_contour) {
-        Quadrature quadrature(quadrature_types::CCGL,start,end,transport_params.n_abscissae);
+        Quadrature quadrature(quadrature_types::CCGL,start,end,transport_params->n_abscissae);
         energyvector.insert(energyvector.end(),quadrature.abscissae.begin(),quadrature.abscissae.end());
         stepvector.insert(stepvector.end(),quadrature.weights.begin(),quadrature.weights.end());
     } else if (method==do_line) {
-        Quadrature quadrature(quadrature_types::MR,start,end,transport_params.n_abscissae);
+        Quadrature quadrature(quadrature_types::MR,start,end,transport_params->n_abscissae);
         energyvector.insert(energyvector.end(),quadrature.abscissae.begin(),quadrature.abscissae.end());
         stepvector.insert(stepvector.end(),quadrature.weights.begin(),quadrature.weights.end());
     }

@@ -2,13 +2,13 @@
 #include "p_eig.H"
 #include "array_tools.H"
 
-int diagscalapack(TCSR<double> *Overlap,TCSR<double> *KohnSham,c_transport_type parameters_transport)
+int diagscalapack(TCSR<double> *Overlap,TCSR<double> *KohnSham,transport_parameters *parameters_transport)
 {
     int iam, nprocs;
     MPI_Comm_size(MPI_COMM_WORLD,&nprocs);
     MPI_Comm_rank(MPI_COMM_WORLD,&iam);
 
-    int nocc=parameters_transport.n_occ;
+    int nocc=parameters_transport->n_occ;
 
     double sabtime;
     double *OVfull, *KSfull;

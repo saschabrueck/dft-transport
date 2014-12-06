@@ -11,24 +11,27 @@ INP_DIR = ../inputfiles/files
 LDFLAGS = $(LFLAGS) $(DFLAGS)
 
 MAIN = main.cpp
-SOURCES_CPP = cDBCSR_tools.cpp c_scf.cpp
-SOURCES_C = InputParameter.C WireGenerator.C FEMGrid.C Poisson.C Utilities.C CSR.C DiagScaLapack.C Density.C EnergyVector.C Quadrature.C KPointIntegration.C GetSingularities.C GetSigma.C rGF.C tmprGF.C SemiSelfConsistent.C AtomStrain.C Macopt.C Material.C Fermi.C Arpack.C Spike.C SpikeSolver.C pole.cpp @pardiso@
+SOURCES_CPP = pole.cpp
+EXCLUDE_C_LIST = @pardiso@ 
+SOURCES_C = $(shell find . $(shell printf "! -name %s " $(EXCLUDE_C_LIST)) -name "*.C")
 SOURCES_c = y.tab.c lex.yy.c
 OBJECTS = $(SOURCES_CPP:.cpp=.o) $(SOURCES_C:.C=.o) $(SOURCES_c:.c=.o)
-EXECUTABLE = interface
+EXECUTABLE = transport
 
-
+# *********************************************************************
 MYMAIN = mymain.cc
 MYEXECUTABLE = mymain
 SOURCES_CPP_MYMAIN =
-SOURCES_C_MYMAIN = WireGenerator.C FEMGrid.C Poisson.C Utilities.C CSR.C DiagScaLapack.C Density.C EnergyVector.C Quadrature.C KPointIntegration.C GetSingularities.C GetSigma.C rGF.C tmprGF.C AtomStrain.C Macopt.C Material.C Fermi.C Arpack.C Spike.C SpikeSolver.C @pardiso@
+EXCLUDE_C_LIST_MYMAIN = @pardiso@ InputParameter.C SemiSelfConsistent.C 
+SOURCES_C_MYMAIN = $(shell find . $(shell printf "! -name %s " $(EXCLUDE_C_LIST_MYMAIN)) -name "*.C")
 SOURCES_c_MYMAIN =
 OBJECTS_MYMAIN = $(SOURCES_CPP_MYMAIN:.cpp=.o) $(SOURCES_C_MYMAIN:.C=.o) $(SOURCES_c_MYMAIN:.c=.o)
+# *********************************************************************
 
 all: $(SOURCES_CPP) $(SOURCES_C) $(SOURCES_c) $(EXECUTABLE)
 
 $(EXECUTABLE): $(MAIN:.cpp=.o) $(OBJECTS)
-	$(CPP) $(CXXFLAGS) $(INCLUDES) -o $@ $(MAIN:.cpp=.o) $(OBJECTS) $(LINLIN) @pardiso_so@ $(LDFLAGS) $(LIBS)
+	$(CPP) $(CXXFLAGS) $(INCLUDES) -o $@ $(MAIN:.cpp=.o) $(OBJECTS) @pardiso_so@ $(LDFLAGS) $(LIBS)
 
 .cpp.o:
 	$(CPP) $(CXXFLAGS) $(INCLUDES) $(LDFLAGS) -c $< -o $@
@@ -48,8 +51,10 @@ y.tab.c: parser.y
 lex.yy.c: parser.lex y.tab.c
 	$(LEX) $<
 
+# *********************************************************************
 $(MYEXECUTABLE): $(MYMAIN:.cc=.o) $(OBJECTS_MYMAIN)
 	$(CPP) $(CXXFLAGS) $(INCLUDES) -o $@ $(MYMAIN:.cc=.o) $(OBJECTS_MYMAIN) @pardiso_so@ $(LINLIN) $(LDFLAGS) $(LIBS)
+# *********************************************************************
 
 .PHONY: clean
 clean:

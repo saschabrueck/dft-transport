@@ -1,10 +1,10 @@
 #include "KPointIntegration.H"
 
-int kpointintegration(TCSR<double> *Overlap,TCSR<double> *KohnSham,c_transport_type trans_params)
+int kpointintegration(TCSR<double> *Overlap,TCSR<double> *KohnSham,transport_parameters *trans_params)
 {
-    int bw=trans_params.bandwidth;
-    int ncells=trans_params.n_cells;
-    int nocc=trans_params.n_occ;
+    int bw=trans_params->bandwidth;
+    int ncells=trans_params->n_cells;
+    int nocc=trans_params->n_occ;
 
     int size=Overlap->size_tot;
     int ndof=size/ncells;

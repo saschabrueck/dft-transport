@@ -426,19 +426,30 @@ struct VOLTAGE
     double Tmax; 	
 };
 
-extern "C"
+struct transport_parameters
 {
-    typedef struct{
-           int n_occ, n_atoms;
-           double evoltfactor;
-           int method, bandwidth, n_cells, n_abscissae,
-               n_kpoint, num_interval, num_contacts, ndof, tasks_per_point;
-           bool real_axis;
-           double  colzero_threshold,
-                   eps_limit, eps_decay, eps_singularity_curvatures,
-                   eps_mu, eps_eigval_degen, energy_interval, min_interval,
-                   temperature; 
-           } c_transport_type;
+    int    n_occ;
+    int    n_atoms;
+    double evoltfactor;
+    int    method;
+    int    bandwidth;
+    int    n_cells;
+    int    n_abscissae;
+    int    n_kpoint;
+    int    num_interval;
+    int    num_contacts;
+    int    ndof;
+    int    tasks_per_point;
+    int    cores_per_node;
+    double colzero_threshold;
+    double eps_limit;
+    double eps_decay;
+    double eps_singularity_curvatures;
+    double eps_mu;
+    double eps_eigval_degen;
+    double energy_interval;
+    double min_interval;
+    double temperature;
 };
 
 namespace transport_methods {

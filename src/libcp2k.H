@@ -1,14 +1,60 @@
-/**  \brief CP2K library routines 
+/**  
+ *   \brief CP2K library types and routines 
  *   \author Mohammad Hossein Bani-Hashemian
  */
-
 #ifndef __libcp2k_H
 #define __libcp2k_H
 
-#include "c_scf.H"
-
 extern "C" {
 
+/* transport parameters read from a CP2K input file. */                               
+/* DO NOT change the ORDERING or the NAMES           */
+    typedef struct{
+           int    n_occ;
+           int    n_atoms;
+           double evoltfactor;
+           int    method;
+           int    bandwidth;
+           int    n_cells;
+           int    n_abscissae;
+           int    n_kpoint;
+           int    num_interval;
+           int    num_contacts;
+           int    ndof;
+           int    tasks_per_point;
+           int    cores_per_node;
+           double colzero_threshold;
+           double eps_limit;
+           double eps_decay;
+           double eps_singularity_curvatures;
+           double eps_mu;
+           double eps_eigval_degen;
+           double energy_interval;
+           double min_interval;
+           double temperature;
+           } cp2k_transport_parameters;
+
+/* CP2K's C-interoperable CSR matrix                 */
+/* DO NOT change the ORDERING or the NAMES           */
+   typedef struct{
+           int     nrows_total;
+           int     ncols_total;
+           int     nze_total;
+           int     nze_local;
+           int     nrows_local;
+           int     data_type;
+           int     first_row;
+           int*    rowptr_local;
+           int*    colind_local;
+           int*    nzerow_local;
+           double* nzvals_local;
+           } cp2k_csr_interop_type;
+
+/* funtion pointer type pointing to a C routine that takes the S and H matrices as input and outputs a P matrix */
+   typedef void(*ptr2function) (cp2k_transport_parameters, cp2k_csr_interop_type, cp2k_csr_interop_type, cp2k_csr_interop_type *);
+   void c_scf_method(cp2k_transport_parameters cp2k_transport_params, cp2k_csr_interop_type S, cp2k_csr_interop_type KS, cp2k_csr_interop_type * P);
+
+/* routines for initializing and finalizing a CP2K run and setting up and destroying CP2K environments */
    void cp_c_init_cp2k(int *init_mpi, int *ierr);
    void cp_c_finalize_cp2k(int *finalize_mpi, int *ierr);
    void cp_c_create_fenv(int *new_env_id, char *input_file_path, char *output_file_path, int *ierr);
@@ -26,6 +72,7 @@ extern "C" {
    void cp_c_run_input(char *input_file_path, char *output_file_path, int *ierr);
    void cp_c_run_input_comm(char *input_file_path, char *output_file_path, int *mpi_comm, int *ierr);
 
+/* routine that gets a C function pointer and passes it to CP2K */
    void cp_c_ext_method_set_ptr(int *f_env_id, ptr2function, int *ierr);
 
 }

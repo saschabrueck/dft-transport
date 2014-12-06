@@ -1,41 +1,41 @@
 #include "SemiSelfConsistent.H"
  
-int semiselfconsistent(TCSR<double> *Overlap,TCSR<double> *KohnSham,c_transport_type transport_params)
+int semiselfconsistent(TCSR<double> *Overlap,TCSR<double> *KohnSham,transport_parameters *transport_params)
 {
     int iam;MPI_Comm_rank(MPI_COMM_WORLD,&iam);
     int procs;MPI_Comm_size(MPI_COMM_WORLD,&procs);
 
-    c_dscal(KohnSham->n_nonzeros,transport_params.evoltfactor,KohnSham->nnz,1);
+    c_dscal(KohnSham->n_nonzeros,transport_params->evoltfactor,KohnSham->nnz,1);
 
-    if (transport_params.method==0) {
+    if (transport_params->method==0) {
         TCSR<double> *KohnShamCollect = new TCSR<double>(KohnSham,MPI_COMM_WORLD);
         TCSR<double> *OverlapCollect = new TCSR<double>(Overlap,MPI_COMM_WORLD);
         if (!iam) {
             KohnShamCollect->write_CSR("KohnSham");
             OverlapCollect->write_CSR("Overlap");
             ofstream paramoutfile("TransportParams");
-            paramoutfile << transport_params.method << endl;
-            paramoutfile << transport_params.bandwidth << endl;
-            paramoutfile << transport_params.n_cells << endl;
-            paramoutfile << transport_params.n_occ << endl;
-            paramoutfile << transport_params.n_atoms << endl;
-            paramoutfile << transport_params.n_abscissae << endl;
-            paramoutfile << transport_params.n_kpoint << endl;
-            paramoutfile << transport_params.num_interval << endl;
-            paramoutfile << transport_params.num_contacts << endl;
-            paramoutfile << transport_params.ndof << endl;
-            paramoutfile << transport_params.tasks_per_point << endl;
-            paramoutfile << transport_params.real_axis << endl;
-            paramoutfile << transport_params.evoltfactor << endl;
-            paramoutfile << transport_params.colzero_threshold << endl;
-            paramoutfile << transport_params.eps_limit << endl;
-            paramoutfile << transport_params.eps_decay << endl;
-            paramoutfile << transport_params.eps_singularity_curvatures << endl;
-            paramoutfile << transport_params.eps_mu << endl;
-            paramoutfile << transport_params.eps_eigval_degen << endl;
-            paramoutfile << transport_params.energy_interval << endl;
-            paramoutfile << transport_params.min_interval << endl;
-            paramoutfile << transport_params.temperature << endl;
+            paramoutfile << transport_params->method << endl;
+            paramoutfile << transport_params->bandwidth << endl;
+            paramoutfile << transport_params->n_cells << endl;
+            paramoutfile << transport_params->n_occ << endl;
+            paramoutfile << transport_params->n_atoms << endl;
+            paramoutfile << transport_params->n_abscissae << endl;
+            paramoutfile << transport_params->n_kpoint << endl;
+            paramoutfile << transport_params->num_interval << endl;
+            paramoutfile << transport_params->num_contacts << endl;
+            paramoutfile << transport_params->ndof << endl;
+            paramoutfile << transport_params->tasks_per_point << endl;
+            paramoutfile << transport_params->cores_per_node << endl;
+            paramoutfile << transport_params->evoltfactor << endl;
+            paramoutfile << transport_params->colzero_threshold << endl;
+            paramoutfile << transport_params->eps_limit << endl;
+            paramoutfile << transport_params->eps_decay << endl;
+            paramoutfile << transport_params->eps_singularity_curvatures << endl;
+            paramoutfile << transport_params->eps_mu << endl;
+            paramoutfile << transport_params->eps_eigval_degen << endl;
+            paramoutfile << transport_params->energy_interval << endl;
+            paramoutfile << transport_params->min_interval << endl;
+            paramoutfile << transport_params->temperature << endl;
             paramoutfile.close();
         }
         MPI_Barrier(MPI_COMM_WORLD);
@@ -43,8 +43,8 @@ int semiselfconsistent(TCSR<double> *Overlap,TCSR<double> *KohnSham,c_transport_
     }
 
     int do_semiself=0;
-    if (transport_params.method==3) do_semiself=1;
-    int NAtom_work=transport_params.n_atoms;
+    if (transport_params->method==3) do_semiself=1;
+    int NAtom_work=transport_params->n_atoms;
     if (do_semiself) NAtom_work=FEM->NAtom;
 
 if (!iam) cout << "N_ATOMS " << NAtom_work << endl;
@@ -84,20 +84,20 @@ rhofile.close();
         return 0;
     }
 
-    double Temp=transport_params.temperature;
+    double Temp=transport_params->temperature;
     double *Vnew = new double[FEM->NGrid]();
     double *Vold = new double[FEM->NGrid];
     double *doping_atom = new double[FEM->NAtom];
     for (int ia=0;ia<FEM->NAtom;ia++) {
         doping_atom[ia]=FEM->doping[FEM->real_at_index[ia]];
     }
-    double *doping_cell = new double[transport_params.n_cells]();
+    double *doping_cell = new double[transport_params->n_cells]();
     for (int ia=0;ia<FEM->NAtom;ia++) {
-        doping_cell[ia/(FEM->NAtom/transport_params.n_cells)]+=doping_atom[ia];
+        doping_cell[ia/(FEM->NAtom/transport_params->n_cells)]+=doping_atom[ia];
     }
     double *dopingvec = new double[n_mu];
     dopingvec[0]=doping_cell[0];
-    dopingvec[1]=doping_cell[transport_params.n_cells-1];
+    dopingvec[1]=doping_cell[transport_params->n_cells-1];
 
 if (!iam) cout << "DOPING " << dopingvec[0] << " " << dopingvec[1] << endl;
 
@@ -122,7 +122,7 @@ if (!iam) cout << "DOPING " << dopingvec[0] << " " << dopingvec[1] << endl;
 if (!iam) cout << "FERMI LEVEL LEFT " << muvec[0] << " RIGHT " << muvec[1] << endl;
 if (!iam) cout << "GATE POTENTIAL " << Vg << endl;
 
-    std::vector<double> nuclearchargeperatom(FEM->NAtom,-(2.0*transport_params.n_occ)/FEM->NAtom);
+    std::vector<double> nuclearchargeperatom(FEM->NAtom,-(2.0*transport_params->n_occ)/FEM->NAtom);
 
     double Ls=nanowire->Ls;
     double Lc=nanowire->Lc;
@@ -228,7 +228,7 @@ rgfile.close();
 }
 //*/
 
-        if (transport_params.n_abscissae) c_daxpy(FEM->NAtom,1.0,&nuclearchargeperatom[0],1,rho_atom,1);
+        if (transport_params->n_abscissae) c_daxpy(FEM->NAtom,1.0,&nuclearchargeperatom[0],1,rho_atom,1);
 
 /*
 double offsetminval=*min_element(rho_atom,rho_atom+FEM->NAtom);
