@@ -1,5 +1,9 @@
 #include "libcp2k_tools.H"
 
+/**
+ *   \brief initializes a transport_parameters type from a cp2k_transport_parameters type
+ *   \author Mohammad Hossein Bani-Hashemian
+ */
 void intit_transport_parameters_from_cp2k(cp2k_transport_parameters& cp2k_transport_params, transport_parameters* transport_params)
 {
 

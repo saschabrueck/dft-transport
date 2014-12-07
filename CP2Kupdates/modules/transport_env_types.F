@@ -93,9 +93,9 @@ CONTAINS
 
     CPPostcondition(ASSOCIATED(transport_env),cp_failure_level,routineP,error,failure)
 
-    CALL cp_csr_destroy(transport_env%p_matrix, error)
-    CALL cp_csr_destroy(transport_env%ks_matrix, error)
     CALL cp_csr_destroy(transport_env%s_matrix, error)
+    CALL cp_csr_destroy(transport_env%ks_matrix, error)
+    CALL cp_csr_destroy(transport_env%p_matrix, error)
     CALL cp_dbcsr_release(transport_env%template_matrix_sym, error)
     CALL cp_dbcsr_release(transport_env%template_matrix_nosym, error)
 
