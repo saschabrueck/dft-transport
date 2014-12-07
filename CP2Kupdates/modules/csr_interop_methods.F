@@ -16,14 +16,15 @@ MODULE csr_interop_methods
                                              cp_convert_dbcsr_to_csr,&
                                              cp_dbcsr_type,&
                                              csr_type
-  USE csr_interop_types,               ONLY: cp2k_csr_interop_type
+  USE csr_interop_types,               ONLY: cp2k_csr_interop_type,&
+                                             csr_interop_matrix_get_info
   USE kinds,                           ONLY: dp
   USE message_passing,                 ONLY: mp_allgather
   USE timings,                         ONLY: timeset,&
                                              timestop
 
-  USE, INTRINSIC :: ISO_C_BINDING,     ONLY: C_ASSOCIATED, C_F_POINTER, C_LOC, &
-                                             C_PTR, C_DOUBLE, C_INT, C_NULL_PTR
+  USE, INTRINSIC :: ISO_C_BINDING,     ONLY: C_ASSOCIATED, C_LOC, C_PTR, &
+                                             C_DOUBLE, C_INT, C_NULL_PTR
 
 #include "./common/cp_common_uses.f90"
 
@@ -54,7 +55,7 @@ CONTAINS
     CHARACTER(LEN=*), PARAMETER :: routineN = 'convert_dbcsr_to_csr_interop', &
       routineP = moduleN//':'//routineN
 
-    INTEGER                                  :: handle, k, mepos, num_pe, mp_group
+    INTEGER                                  :: handle, mepos, num_pe, mp_group
     INTEGER, ALLOCATABLE, DIMENSION(:)       :: nrows_local_all, first_row_all
     INTEGER(C_INT), DIMENSION(:), POINTER    :: colind_local, rowptr_local, nzerow_local
     REAL(C_DOUBLE), DIMENSION(:), POINTER    :: nzvals_local
@@ -71,12 +72,9 @@ CONTAINS
     CALL cp_convert_dbcsr_to_csr(dbcsr_mat, csr_mat, error=error)
 
 !> csr to csr_interop
-    ALLOCATE(nzerow_local(csr_mat%nrows_local))
-    DO k=1,csr_mat%nrows_local
-      nzerow_local(k) = csr_mat%rowptr_local(k+1) - csr_mat%rowptr_local(k)
-    ENDDO
     rowptr_local => csr_mat%rowptr_local
     colind_local => csr_mat%colind_local
+    nzerow_local => csr_mat%nzerow_local
     nzvals_local => csr_mat%nzval_local%r_dp !> support real double percision for now
 
     IF (.NOT. C_ASSOCIATED(csr_interop_mat%rowptr_local)) THEN 
@@ -127,11 +125,9 @@ CONTAINS
     csr_interop_mat%nrows_local = csr_mat%nrows_local
     csr_interop_mat%data_type = csr_mat%nzval_local%data_type
 
-!    DEALLOCATE(nzerow_local)
     CALL timestop(handle)
 
     CONTAINS
-      
 ! *****************************************************************************
 !> \brief cumulative sum of a 1d array of integers
 !> \param[in]  arr    input array
@@ -151,63 +147,6 @@ CONTAINS
     END SUBROUTINE cumsum_i
 
   END SUBROUTINE convert_dbcsr_to_csr_interop
-
-! *****************************************************************************
-!> \brief gets the fields of a C-interoperable CSR matrix
-!> \param[in] csr_interop_mat C-interoperable CSR matrix
-!> \param[out] nrows_total     total number of rows
-!> \param[out] ncols_total     total number of columns
-!> \param[out] nze_local       number of local nonzero elements
-!> \param[out] nze_total       total number of nonzero elements
-!> \param[out] nrows_local     number of local rows
-!> \param[out] data_type       data type
-!> \param[out] first_row       index of the first row (C indexing)
-!> \param[out] rowptr_local    row pointer (local - Fortran indexing)
-!> \param[out] colind_local    column index (local - Fortran indexing)
-!> \param[out] nzerow_local    number of nunzeros per row (index-i, local - Fortran indexing)
-!> \param[out] nzvals_local    nonzero elements (local)
-!> \param[inout] error           CP2K error
-!> \author Mohammad Hossein Bani-Hashemian
-! *****************************************************************************
-  SUBROUTINE csr_interop_matrix_get_info(csr_interop_mat, &
-                        nrows_total, ncols_total, nze_local, nze_total, nrows_local, data_type, &
-                        first_row, rowptr_local, colind_local, nzerow_local, nzvals_local, error)
-
-    TYPE(cp2k_csr_interop_type), INTENT(IN)  :: csr_interop_mat
-    INTEGER, INTENT(OUT), OPTIONAL           :: nrows_total, ncols_total, &
-                                                nze_local, nze_total, &
-                                                nrows_local, data_type, &
-                                                first_row
-    INTEGER, DIMENSION(:), INTENT(OUT), &
-      OPTIONAL, POINTER                      :: rowptr_local, colind_local, &
-                                                nzerow_local
-    REAL(dp), DIMENSION(:), INTENT(OUT), &
-      OPTIONAL, POINTER                      :: nzvals_local
-    TYPE(cp_error_type), INTENT(INOUT)       :: error
-
-    CHARACTER(LEN=*), PARAMETER :: routineN = 'csr_interop_matrix_get_info', &
-      routineP = moduleN//':'//routineN
-
-    INTEGER                                  :: handle
-
-    CALL timeset(routineN,handle)
-
-    IF (PRESENT(nrows_total)) nrows_total = csr_interop_mat%nrows_total
-    IF (PRESENT(ncols_total)) ncols_total = csr_interop_mat%ncols_total
-    IF (PRESENT(nze_local)) nze_local = csr_interop_mat%nze_local 
-    IF (PRESENT(nze_total)) nze_total = csr_interop_mat%nze_total
-    IF (PRESENT(nrows_local)) nrows_local = csr_interop_mat%nrows_local
-    IF (PRESENT(data_type)) data_type = csr_interop_mat%data_type 
-    IF (PRESENT(first_row)) first_row = csr_interop_mat%first_row
-
-    IF (PRESENT(rowptr_local)) CALL C_F_POINTER(csr_interop_mat%rowptr_local, rowptr_local, [nrows_local+1])
-    IF (PRESENT(colind_local)) CALL C_F_POINTER(csr_interop_mat%colind_local, colind_local, [nze_local])
-    IF (PRESENT(nzerow_local)) CALL C_F_POINTER(csr_interop_mat%nzerow_local, nzerow_local, [nrows_local])
-    IF (PRESENT(nzvals_local)) CALL C_F_POINTER(csr_interop_mat%nzvals_local, nzvals_local, [nze_local])
-
-    CALL timestop(handle)
-
-  END SUBROUTINE csr_interop_matrix_get_info 
 
 ! *****************************************************************************
 !> \brief converts a C-interoperable CSR matrix to a DBCSR matrix
@@ -231,7 +170,8 @@ CONTAINS
                                                 ncols_total, nrows_local, &
                                                 nrows_total, nze_local, &
                                                 nze_total
-    INTEGER, DIMENSION(:), POINTER           :: colind_local, rowptr_local
+    INTEGER, DIMENSION(:), POINTER           :: colind_local, nzerow_local, &
+                                                rowptr_local
     REAL(dp), DIMENSION(:), POINTER          :: nzvals_local
 
     CALL timeset(routineN,handle)
@@ -240,7 +180,8 @@ CONTAINS
     CALL csr_interop_matrix_get_info(csr_interop_mat, &
                    nrows_total = nrows_total, ncols_total = ncols_total, nze_local = nze_local, &
                    nze_total = nze_total, nrows_local = nrows_local, data_type = data_type,&
-                   rowptr_local = rowptr_local, colind_local = colind_local, nzvals_local = nzvals_local, &
+                   rowptr_local = rowptr_local, colind_local = colind_local, &
+                   nzerow_local = nzerow_local, nzvals_local = nzvals_local, &
                    error=error)
 
     csr_mat%nrows_total = nrows_total
@@ -250,12 +191,16 @@ CONTAINS
     csr_mat%nrows_local = nrows_local
     csr_mat%nzval_local%data_type = data_type
 
-    csr_mat%rowptr_local => rowptr_local
-    csr_mat%colind_local => colind_local
-    csr_mat%nzval_local%r_dp => nzvals_local
+    csr_mat%rowptr_local = rowptr_local
+    csr_mat%colind_local = colind_local
+    csr_mat%nzerow_local = nzerow_local
+    csr_mat%nzval_local%r_dp = nzvals_local
 
 !> csr to dbcsr
     CALL cp_convert_csr_to_dbcsr(dbcsr_mat, csr_mat, error=error)
+
+!> release memory allocated for csr_interop_mat
+    DEALLOCATE(rowptr_local, colind_local, nzerow_local, nzvals_local)
 
     CALL timestop(handle)
 

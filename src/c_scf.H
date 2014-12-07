@@ -39,14 +39,9 @@ void cp2kCSR_to_CSR (cp2k_csr_interop_type& cp2kCSRmat, TCSR<T>* CSRmat)
    CSRmat->size = N;
    CSRmat->size_tot = cp2kCSRmat.nrows_total;
    CSRmat->n_nonzeros = n_nnz;
-//   CSRmat->type = 3;
+   CSRmat->type = 3;
    CSRmat->findx = 1;
    CSRmat->first_row = cp2kCSRmat.first_row;
-
-   CSRmat->nnz = new T[n_nnz];
-   CSRmat->index_i = new int[N];
-   CSRmat->index_j = new int[n_nnz];
-   CSRmat->edge_i = new int[N+1];
 
    CSRmat->set_nnz(n_nnz, cp2kCSRmat.nzvals_local);
    CSRmat->set_index_i(N, cp2kCSRmat.nzerow_local);
@@ -61,17 +56,15 @@ void cp2kCSR_to_CSR (cp2k_csr_interop_type& cp2kCSRmat, TCSR<T>* CSRmat)
 template <class T>
 void CSR_to_cp2kCSR (TCSR<T>* CSRmat, cp2k_csr_interop_type& cp2kCSRmat)
 {
-
    int rank;
    MPI::Intercomm Comm;
-
    Comm = MPI::COMM_WORLD;
    rank = Comm.Get_rank();
 
-   cp2kCSRmat.rowptr_local = new int[CSRmat->size+1];
-   cp2kCSRmat.colind_local = new int[CSRmat->n_nonzeros];
-   cp2kCSRmat.nzerow_local = new int[CSRmat->size];
-   cp2kCSRmat.nzvals_local = new double[CSRmat->n_nonzeros];
+   cp2kCSRmat.rowptr_local = new int[max(CSRmat->size+1,1)];
+   cp2kCSRmat.colind_local = new int[max(CSRmat->n_nonzeros,1)];
+   cp2kCSRmat.nzerow_local = new int[max(CSRmat->size,1)];
+   cp2kCSRmat.nzvals_local = new double[max(CSRmat->n_nonzeros,1)];
 
    c_icopy(CSRmat->size+1, CSRmat->edge_i, 1, cp2kCSRmat.rowptr_local, 1);
    c_icopy(CSRmat->n_nonzeros, CSRmat->index_j, 1, cp2kCSRmat.colind_local, 1);

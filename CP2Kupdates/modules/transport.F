@@ -45,6 +45,7 @@ MODULE transport
 
   PUBLIC :: transport_env_create, transport_initialize, external_scf_method 
 
+!> interface between C/C++ and FORTRAN
   INTERFACE c_func_interface
 ! *****************************************************************************
 !> \brief C routine that takes the S and H matrices as input and outputs a P matrix
@@ -60,7 +61,7 @@ MODULE transport
       TYPE(cp2k_transport_parameters), VALUE, INTENT(IN) :: cp2k_transport_params
       TYPE(cp2k_csr_interop_type), VALUE, INTENT(IN)     :: s_mat
       TYPE(cp2k_csr_interop_type), VALUE, INTENT(IN)     :: ks_mat
-      TYPE(cp2k_csr_interop_type)                        :: p_mat
+      TYPE(cp2k_csr_interop_type), INTENT(INOUT)         :: p_mat
     END SUBROUTINE c_scf_routine
   END INTERFACE c_func_interface
 
