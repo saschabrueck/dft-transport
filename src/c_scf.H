@@ -61,11 +61,6 @@ void CSR_to_cp2kCSR (TCSR<T>* CSRmat, cp2k_csr_interop_type& cp2kCSRmat)
    Comm = MPI::COMM_WORLD;
    rank = Comm.Get_rank();
 
-   cp2kCSRmat.rowptr_local = new int[max(CSRmat->size+1,1)];
-   cp2kCSRmat.colind_local = new int[max(CSRmat->n_nonzeros,1)];
-   cp2kCSRmat.nzerow_local = new int[max(CSRmat->size,1)];
-   cp2kCSRmat.nzvals_local = new double[max(CSRmat->n_nonzeros,1)];
-
    c_icopy(CSRmat->size+1, CSRmat->edge_i, 1, cp2kCSRmat.rowptr_local, 1);
    c_icopy(CSRmat->n_nonzeros, CSRmat->index_j, 1, cp2kCSRmat.colind_local, 1);
    c_icopy(CSRmat->size, CSRmat->index_i, 1, cp2kCSRmat.nzerow_local, 1);
