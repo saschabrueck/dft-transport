@@ -99,6 +99,7 @@ extern "C" {
                                      int *m,double *w,CPX *z,int *ldz,CPX *work,int *lwork,double *rwork,\
                                      int *iwork,int *ifail,int *info);
     double fortran_name(dlamch,DLAMCH)(char*);
+    double fortran_name(pdlamch,PDLAMCH)(int*,char*);
     void fortran_name(dlasrt,DLASRT)(char*,int*,double*,int*);
 
 // MMC
@@ -543,6 +544,13 @@ inline void c_zhegvx(int itype,char jobz,char range,char uplo,int n,CPX *a,int l
 inline double c_dlamch(char cmach)
 {
     return fortran_name(dlamch,DLAMCH)(&cmach);
+}
+
+/************************************************************************************************/
+
+inline double c_pdlamch(int ictxt,char cmach)
+{
+    return fortran_name(pdlamch,PDLAMCH)(&ictxt,&cmach);
 }
 
 /************************************************************************************************/

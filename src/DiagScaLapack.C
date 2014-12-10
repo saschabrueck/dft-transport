@@ -31,33 +31,27 @@ int diagscalapack(TCSR<double> *Overlap,TCSR<double> *KohnSham,transport_paramet
 
     double *eigval = new double [nvec];
 
-    if (!iam) sabtime=get_time(0.0);
+if (!iam) sabtime=get_time(0.0);
     if (p_eig(KSfull,OVfull,eigval,nvec,MPI_COMM_WORLD)) return (LOGCERR, EXIT_FAILURE);
-    if (!iam) cout << "Time for p_eig " << get_time(sabtime) << endl;
+if (!iam) cout << "Time for p_eig " << get_time(sabtime) << endl;
 
+    c_dscal(OverlapCollect->n_nonzeros,0.0,OverlapCollect->nnz,1);
+if (!iam) sabtime=get_time(0.0);
+//    if (!iam) OverlapCollect->psipsidagger(KSfull,nocc,1.0); THIS TAKES REALLY A LOT OF TIME
     if (!iam) full_transpose(nvec,nvec,KSfull,OVfull);
+    if (!iam) OverlapCollect->psipsidagger_transpose(OVfull,nocc,1.0);
 
-// THIS IS OF COURSE UNNECESSARILY COMPLICATED BUT IT IS TO TRY MPI ROUTINES
-    if (!iam) sabtime=get_time(0.0);
-    TCSR<double> *Density;
-    if (!iam)
-        Density = new TCSR<double>(OverlapCollect,OVfull,1.0/nprocs,nocc);
-    else
-        Density = new TCSR<double>(OverlapCollect->size,OverlapCollect->n_nonzeros,OverlapCollect->findx);
-    if (!iam) cout << "Time for Dens " << get_time(sabtime) << endl;
-    delete OverlapCollect;
+if (!iam) cout << "Time for Dens " << get_time(sabtime) << endl;
 
     if (!iam) {
         delete[] KSfull;
         delete[] OVfull;
     }
-    if (!iam) for (int i_out=0;i_out<nocc;i_out++) cout << eigval[i_out] << "\n";
+//if (!iam) for (int i_out=0;i_out<nocc;i_out++) cout << eigval[i_out] << "\n";
     delete[] eigval;
 
-    MPI_Bcast(Density->nnz,Density->n_nonzeros,MPI_DOUBLE,0,MPI_COMM_WORLD);
-    Density->reducescatter(Overlap,MPI_COMM_WORLD);
-
-    delete Density;
+    OverlapCollect->reducescatter(Overlap,MPI_COMM_WORLD);
+    delete OverlapCollect;
 
     return 0;
 }

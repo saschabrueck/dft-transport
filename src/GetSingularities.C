@@ -467,7 +467,7 @@ int Singularities::eigen(CPX *H_Sum_k,CPX *S_Sum_k,CPX *H,CPX *S,CPX kval,double
         int iinfo;
         CPX twork;
         int mfound;
-        double abstol=2*c_dlamch('S');
+        double abstol=2.0*c_dlamch('S');
         CPX *zmat=new CPX[ndofsq];
         double *rwork=new double[7*ndof];
         int *iwork=new int[5*ndof];

@@ -39,5 +39,9 @@ DFLAGS = -DAdd_
 LIBS = $(UMFPACKLIB) $(AMDLIB) $(AZTECLIB) $(QHULLLIB) $(ARPACKLIB) $(PEXSILIB) \
 	-lzmumps -lsuperlu_dist \
 	-lcp2k /project/cray/alazzaro/libsmm/affinity/sandybridge_gcc_4.9.0/lib/libsmm_dnn_cray.gnu.a \
-	-lsci_gnu_mp -lm -lrt -fopenmp -lgfortran -lstdc++ 
+        -lfftw3 -lfftw3_threads \
+        $(MKLROOT)/lib/intel64/libmkl_scalapack_lp64.a -Wl,--start-group \
+        $(MKLROOT)/lib/intel64/libmkl_gf_lp64.a $(MKLROOT)/lib/intel64/libmkl_sequential.a \
+        $(MKLROOT)/lib/intel64/libmkl_core.a $(MKLROOT)/lib/intel64/libmkl_blacs_intelmpi_lp64.a -Wl,--end-group -ldl \
+	-lm -lrt -fopenmp -lgfortran -lstdc++ 
 INCLUDES = $(INCUFC) $(INCUMF) $(INCAMD) $(INCAZT) $(INCQHU) $(INCPEX)

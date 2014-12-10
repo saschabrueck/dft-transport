@@ -47,10 +47,6 @@ public:
     TCSR(CPX,TCSR<CPX>*,CPX,TCSR<CPX>*);
 // this constructs a matrix by summing of a vector of matrices
     TCSR(int,T*,TCSR<T>**,int=-1);
-// and this will construct the density matrix on the TCSR sparsity pattern
-// WITH THE TRANSPOSED ORBITALS AS INPUT
-    TCSR(TCSR<double>*,double*,double,int);
-    TCSR(TCSR<double>*,CPX*,CPX,int);
 // this creates a matrix which is the input matrix multiplied by the sum
 // of the input vector elements corresponding to the row and col number
     TCSR(TCSR<T>*,T*);
@@ -114,6 +110,8 @@ public:
     void reducescatter(TCSR<T>*,MPI_Comm);
     double psipsidagger(CPX*,int);
     void psipsidagger(CPX*,int,CPX);
+    void psipsidagger(double*,int,double);
+    void psipsidagger_transpose(double*,int,double);
     void psipsidagger(CPX*,CPX*,CPX*,int,int,int,CPX);
     void psipsidagger(CPX*,int,CPX,int*,double*);
     void psipsidagger(CPX*,int,CPX,int*,double*,double*,double);
@@ -419,72 +417,6 @@ inline TCSR<T>::TCSR(int N,T *factors,TCSR<T> **A,int jlength)
 
     get_row_edge();
     get_diag_pos();
-}
-
-/******************** written by SAB ********************/
-
-template <>
-inline TCSR<double>::TCSR(TCSR<double> *mat,double* phi,double factor,int nkval)
-{
-
-    nnz        = new double[mat->n_nonzeros];
-    index_i    = new int[mat->size];
-    index_j    = new int[mat->n_nonzeros];
-    edge_i     = new int[mat->size+1];
-    diag_pos   = new int[mat->size];
-
-    size       = mat->size;
-    size_tot   = mat->size_tot;
-    type       = mat->type;
-    n_nonzeros = mat->n_nonzeros;
-    findx      = mat->findx;
-    first_row  = mat->first_row;
-
-    c_icopy(size,mat->index_i,1,index_i,1);
-    c_icopy(n_nonzeros,mat->index_j,1,index_j,1);
-    c_icopy(size+1,mat->edge_i,1,edge_i,1);
-    c_icopy(size,mat->diag_pos,1,diag_pos,1);
-
-    int i,j;
-    for(i=0;i<size;i++){
-        for(j=edge_i[i]-findx;j<edge_i[i+1]-findx;j++){
-            nnz[j]=factor*c_ddot(nkval,&phi[(index_j[j]-findx)*size],1,&phi[i*size],1);
-        }
-    }
-
-}
-
-/******************** written by SAB ********************/
-
-template <>
-inline TCSR<CPX>::TCSR(TCSR<double> *mat,CPX* phi,CPX factor,int nkval)
-{
-
-    nnz        = new CPX[mat->n_nonzeros];
-    index_i    = new int[mat->size];
-    index_j    = new int[mat->n_nonzeros];
-    edge_i     = new int[mat->size+1];
-    diag_pos   = new int[mat->size];
-
-    size       = mat->size;
-    size_tot   = mat->size_tot;
-    type       = mat->type;
-    n_nonzeros = mat->n_nonzeros;
-    findx      = mat->findx;
-    first_row  = mat->first_row;
-
-    c_icopy(size,mat->index_i,1,index_i,1);
-    c_icopy(n_nonzeros,mat->index_j,1,index_j,1);
-    c_icopy(size+1,mat->edge_i,1,edge_i,1);
-    c_icopy(size,mat->diag_pos,1,diag_pos,1);
-
-    int i,j;
-    for(i=0;i<size;i++){
-        for(j=edge_i[i]-findx;j<edge_i[i+1]-findx;j++){
-            nnz[j]=factor*c_zdotc(nkval,&phi[(index_j[j]-findx)*size],1,&phi[i*size],1);
-        }
-    }
-
 }
 
 /******************** written by SAB ********************/
@@ -2154,6 +2086,32 @@ inline void TCSR<double>::psipsidagger(CPX* psi,int nkval,CPX factor)
     for(i=0;i<size;i++){
         for(e=edge_i[i]-findx;e<edge_i[i+1]-findx;e++){
             nnz[e]+=real(factor*c_zdotc(nkval,&psi[index_j[e]-findx],size_tot,&psi[first_row+i],size_tot));
+        }
+    }
+}
+
+/************************************************************************************************/
+
+template <>
+inline void TCSR<double>::psipsidagger(double* psi,int nkval,double factor)
+{
+    int i,e;
+    for(i=0;i<size;i++){
+        for(e=edge_i[i]-findx;e<edge_i[i+1]-findx;e++){
+            nnz[e]+=factor*c_ddot(nkval,&psi[index_j[e]-findx],size_tot,&psi[first_row+i],size_tot);
+        }
+    }
+}
+
+/************************************************************************************************/
+
+template <>
+inline void TCSR<double>::psipsidagger_transpose(double* psi,int nkval,double factor)
+{
+    int i,e;
+    for(i=0;i<size;i++){
+        for(e=edge_i[i]-findx;e<edge_i[i+1]-findx;e++){
+            nnz[e]+=factor*c_ddot(nkval,&psi[(index_j[e]-findx)*size],1,&psi[i*size],1);
         }
     }
 }
