@@ -187,22 +187,8 @@ void InjectionFeast<T>::sort_eig(CPX *kphase,CPX *Vsurf,double *dEk_dk,int *Ntr,
 
 	    kphase[IP] = CPX(0.0,1.0)*log(lambdaR[IM]);
 
- /*
-	    for(iter=0;iter<floor(slab_per_bc/2.0);iter++){
-                kphase[IP] = 2.0*kphase[IP];
-                if(real(kphase[IP])>PI){
-                    kphase[IP] = kphase[IP]-CPX(2.0*PI,0.0);
-                }
-		if(real(kphase[IP])<-PI){
-                    kphase[IP] = kphase[IP]+CPX(2.0*PI,0.0);
-                }
-            }
- */
-
-// /*
             CPX normy=CPX(1.0/c_dznrm2(ND/2,&Vsurf[IP*ND],1),0.0);
             c_zscal(ND,normy,&Vsurf[IP*ND],1);
-// */
 	  
 	    type = get_type(T01,&Vsurf[IP*ND],kphase[IP],&dEk_dk[(*Ntr)],index_to_keep[IM],\
 			    sign);
@@ -328,7 +314,9 @@ void InjectionFeast<T>::calc_kphase(TCSR<T> *D,TCSR<T> *P,TCSR<CPX> *T01,int ND,
 	t0 = get_time(0.0);
 	if(loc_rank==root_rank){
 
-            omp_set_num_threads(omp_get_max_threads()*loc_size);
+            int cores_per_node=8;
+            int omp_size_feast=min(loc_size,cores_per_node);
+            omp_set_num_threads(omp_get_max_threads()*omp_size_feast);
 
 	    transpose(TrQF,QF,ND,NM);
 
@@ -338,7 +326,7 @@ void InjectionFeast<T>::calc_kphase(TCSR<T> *D,TCSR<T> *P,TCSR<CPX> *T01,int ND,
 	    BF->trans_mat_vec_mult_omp(TrQF,CR,NM,ND);
 	    c_zgemm('C','N',NM,NM,ND,CPX(1.0,0.0),QF,ND,CR,ND,CPX(0.0,0.0),BR,NM);
 
-            omp_set_num_threads(omp_get_max_threads()/loc_size);
+            omp_set_num_threads(omp_get_max_threads()/omp_size_feast);
 
             if(contour_factor==2){
                 gen_eig_real(AR,BR,NM,VR,lambdaR);
@@ -346,7 +334,7 @@ void InjectionFeast<T>::calc_kphase(TCSR<T> *D,TCSR<T> *P,TCSR<CPX> *T01,int ND,
                 gen_eig(AR,BR,NM,VR,lambdaR);
             }
 
-            omp_set_num_threads(omp_get_max_threads()*loc_size);
+            omp_set_num_threads(omp_get_max_threads()*omp_size_feast);
 
 	    sort_abs_vec(lambdaR,reord_index,NM);
 
@@ -384,7 +372,7 @@ void InjectionFeast<T>::calc_kphase(TCSR<T> *D,TCSR<T> *P,TCSR<CPX> *T01,int ND,
             }
 */
 
-            omp_set_num_threads(omp_get_max_threads()/loc_size);
+            omp_set_num_threads(omp_get_max_threads()/omp_size_feast);
 
 	    for(IM=0;IM<NM;IM++){
 

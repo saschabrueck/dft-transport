@@ -127,31 +127,42 @@ if (!iam) cout << "GATE POTENTIAL " << Vg << endl;
     double Ls=nanowire->Ls;
     double Lc=nanowire->Lc;
 
+    enum choose_initial_guess {ramp,ferm,file};
+    choose_initial_guess initial_guess=ferm;
+    ifstream potgridinfile;
+    if (initial_guess==file) potgridinfile.open("potgrid.input");
     for (int IX=0;IX<FEM->NGrid;IX++) {
         double x=FEM->grid[3*IX]-FEM->grid[0];
-        double dx_ramp = 1;
-
-        if(x<(Ls-dx_ramp)){
-            Vnew[IX] = -Vs-dV;
+        if (initial_guess==ramp) {
+            double dx_ramp = 1;
+            if(x<(Ls-dx_ramp)){
+                Vnew[IX] = -Vs-dV;
+            }
+            if((x>=(Ls-dx_ramp))&&(x<Ls)){
+                Vnew[IX] = -Vs-dV+Vg*(x-(Ls-dx_ramp))/dx_ramp;
+                //V[IX] = -Vs-dV+(Vg+Vs+dV)*(x-(Ls-dx_ramp))/dx_ramp;
+            }
+            if((x>=Ls)&&(x<(Ls+Lc))){
+                Vnew[IX] = (Vs-Vd+2*dV)*(x-Ls)/Lc+Vg-Vs-dV;
+                //V[IX] = Vg;
+            }
+            if((x>=(Ls+Lc))&&(x<(Ls+Lc+dx_ramp))){
+                Vnew[IX] = -Vd+dV+Vg*(Ls+Lc+dx_ramp-x)/dx_ramp;
+                //V[IX] = -Vd+dV+(Vg-dV+Vd)*(Ls+Lc+dx_ramp-x)/dx_ramp;
+            }
+            if(x>=(Ls+Lc+dx_ramp)){
+                Vnew[IX] = -Vd+dV;
+            }
+        } else if (initial_guess==ferm) {
+            double bfac = 0.5/K_BOLTZMANN;
+            Vnew[IX] = (Vs+Vg+Vd)*fermi(x-(Ls+Lc),0.0,bfac,0)*fermi(-x+Ls,0.0,bfac,0)-Vs*fermi(x-(Ls+Lc),0.0,bfac,0)-Vd*fermi(-x+Ls,0.0,bfac,0);
+        } else if (initial_guess==file) {
+            potgridinfile >> Vnew[IX];
+        } else {
+            return (LOGCERR, EXIT_FAILURE);
         }
-        if((x>=(Ls-dx_ramp))&&(x<Ls)){
-            Vnew[IX] = -Vs-dV+Vg*(x-(Ls-dx_ramp))/dx_ramp;
-            //V[IX] = -Vs-dV+(Vg+Vs+dV)*(x-(Ls-dx_ramp))/dx_ramp;
-        }
-        if((x>=Ls)&&(x<(Ls+Lc))){
-            Vnew[IX] = (Vs-Vd+2*dV)*(x-Ls)/Lc+Vg-Vs-dV;
-            //V[IX] = Vg;
-        }
-        if((x>=(Ls+Lc))&&(x<(Ls+Lc+dx_ramp))){
-            Vnew[IX] = -Vd+dV+Vg*(Ls+Lc+dx_ramp-x)/dx_ramp;
-            //V[IX] = -Vd+dV+(Vg-dV+Vd)*(Ls+Lc+dx_ramp-x)/dx_ramp;
-        }
-        if(x>=(Ls+Lc+dx_ramp)){
-            Vnew[IX] = -Vd+dV;
-        }
-        double bfac = 0.5/K_BOLTZMANN;
-//        Vnew[IX] = (Vs+Vg+Vd)*fermi(x-(Ls+Lc),0.0,bfac,0)*fermi(-x+Ls,0.0,bfac,0)-Vs*fermi(x-(Ls+Lc),0.0,bfac,0)-Vd*fermi(-x+Ls,0.0,bfac,0);
     }
+    if (initial_guess==file) potgridinfile.close();
 
 if(!iam){
 stringstream mysstream;

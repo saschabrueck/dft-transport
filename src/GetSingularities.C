@@ -184,7 +184,7 @@ double Singularities::determine_fermi(double doping,int i_mu) //slightly differs
         double mu_a = mu;
         double nocc_a = nocciter;
 //Find Interval
-        while ((2.0*noccunitcell+doping-nocc_a)*(2.0*noccunitcell+doping-nocciter)>0) {
+        while ((2.0*noccunitcell+doping-nocc_a)*(2.0*noccunitcell+doping-nocciter)>0 && abs(2.0*noccunitcell+doping-nocciter)>nocctol) {
             mu_a=mu;
             nocc_a=nocciter;
             mu+=(2.0*noccunitcell+doping-nocciter);

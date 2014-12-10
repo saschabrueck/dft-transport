@@ -32,7 +32,7 @@ class Spike {
 
  public: 
   Spike(TCSR<T>* matrix, T* RHS, int RHS_col, MPI_Comm communicator,
-        bool diagonal_dense);
+        bool diagonal_dense = false);
   ~Spike();
   void solve_full(T* sol);
 #ifdef SPIKE_DEBUG
@@ -173,7 +173,7 @@ class Spike {
 
 template<typename T>
 Spike<T>:: Spike(TCSR<T>* matrix, T* RHS, int RHS_col, MPI_Comm communicator,
-                 bool diagonal_dense = false) {
+                 bool diagonal_dense) {
 
   MPI_Comm_rank(communicator, &rank);
   MPI_Comm_size(communicator, &num_ranks);

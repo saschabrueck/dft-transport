@@ -47,6 +47,7 @@ SuperLU<T>::SuperLU(TCSR<T>* mat,MPI_Comm solver_comm)
 
     options.Fact              = DOFACT;
     options.Equil             = YES;
+    options.ParSymbFact       = NO;
     options.ColPerm           = MMD_AT_PLUS_A;
     options.RowPerm           = LargeDiag;
     options.ReplaceTinyPivot  = YES;

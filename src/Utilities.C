@@ -340,6 +340,7 @@ double get_time(double t0)
     gettimeofday(&tim, NULL);
     
     return (double)(tim.tv_sec+(tim.tv_usec/1000000.0))-t0;
+//    return double(std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch()).count())/1000.0-t0;
 }
 
 /************************************************************************************************/
