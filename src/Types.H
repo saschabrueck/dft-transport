@@ -452,6 +452,11 @@ struct transport_parameters
     double temperature;
 };
 
+struct contact_type
+{
+    int bandwidth, ndof, start, inj_sign, n_occ;
+}
+
 namespace transport_methods {
 enum transport_method {
   NEGF=0,
