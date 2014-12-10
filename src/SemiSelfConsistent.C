@@ -7,12 +7,21 @@ int semiselfconsistent(TCSR<double> *Overlap,TCSR<double> *KohnSham,transport_pa
 
     c_dscal(KohnSham->n_nonzeros,transport_params->evoltfactor,KohnSham->nnz,1);
 
+//if (Overlap->additionalentries(KohnSham)) return (LOGCERR, EXIT_FAILURE);
+//if (KohnSham->additionalentries(Overlap)) return (LOGCERR, EXIT_FAILURE);
+
     if (transport_params->method==0) {
-        TCSR<double> *KohnShamCollect = new TCSR<double>(KohnSham,MPI_COMM_WORLD);
-        TCSR<double> *OverlapCollect = new TCSR<double>(Overlap,MPI_COMM_WORLD);
+        TCSR<double> *KohnShamCollect = new TCSR<double>(KohnSham,0,MPI_COMM_WORLD);
+        TCSR<double> *OverlapCollect = new TCSR<double>(Overlap,0,MPI_COMM_WORLD);
         if (!iam) {
+            KohnShamCollect->change_findx(1);
+            OverlapCollect->change_findx(1);
             KohnShamCollect->write_CSR("KohnSham");
             OverlapCollect->write_CSR("Overlap");
+            KohnShamCollect->removepbc(transport_params->bandwidth,OverlapCollect->size_tot/transport_params->n_cells);
+            OverlapCollect->removepbc(transport_params->bandwidth,OverlapCollect->size_tot/transport_params->n_cells);
+            KohnShamCollect->write_CSR_bin("H_4.bin");
+            OverlapCollect->write_CSR_bin("S_4.bin");
             ofstream paramoutfile("TransportParams");
             paramoutfile << transport_params->method << endl;
             paramoutfile << transport_params->bandwidth << endl;

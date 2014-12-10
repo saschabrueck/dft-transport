@@ -455,7 +455,7 @@ struct transport_parameters
 struct contact_type
 {
     int bandwidth, ndof, start, inj_sign, n_occ;
-}
+};
 
 namespace transport_methods {
 enum transport_method {

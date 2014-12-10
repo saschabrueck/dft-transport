@@ -50,6 +50,8 @@ inline int p_eig(double *KSfull,double *OVfull,double *eigval,int nvec,MPI_Comm 
     c_pdgeadd('N',nvec,nvec,1.0,KSfull,1,1,descKSfull,0.0,KSloc,1,1,descKS);
     c_pdgeadd('N',nvec,nvec,1.0,OVfull,1,1,descOVfull,0.0,OVloc,1,1,descOV);
 
+    double eps_eigval_degen=1.0E-6;
+    double abstol = 2.0*c_pdlamch(icontxt,'S');
     double workytest[3];
     int iworkytest[3];
     int mout, nzout;
@@ -58,7 +60,7 @@ inline int p_eig(double *KSfull,double *OVfull,double *eigval,int nvec,MPI_Comm 
     double *dgap    = new double[nprocs];
     if (nprocs<1) return (LOGCERR, EXIT_FAILURE);  
     c_pdsygvx(1,'V','A','U',nvec,KSloc,1,1,descKS,OVloc,1,1,descOV,\
-              0.0,0.0,1,1,0.0,&mout,&nzout,eigval,0.0,Zloc,1,1,descZ,\
+              0.0,0.0,1,1,abstol,&mout,&nzout,eigval,eps_eigval_degen,Zloc,1,1,descZ,\
               workytest,-1,iworkytest,-1,ifail,iclu,dgap,&iinfo);
     int lworky    = int(workytest[0]);
     int liworky   = iworkytest[0];
@@ -66,7 +68,7 @@ inline int p_eig(double *KSfull,double *OVfull,double *eigval,int nvec,MPI_Comm 
     int *iworky   = new int[liworky];
     if (!iam) sabtime=get_time(0.0);
     c_pdsygvx(1,'V','A','U',nvec,KSloc,1,1,descKS,OVloc,1,1,descOV,\
-              0.0,0.0,1,1,0.0,&mout,&nzout,eigval,0.0,Zloc,1,1,descZ,\
+              0.0,0.0,1,1,abstol,&mout,&nzout,eigval,eps_eigval_degen,Zloc,1,1,descZ,\
               worky,lworky,iworky,liworky,ifail,iclu,dgap,&iinfo);
     if (iinfo) return (LOGCERR, EXIT_FAILURE);
     if (!iam) cout << "Time after Diag " << get_time(sabtime) << endl;
@@ -134,6 +136,8 @@ inline int p_eig(CPX *KSfull,CPX *OVfull,double *eigval,int nvec,MPI_Comm p_eig_
     c_pzgeadd('N',nvec,nvec,1.0,KSfull,1,1,descKSfull,0.0,KSloc,1,1,descKS);
     c_pzgeadd('N',nvec,nvec,1.0,OVfull,1,1,descOVfull,0.0,OVloc,1,1,descOV);
 
+    double eps_eigval_degen=1.0E-6;
+    double abstol = 2.0*c_pdlamch(icontxt,'S');
     CPX workytest[3];
     double rworkytest[3];
     int iworkytest[3];
@@ -143,7 +147,7 @@ inline int p_eig(CPX *KSfull,CPX *OVfull,double *eigval,int nvec,MPI_Comm p_eig_
     double *dgap    = new double[nprocs];
     if (nprocs<1) return (LOGCERR, EXIT_FAILURE);  
     c_pzhegvx(1,'V','A','U',nvec,KSloc,1,1,descKS,OVloc,1,1,descOV,\
-              0.0,0.0,1,1,0.0,&mout,&nzout,eigval,0.0,Zloc,1,1,descZ,\
+              0.0,0.0,1,1,abstol,&mout,&nzout,eigval,eps_eigval_degen,Zloc,1,1,descZ,\
               workytest,-1,rworkytest,-1,iworkytest,-1,ifail,iclu,dgap,&iinfo);
     int lworky      = int(real(workytest[0]));
     int lrworky     = int(rworkytest[0]);
@@ -153,7 +157,7 @@ inline int p_eig(CPX *KSfull,CPX *OVfull,double *eigval,int nvec,MPI_Comm p_eig_
     int *iworky     = new int[liworky];
     if (!iam) sabtime=get_time(0.0);
     c_pzhegvx(1,'V','A','U',nvec,KSloc,1,1,descKS,OVloc,1,1,descOV,\
-              0.0,0.0,1,1,0.0,&mout,&nzout,eigval,0.0,Zloc,1,1,descZ,\
+              0.0,0.0,1,1,abstol,&mout,&nzout,eigval,eps_eigval_degen,Zloc,1,1,descZ,\
               worky,lworky,rworky,lrworky,iworky,liworky,ifail,iclu,dgap,&iinfo);
     if (iinfo) return (LOGCERR, EXIT_FAILURE);
     if (!iam) cout << "Time after Diag " << get_time(sabtime) << endl;
