@@ -44,9 +44,6 @@ public:
     TCSR(TCSR<T>*,int,int,int,int);
 // this constructs a matrix by summing of a vector of matrices
     TCSR(int,T*,TCSR<T>**,int=-1);
-// this creates a matrix which is the input matrix multiplied by the sum
-// of the input vector elements corresponding to the row and col number
-    TCSR(TCSR<T>*,T*);
 // and this is the gather
     TCSR(TCSR<T>*,MPI_Comm);
     TCSR(TCSR<T>*,int,MPI_Comm);
@@ -125,6 +122,7 @@ public:
     void extract_upper_triangle(TCSR<T>*);
     void sparse_to_full(T*,int,int,int,int);
     void set_to_id();
+    void remove_thr(double);
 // sab end
     void set_nnz(int,T*);
     void set_index_i(int,int*);
@@ -281,20 +279,40 @@ inline TCSR<T>::TCSR(int N,T *factors,TCSR<T> **A,int jlength)
     T *linefull = new T[jlength];
 
     for (i=0;i<size;i++) {
-        init_variable(linefull,jlength);
-        index_i[i]=0;
+        int start=jlength;
+        int end=0;
+        int have_row=0;
+        int has_row;
         for (n=0;n<N;n++) {
-            if (factors) factor=factors[n];
-            for (e=A[n]->edge_i[i]-A[n]->findx;e<A[n]->edge_i[i+1]-A[n]->findx;e++) {
-                linefull[A[n]->index_j[e]-A[n]->findx]+=factor*A[n]->nnz[e];
+            if (A[n]->edge_i[i+1]-A[n]->edge_i[i]) {
+                start=min(start,A[n]->index_j[A[n]->edge_i[i]-A[n]->findx]-A[n]->findx);
+                end=max(end,A[n]->index_j[A[n]->edge_i[i+1]-1-A[n]->findx]-A[n]->findx+1);
+                have_row++;
+                has_row=n;
             }
         }
-        for (j=0;j<jlength;j++) {
-            if (abs(linefull[j])) {
-                nnz_tmp[n_nonzeros]=linefull[j];
-                index_j_tmp[n_nonzeros]=j+findx;
-                index_i[i]++;
-                n_nonzeros++;
+        if (have_row==1) {
+            int index_length=A[has_row]->edge_i[i+1]-A[has_row]->edge_i[i];
+            c_tcopy(index_length,&A[has_row]->nnz[A[has_row]->edge_i[i]-A[has_row]->findx],1,&nnz_tmp[n_nonzeros],1);
+            c_icopy(index_length,&A[has_row]->index_j[A[has_row]->edge_i[i]-A[has_row]->findx],1,&index_j_tmp[n_nonzeros],1);
+            index_i[i]=index_length;
+            n_nonzeros+=index_length;
+        } else if (have_row>1) {
+            init_variable(linefull,end-start);
+            index_i[i]=0;
+            for (n=0;n<N;n++) {
+                if (factors) factor=factors[n];
+                for (e=A[n]->edge_i[i]-A[n]->findx;e<A[n]->edge_i[i+1]-A[n]->findx;e++) {
+                    linefull[A[n]->index_j[e]-A[n]->findx-start]+=factor*A[n]->nnz[e];
+                }
+            }
+            for (j=0;j<end-start;j++) {
+                if (abs(linefull[j])) {
+                    nnz_tmp[n_nonzeros]=linefull[j];
+                    index_j_tmp[n_nonzeros]=j+findx+start;
+                    index_i[i]++;
+                    n_nonzeros++;
+                }
             }
         }
     }
@@ -1296,21 +1314,20 @@ inline void TCSR<CPX>::trans_mat_vec_mult(CPX *tr_in, CPX *out, int nrhs, int NR
 template <>
 inline void TCSR<CPX>::trans_mat_vec_mult_omp(CPX *tr_in, CPX *out, int nrhs, int NR)
 {
-    int nthr=omp_get_max_threads();
-    int i;//DECLARE J PRIVATE TO THREAD
-    CPX *vec = new CPX[nrhs*nthr];
-
-#pragma omp parallel for schedule(dynamic)
-    for(i=0;i<size;i++){
-        int ithr=omp_get_thread_num();
-        init_variable(&vec[nrhs*ithr],nrhs);
+#pragma omp parallel
+{
+    CPX *vec = new CPX[nrhs];
+#pragma omp for schedule(dynamic)
+    for(int i=0;i<size;i++){
+        init_variable(vec,nrhs);
         for(int j=edge_i[i]-findx;j<edge_i[i+1]-findx;j++){
-            c_zaxpy(nrhs,nnz[j],&tr_in[nrhs*(index_j[j]-findx)],1,&vec[nrhs*ithr],1);
+            c_zaxpy(nrhs,nnz[j],&tr_in[nrhs*(index_j[j]-findx)],1,vec,1);
         }
-        c_zcopy(nrhs,&vec[nrhs*ithr],1,&out[i],size);
+        c_zcopy(nrhs,vec,1,&out[i],size);
     }
 
     delete[] vec;
+}
 
 }
 
@@ -1385,21 +1402,20 @@ inline void TCSR<double>::trans_mat_vec_mult(double *tr_in, double *out, int nrh
 template <>
 inline void TCSR<double>::trans_mat_vec_mult_omp(double *tr_in, double *out, int nrhs, int NR)
 {
-    int nthr=omp_get_max_threads();
-    int i;//DECLARE J PRIVATE TO THREAD
-    double *vec = new double[nrhs*nthr];
-
-#pragma omp parallel for schedule(dynamic)
-    for(i=0;i<size;i++){
-        int ithr=omp_get_thread_num();
-        init_variable(&vec[nrhs*ithr],nrhs);
+#pragma omp parallel
+{
+    double *vec = new double[nrhs];
+#pragma omp for schedule(dynamic)
+    for(int i=0;i<size;i++){
+        init_variable(vec,nrhs);
         for(int j=edge_i[i]-findx;j<edge_i[i+1]-findx;j++){
-            c_daxpy(nrhs,nnz[j],&tr_in[nrhs*(index_j[j]-findx)],1,&vec[nrhs*ithr],1);
+            c_daxpy(nrhs,nnz[j],&tr_in[nrhs*(index_j[j]-findx)],1,vec,1);
         }
-        c_dcopy(nrhs,&vec[nrhs*ithr],1,&out[i],size);
+        c_dcopy(nrhs,vec,1,&out[i],size);
     }
 
     delete[] vec;
+}
 
 }
 
@@ -2361,6 +2377,32 @@ void TCSR<T>::set_to_id()
     get_diag_pos();
 }
 
+/************************************************************************************************/
+
+template <class T>
+void TCSR<T>::remove_thr(double thr)
+{
+    int i,e;
+
+    n_nonzeros=0; 
+    for(i=0;i<size;i++){
+        index_i[i]=0;
+        for (e=edge_i[i]-findx;e<edge_i[i+1]-findx;e++){
+            if (abs(nnz[e])>thr){
+                nnz[n_nonzeros]=nnz[e];
+                index_j[n_nonzeros]=index_j[e];
+                index_i[i]++;
+                n_nonzeros++;
+            }
+        }
+    }
+
+    get_row_edge();
+    get_diag_pos();
+
+    if (n_nonzeros!=edge_i[size]-findx) throw CSR_Exception(__LINE__,__FILE__);
+}
+
 /*SAB*END****************************************************************************************/
 
 template <class T>
@@ -2618,9 +2660,7 @@ void TCSR<T>::init_variable(int *var,int N)
 template <class T>
 void TCSR<T>::init_variable(double *var,int N)
 {
-    for(int i=0;i<N;i++){
-        var[i] = 0.0;
-    }
+    c_dscal(N,0.0,var,1);
 }
 
 /************************************************************************************************/
@@ -2628,9 +2668,7 @@ void TCSR<T>::init_variable(double *var,int N)
 template <class T>
 void TCSR<T>::init_variable(CPX *var,int N)
 {
-    for(int i=0;i<N;i++){
-        var[i] = CPX(0.0,0.0);
-    }
+    c_zscal(N,CPX(0.0,0.0),var,1);
 }
 
 /************************************************************************************************/

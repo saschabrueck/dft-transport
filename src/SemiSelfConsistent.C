@@ -14,6 +14,8 @@ int semiselfconsistent(TCSR<double> *Overlap,TCSR<double> *KohnSham,transport_pa
         TCSR<double> *KohnShamCollect = new TCSR<double>(KohnSham,0,MPI_COMM_WORLD);
         TCSR<double> *OverlapCollect = new TCSR<double>(Overlap,0,MPI_COMM_WORLD);
         if (!iam) {
+//KohnShamCollect->remove_thr(1.0E-6);
+//OverlapCollect->remove_thr(1.0E-6);
             KohnShamCollect->change_findx(1);
             OverlapCollect->change_findx(1);
             KohnShamCollect->write_CSR("KohnSham");
