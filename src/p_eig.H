@@ -62,7 +62,7 @@ inline int p_eig(double *KSfull,double *OVfull,double *eigval,int nvec,MPI_Comm 
     c_pdsygvx(1,'V','A','U',nvec,KSloc,1,1,descKS,OVloc,1,1,descOV,\
               0.0,0.0,1,1,abstol,&mout,&nzout,eigval,eps_eigval_degen,Zloc,1,1,descZ,\
               workytest,-1,iworkytest,-1,ifail,iclu,dgap,&iinfo);
-    int lworky    = int(workytest[0]);
+    int lworky    = int(workytest[0])+nvec;
     int liworky   = iworkytest[0];
     double *worky = new double[lworky];
     int *iworky   = new int[liworky];
@@ -150,7 +150,7 @@ inline int p_eig(CPX *KSfull,CPX *OVfull,double *eigval,int nvec,MPI_Comm p_eig_
               0.0,0.0,1,1,abstol,&mout,&nzout,eigval,eps_eigval_degen,Zloc,1,1,descZ,\
               workytest,-1,rworkytest,-1,iworkytest,-1,ifail,iclu,dgap,&iinfo);
     int lworky      = int(real(workytest[0]));
-    int lrworky     = int(rworkytest[0]);
+    int lrworky     = int(rworkytest[0])+nvec;
     int liworky     = iworkytest[0];
     CPX *worky      = new CPX[lworky];
     double *rworky  = new double[lrworky];
