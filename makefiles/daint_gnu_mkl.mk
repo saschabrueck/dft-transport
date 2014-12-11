@@ -32,7 +32,7 @@ PEXSILIB      = $(LIB_TOP)/pexsi_v0.6.0/src/libpexsi_daint.a
 
 LINLIN = $(LIB_TOP)/CSelInv/EXAMPLES/C2Finterface.o $(LIB_TOP)/CSelInv/LIB/libcsupldlt.a
 
-DMALLOC = -L/apps/rosa/ddt/4.1.1/lib/64/ -ldmallocthcxx -z muldefs
+DMALLOC = -L/apps/daint/ddt/4.3rc7/lib/64/ -ldmallocthcxx -z muldefs
 
 LFLAGS = -L$(LIB_TOP)/cp2k/lib/CRAY-XC30-gfortran/psmp/
 DFLAGS = -DAdd_
