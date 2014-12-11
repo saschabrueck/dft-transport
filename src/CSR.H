@@ -42,9 +42,6 @@ public:
 // sab begin
 //create new matrix by cutting out from old one
     TCSR(TCSR<T>*,int,int,int,int);
-// THIS CONSTRUCTOR WILL CREATE A MATRIX BY WEIGHTED SUMMING OF TWO OTHERS
-    TCSR(T,TCSR<double>*,T,TCSR<double>*);
-    TCSR(CPX,TCSR<CPX>*,CPX,TCSR<CPX>*);
 // this constructs a matrix by summing of a vector of matrices
     TCSR(int,T*,TCSR<T>**,int=-1);
 // this creates a matrix which is the input matrix multiplied by the sum
@@ -104,6 +101,7 @@ public:
     int additionalentries(TCSR<T>*);
     void add(TCSR<T>*,T);
     void add_real(TCSR<CPX>*,CPX);
+    void add_pot(TCSR<T>*,T*);
     void Bcast(int,MPI_Comm);
     void scatter(TCSR<T>*,int,MPI_Comm);
     void reduce(int,MPI_Comm);
@@ -118,7 +116,6 @@ public:
     void psipsidagger(CPX*,CPX*,int,CPX,int*,double*);
     void atomdensity(TCSR<CPX>*,CPX,int*,double*);
     double collect_density(double*,double*,int*);
-    void moveawaypbc(T*,T*,int,int);
     void settozeropbc(int,int);
     void removepbc(int,int);
     void tr_full_to_sparse(T*,int,int);
@@ -250,110 +247,6 @@ inline TCSR<T>::TCSR(TCSR<T> *mat,int istart, int ilength, int jstart, int jleng
 
 /******************** written by SAB ********************/
 
-template <>
-inline TCSR<CPX>::TCSR(CPX alphafactor,TCSR<CPX> *A,CPX betafactor,TCSR<CPX> *B)
-{
-    if ( (size       = A->size      )!=B->size      ) throw CSR_Exception(__LINE__,__FILE__);
-    if ( (size_tot   = A->size_tot  )!=B->size_tot  ) throw CSR_Exception(__LINE__,__FILE__);
-    if ( (type       = A->type      )!=B->type      ) throw CSR_Exception(__LINE__,__FILE__);
-    if ( (findx      = A->findx     )!=B->findx     ) throw CSR_Exception(__LINE__,__FILE__);
-    if ( (first_row  = A->first_row )!=B->first_row ) throw CSR_Exception(__LINE__,__FILE__);
-
-    int addit  = B->additionalentries(A);
-
-    if (addit<0) throw CSR_Exception(__LINE__,__FILE__);
-  
-    n_nonzeros = addit+A->n_nonzeros;
-
-    index_i    = new int[size];
-    edge_i     = new int[size+1];
-    nnz        = new CPX[n_nonzeros];
-    index_j    = new int[n_nonzeros];
-    diag_pos   = new int[size];
-
-    int i,j,e;
-    n_nonzeros=0;
-    CPX *linefull=new CPX[size_tot];
-
-    for (i=0;i<size;i++) {
-        init_variable(linefull,size_tot);
-        index_i[i]=0;
-        for (e=A->edge_i[i]-A->findx;e<A->edge_i[i+1]-A->findx;e++) {
-            linefull[A->index_j[e]-A->findx]+=alphafactor*A->nnz[e];
-        }
-        for (e=B->edge_i[i]-B->findx;e<B->edge_i[i+1]-B->findx;e++) {
-            linefull[B->index_j[e]-B->findx]+=betafactor*B->nnz[e];
-        }
-        for (j=0;j<size_tot;j++) {
-            if (abs(linefull[j])) {
-                nnz[n_nonzeros]=linefull[j];
-                index_j[n_nonzeros]=j+findx;
-                index_i[i]++;
-                n_nonzeros++;
-            }
-        }
-    }
-
-    delete[] linefull;
-
-    get_row_edge();
-    get_diag_pos();
-}
-
-/******************** written by SAB ********************/
-
-template <class T>
-inline TCSR<T>::TCSR(T alphafactor,TCSR<double> *A,T betafactor,TCSR<double> *B)
-{
-    if ( (size       = A->size      )!=B->size      ) throw CSR_Exception(__LINE__,__FILE__);
-    if ( (size_tot   = A->size_tot  )!=B->size_tot  ) throw CSR_Exception(__LINE__,__FILE__);
-    if ( (type       = A->type      )!=B->type      ) throw CSR_Exception(__LINE__,__FILE__);
-    if ( (findx      = A->findx     )!=B->findx     ) throw CSR_Exception(__LINE__,__FILE__);
-    if ( (first_row  = A->first_row )!=B->first_row ) throw CSR_Exception(__LINE__,__FILE__);
-
-    int addit  = B->additionalentries(A);
-
-    if (addit<0) throw CSR_Exception(__LINE__,__FILE__);
-  
-    n_nonzeros = addit+A->n_nonzeros;
-
-    index_i    = new int[size];
-    edge_i     = new int[size+1];
-    nnz        = new T[max(n_nonzeros,1)];
-    index_j    = new int[max(n_nonzeros,1)];
-    diag_pos   = new int[size];
-
-    int i,j,e;
-    n_nonzeros=0;
-    T *linefull=new T[size_tot];
-
-    for (i=0;i<size;i++) {
-        init_variable(linefull,size_tot);
-        index_i[i]=0;
-        for (e=A->edge_i[i]-A->findx;e<A->edge_i[i+1]-A->findx;e++) {
-            linefull[A->index_j[e]-A->findx]+=alphafactor*A->nnz[e];
-        }
-        for (e=B->edge_i[i]-B->findx;e<B->edge_i[i+1]-B->findx;e++) {
-            linefull[B->index_j[e]-B->findx]+=betafactor*B->nnz[e];
-        }
-        for (j=0;j<size_tot;j++) {
-            if (abs(linefull[j])) {
-                nnz[n_nonzeros]=linefull[j];
-                index_j[n_nonzeros]=j+findx;
-                index_i[i]++;
-                n_nonzeros++;
-            }
-        }
-    }
-
-    delete[] linefull;
-
-    get_row_edge();
-    get_diag_pos();
-}
-
-/******************** written by SAB ********************/
-
 template <class T>
 inline TCSR<T>::TCSR(int N,T *factors,TCSR<T> **A,int jlength)
 {
@@ -417,38 +310,6 @@ inline TCSR<T>::TCSR(int N,T *factors,TCSR<T> **A,int jlength)
 
     get_row_edge();
     get_diag_pos();
-}
-
-/******************** written by SAB ********************/
-
-template <class T>
-inline TCSR<T>::TCSR(TCSR<T> *mat,T *vec)
-{
-
-    nnz        = new T[max(mat->n_nonzeros,1)];
-    index_i    = new int[mat->size];
-    index_j    = new int[max(mat->n_nonzeros,1)];
-    edge_i     = new int[mat->size+1];
-    diag_pos   = new int[mat->size];
-
-    size       = mat->size;
-    size_tot   = mat->size_tot;
-    type       = mat->type;
-    n_nonzeros = mat->n_nonzeros;
-    findx      = mat->findx;
-    first_row  = mat->first_row;
-    
-    c_icopy(size,mat->index_i,1,index_i,1);
-    c_icopy(n_nonzeros,mat->index_j,1,index_j,1);
-    c_icopy(size+1,mat->edge_i,1,edge_i,1);
-    c_icopy(size,mat->diag_pos,1,diag_pos,1);
-
-    for(int i=0;i<size;i++) {
-        for(int e=edge_i[i]-findx;e<edge_i[i+1]-findx;e++) {
-            nnz[e]=(vec[i+first_row]+vec[index_j[e]-findx])/2*mat->nnz[e];
-        }
-    }
-
 }
 
 /******************** written by SAB ********************/
@@ -1957,6 +1818,18 @@ inline void TCSR<double>::add_real(TCSR<CPX> *A,CPX factor)
 /************************************************************************************************/
 
 template <class T>
+void TCSR<T>::add_pot(TCSR<T> *mat,T *vec)
+{
+    for(int i=0;i<size;i++) {
+        for(int e=edge_i[i]-findx;e<edge_i[i+1]-findx;e++) {
+            nnz[e]+=(vec[i+first_row]+vec[index_j[e]-findx])/2*mat->nnz[e];
+        }
+    }
+}
+
+/************************************************************************************************/
+
+template <class T>
 void TCSR<T>::Bcast(int rootrank,MPI_Comm my_comm)
 {
     MPI_Bcast(&size,1,MPI_INT,rootrank,my_comm);
@@ -2255,36 +2128,6 @@ double TCSR<T>::collect_density(double* xyz_grid,double* xyz_atom,int* atom_of_b
     }
     return rho_grid;
 
-}
-
-/************************************************************************************************/
-
-template <class T>
-void TCSR<T>::moveawaypbc(T *left, T *right, int bw, int ndof)
-{
-    int i,e;
-    int bwndof=bw*ndof;
-    T zero=(T)0;
-    init_variable(left,size_tot*size_tot);
-    init_variable(right,size_tot*size_tot);
-
-    for (i=0;i<bwndof;i++) {
-        for (e=edge_i[i]-findx;e<edge_i[i+1]-findx;e++) {
-            if (index_j[e]-findx-i>=bwndof) {
-                right[i+(index_j[e]-findx)*size_tot]=nnz[e];
-                nnz[e]=zero;
-            }
-        }
-    }
-
-    for (i=size_tot-bwndof;i<size_tot;i++) {
-        for (e=edge_i[i]-findx;e<edge_i[i+1]-findx;e++) {
-            if (index_j[e]-findx-i<=-bwndof) {
-                left[i+(index_j[e]-findx)*size_tot]=nnz[e];
-                nnz[e]=zero;
-            }
-        }
-    }
 }
 
 /************************************************************************************************/

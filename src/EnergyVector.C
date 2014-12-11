@@ -19,7 +19,6 @@ Energyvector::~Energyvector()
 int Energyvector::Execute(TCSR<double> *Overlap,TCSR<double> *KohnSham,int n_mu,double* muvec, int* contactvec,double* electronchargeperatom,double* derivativechargeperatom,double *Vatom,int n_atoms,int* atom_of_bf,transport_parameters *transport_params)
 {
     double sabtime;
-    if ( Overlap->size_tot%transport_params->n_cells || transport_params->bandwidth<1 ) return (LOGCERR, EXIT_FAILURE);
     int tasks_per_point=transport_params->tasks_per_point;
     if (!iam) cout << "Distributing matrix over " << tasks_per_point << " tasks" << endl;
     if ( nprocs%tasks_per_point ) {
@@ -82,11 +81,10 @@ int Energyvector::Execute(TCSR<double> *Overlap,TCSR<double> *KohnSham,int n_mu,
     double *dperatom = new double[n_atoms]();
     int n_cells=transport_params->n_cells;
     int ndof=Overlap->size_tot/n_cells;
-    TCSR<double> *OverlapCollectSave = new TCSR<double>(OverlapCollect);
+    TCSR<double> *OverlapCollectPBC = new TCSR<double>(OverlapCollect);
     KohnShamCollect->settozeropbc(transport_params->bandwidth,ndof);
     OverlapCollect->settozeropbc(transport_params->bandwidth,ndof);
-    TCSR<double> *OverlapCollectPBC = new TCSR<double>(1.0,OverlapCollectSave,-1.0,OverlapCollect);
-    delete OverlapCollectSave;
+    c_daxpy(OverlapCollect->n_nonzeros,-1.0,OverlapCollect->nnz,1,OverlapCollectPBC->nnz,1);
     int matrix_id, n_mat_comm;
     MPI_Comm_size(eq_rank_matrix_comm,&n_mat_comm);
     MPI_Comm_rank(eq_rank_matrix_comm,&matrix_id);
@@ -180,7 +178,7 @@ int Energyvector::determine_energyvector(std::vector<CPX> &energyvector,std::vec
 
     if (!transport_params->n_abscissae) {
         add_real_axis_energies(energy_cb,nonequi_end,energyvector,stepvector,methodvector,singularities.energies_extremum,transport_params,n_mu);
-    } else if (transport_params->method==2) {
+    } else if (transport_params->method==1) {
         add_cmpx_cont_energies(singularities.energy_gs,singularities.energy_gs,muvec_min,energyvector,stepvector,methodvector,transport_params,n_mu); //FOR PEX ONLY MU AND EM
     } else {
 // all localized states with lowest fermi level corresponding to occupation of localized states in bandgap

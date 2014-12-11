@@ -56,7 +56,12 @@ int worldrank; MPI_Comm_rank(MPI_COMM_WORLD,&worldrank);
     int ndof=Overlap->size_tot/parameter_sab->n_cells;
     int ntriblock=bandwidth*ndof;
     {
-        TCSR<CPX> *SumHamC = new TCSR<CPX>(z_one,KohnSham,-energy,Overlap);
+sabtime=get_time(d_zer);
+        TCSR<CPX> *SumHamC = new TCSR<CPX>(Overlap->size,Overlap->n_nonzeros,Overlap->findx);
+        SumHamC->copy_contain(Overlap,d_one);
+        c_zscal(SumHamC->n_nonzeros,-energy,SumHamC->nnz,1);
+        c_daxpy(SumHamC->n_nonzeros,d_one,KohnSham->nnz,1,(double*)SumHamC->nnz,2);
+if (!worldrank) cout << "TIME FOR SumHamC " << get_time(sabtime) << endl;
 // set pbc to zero 
         SumHamC->settozeropbc(bandwidth,ndof);
 // compute self energies
@@ -74,24 +79,40 @@ int worldrank; MPI_Comm_rank(MPI_COMM_WORLD,&worldrank);
             if (ipos<n_mu) {
                 if ( selfenergies[ipos].Set_master(matrix_comm,boundary_comm) ) return (LOGCERR, EXIT_FAILURE);
             }
+sabtime=get_time(d_zer);
             for (int i_bound_id=0;i_bound_id<n_bound_comm;i_bound_id++) {
                 int ibpos=i_bound_id+iseq*n_bound_comm;
                 if ( selfenergies[ibpos].Cutout(SumHamC,contactvec[ibpos],energy,method,parameter_sab,matrix_comm) ) return (LOGCERR, EXIT_FAILURE);
             }
+if (!worldrank) cout << "TIME FOR SIGMA CUTOUT " << get_time(sabtime) << endl;
+sabtime=get_time(d_zer);
             if (ipos<n_mu) {
                 if ( selfenergies[ipos].GetSigma(boundary_comm,evecpos) ) return (LOGCERR, EXIT_FAILURE);
             }
+if (!worldrank) cout << "TIME FOR SIGMA GETSIGMA " << get_time(sabtime) << endl;
+sabtime=get_time(d_zer);
             for (int i_bound_id=0;i_bound_id<n_bound_comm;i_bound_id++) {
                 int ibpos=i_bound_id+iseq*n_bound_comm;
                 selfenergies[ibpos].Distribute(SumHamC,matrix_comm);
             }
+if (!worldrank) cout << "TIME FOR SIGMA DISTRIBUTE " << get_time(sabtime) << endl;
         }
         MPI_Comm_free(&boundary_comm);
 //add sigma to sumhamc
-        TCSR<CPX> *SumHamCplusSigma = new TCSR<CPX>(z_one,SumHamC,-z_one,selfenergies[0].spsigmadist);
+sabtime=get_time(d_zer);
+        TCSR<CPX> **HamSigVec = new TCSR<CPX>*[n_mu+1];
+        CPX *HamSigSigns = new CPX[n_mu+1];
+        HamSigVec[0]=SumHamC;
+        HamSigSigns[0]=z_one;
+        for (int i_mu=0;i_mu<n_mu;i_mu++) {
+            HamSigVec[i_mu+1]=selfenergies[i_mu].spsigmadist;
+            HamSigSigns[i_mu+1]=-z_one;
+        }
+        HamSig = new TCSR<CPX>(n_mu+1,HamSigSigns,HamSigVec);
+        delete[] HamSigVec;
+        delete[] HamSigSigns;
         delete SumHamC;
-        HamSig = new TCSR<CPX>(z_one,SumHamCplusSigma,-z_one,selfenergies[1].spsigmadist);
-        delete SumHamCplusSigma;
+if (!worldrank) cout << "TIME FOR ADDING SIGMA " << get_time(sabtime) << endl;
         if (method==transport_methods::WF) {
             nprol=selfenergies[0].n_propagating;
             npror=selfenergies[1].n_propagating;
@@ -117,11 +138,13 @@ if (npror!=propnum[1]) cout << "WARNING: FOUND " << npror << " OF " << propnum[1
         if (method==transport_methods::NEGF) {
             if (matrix_procs>1) return (LOGCERR, EXIT_FAILURE);
             for (int i_mu=0;i_mu<n_mu;i_mu++) {
+/*
                 TCSR<CPX> *Sigma_H = new TCSR<CPX>(selfenergies[i_mu].spsigmadist);
                 Sigma_H->sparse_transpose(selfenergies[i_mu].spsigmadist);
                 c_dscal(Sigma_H->n_nonzeros,-d_one,((double*)Sigma_H->nnz)+1,2);
                 Gamma[i_mu] = new TCSR<CPX>(z_one,selfenergies[i_mu].spsigmadist,-z_one,Sigma_H);
                 delete Sigma_H;
+*/
 //OR JUST USE IMAGINARY PART OF SIGMA INSTEAD
             }
         }

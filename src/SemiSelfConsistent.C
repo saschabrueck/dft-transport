@@ -52,7 +52,7 @@ int semiselfconsistent(TCSR<double> *Overlap,TCSR<double> *KohnSham,transport_pa
     }
 
     int do_semiself=0;
-    if (transport_params->method==3) do_semiself=1;
+    if (transport_params->method==2) do_semiself=1;
     int NAtom_work=transport_params->n_atoms;
     if (do_semiself) NAtom_work=FEM->NAtom;
 
@@ -68,7 +68,8 @@ if (!iam) cout << "N_ATOMS " << NAtom_work << endl;
         atom_of_bf[ibf]=ibf/(Overlap->size_tot/NAtom_work);
     }
 
-    int n_mu=2;
+    if ( Overlap->size_tot%transport_params->n_cells || transport_params->bandwidth<1 ) return (LOGCERR, EXIT_FAILURE);
+    int n_mu=transport_params->num_contacts;
     double *muvec = new double[n_mu];
     int *contactvec = new int[n_mu];
     contactvec[0]=1;
@@ -190,6 +191,8 @@ rhofile.close();
 
     double *Overlap_nnz = new double[Overlap->n_nonzeros];
     c_dcopy(Overlap->n_nonzeros,Overlap->nnz,1,Overlap_nnz,1);
+    double *KohnSham_nnz = new double[KohnSham->n_nonzeros];
+    c_dcopy(KohnSham->n_nonzeros,KohnSham->nnz,1,KohnSham_nnz,1);
 
     double residual=(numeric_limits<double>::max)();
     double density_old=(numeric_limits<double>::max)();
@@ -200,18 +203,16 @@ rhofile.close();
 
         double sabtime=get_time(0.0);
         c_dcopy(Overlap->n_nonzeros,Overlap_nnz,1,Overlap->nnz,1);
+        c_dcopy(KohnSham->n_nonzeros,KohnSham_nnz,1,KohnSham->nnz,1);
         for (int ibf=0;ibf<Overlap->size_tot;ibf++) {
             Vbf[ibf]=Vnew[FEM->real_at_index[atom_of_bf[ibf]]];
         }
-        TCSR<double> *Pot = new TCSR<double>(Overlap,Vbf);
-        TCSR<double> *KohnShamPot = new TCSR<double>(1.0,KohnSham,1.0,Pot);
-        delete Pot;
+        KohnSham->add_pot(Overlap,Vbf);
         for (int ia=0;ia<FEM->NAtom;ia++) {
             Vbf[ia]=Vm+Vnew[FEM->real_at_index[ia]];
         }
         Energyvector energyvector;
-        if (energyvector.Execute(Overlap,KohnShamPot,n_mu,muvec,contactvec,rho_atom,drho_atom_dV,Vbf,FEM->NAtom,atom_of_bf,transport_params)) return (LOGCERR, EXIT_FAILURE);
-        delete KohnShamPot;
+        if (energyvector.Execute(Overlap,KohnSham,n_mu,muvec,contactvec,rho_atom,drho_atom_dV,Vbf,FEM->NAtom,atom_of_bf,transport_params)) return (LOGCERR, EXIT_FAILURE);
 
         if (!iam) cout << "TIME FOR SCHROEDINGER " << get_time(sabtime) << endl;
 
