@@ -155,14 +155,12 @@ int main (int argc, char **argv)
          fclose(ovlfile);
          Overlap = new TCSR<double>("Overlap",w_size,w_rank);
       } else {
-         TCSR<double>* OverlapRoot = NULL;
-         if (!w_rank) {
-            OverlapRoot = new TCSR<double>(KohnSham->size_tot,KohnSham->size_tot,KohnSham->findx);
-            OverlapRoot->set_to_id();
-         }
-         Overlap = new TCSR<double>(KohnSham,OverlapRoot,0,MPI_COMM_WORLD);
-         if (!w_rank) delete OverlapRoot;
+         Overlap = new TCSR<double>(KohnSham);
+         c_dscal(Overlap->n_nonzeros,0.0,Overlap->nnz,1);
+         for (int i_diag=0;i_diag<Overlap->size;i_diag++) Overlap->nnz[Overlap->diag_pos[i_diag]]=1.0;
       }
+      if (Overlap->additionalentries(KohnSham)) return (LOGCERR, EXIT_FAILURE);
+      if (KohnSham->additionalentries(Overlap)) return (LOGCERR, EXIT_FAILURE);
       semiselfconsistent(Overlap,KohnSham,transport_env_params);
       delete Overlap;
       delete KohnSham;
