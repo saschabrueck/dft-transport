@@ -13,9 +13,9 @@ BoundarySelfEnergy();
 ~BoundarySelfEnergy();
 
 int Set_master(MPI_Comm,MPI_Comm);
-int Cutout(TCSR<CPX>*,int,CPX,transport_methods::transport_method,transport_parameters*,MPI_Comm);
+int Cutout(TCSR<CPX>*,contact_type,CPX,transport_methods::transport_method,MPI_Comm);
 void Distribute(TCSR<CPX>*,MPI_Comm);
-int GetSigma(MPI_Comm,int);
+int GetSigma(MPI_Comm,int,transport_parameters*);
 
 /// Self Energy
 CPX *sigma;
@@ -31,25 +31,13 @@ int n_propagating;
 CPX *lambdapro;
 
 private:
-
-int ndof;
-
 int master_rank;
 
 CPX energy;
 
 int compute_inj;
 
-int inj_sign;
-
-int n_cells;
-
-int contact;
-
-int bandwidth;
-double colzerothr;
-double eps_limit;
-double eps_decay;
+contact_type contact;
 
 TCSR<CPX> *H0;
 TCSR<CPX> *H1;

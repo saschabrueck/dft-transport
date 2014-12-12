@@ -1666,7 +1666,7 @@ void TCSR<T>::replicate_cell(int ndof,int bandw,int contact,int strinum,MPI_Comm
             }
         }
         delete Pcell;
-    } else if (contact==2) {
+    } else if (contact==-1) {
         TCSR<T> *Pscut = new TCSR<T>(this,size_tot-(strinum+1)*ndof,ndof,0,size_tot*ndof);
         TCSR<T> *Pcell = new TCSR<T>(Pscut,my_comm);
         delete Pscut;
@@ -1729,7 +1729,7 @@ void TCSR<T>::fill_pbc_block(TCSR<T> *A,int ndof,int bandw,int contact,MPI_Comm 
             }
         }
         delete Pblock;
-    } else if (contact==2) {
+    } else if (contact==-1) {
         TCSR<T> **Pcell = new TCSR<T>*[bandw];
         for (int i_band=0;i_band<bandw;i_band++) {
             TCSR<T> *Pscut = new TCSR<T>(A,size_tot-(bandw+1+i_band)*ndof,bandw*ndof,size_tot-ndof,ndof);

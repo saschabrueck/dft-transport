@@ -29,7 +29,7 @@ int ldlt_free__(int *);
 int ldlt_blkselinv__(int *, int*, int*, CPX *, int*);
 }
 
-int density(TCSR<double> *KohnSham,TCSR<double> *Overlap,TCSR<double> *OverlapPBC,TCSR<double> *Ps,CPX energy,CPX weight,transport_methods::transport_method method,int n_mu,double *muvec,int *contactvec,double &current,double &transm,double &dos,std::vector<int> propnum,int *atom_of_bf,double *erhoperatom,double *drhoperatom,double *Vatom,transport_parameters *parameter_sab,int distribute_pmat,int evecpos,MPI_Comm matrix_comm)
+int density(TCSR<double> *KohnSham,TCSR<double> *Overlap,TCSR<double> *OverlapPBC,TCSR<double> *Ps,CPX energy,CPX weight,transport_methods::transport_method method,double *muvec,contact_type *contactvec,double &current,double &transm,double &dos,std::vector<int> propnum,int *atom_of_bf,double *erhoperatom,double *drhoperatom,double *Vatom,transport_parameters *parameter_sab,int distribute_pmat,int evecpos,MPI_Comm matrix_comm)
 {
     double d_one=1.0;
     double d_zer=0.0;
@@ -44,17 +44,17 @@ int density(TCSR<double> *KohnSham,TCSR<double> *Overlap,TCSR<double> *OverlapPB
     CPX *lambda;
     int *dist_sol;
     int *displc_sol;
-    vector<TCSR<CPX>*> Gamma(n_mu);
     int matrix_procs,matrix_rank;
     MPI_Comm_size(matrix_comm,&matrix_procs);
     MPI_Comm_rank(matrix_comm,&matrix_rank);
 int worldrank; MPI_Comm_rank(MPI_COMM_WORLD,&worldrank);
 // get parameters always at the beginning of a subroutine (or maybe even better in the constructor) to make it independent of the structure containing the parameters
-// but ndof bandwidth etc will be included in contactvec, which will become a more complicated structure
+    int n_mu=parameter_sab->num_contacts;
     int ncells=parameter_sab->n_cells;
     int bandwidth=parameter_sab->bandwidth;
     int ndof=Overlap->size_tot/parameter_sab->n_cells;
     int ntriblock=bandwidth*ndof;
+    vector<TCSR<CPX>*> Gamma(n_mu);
     {
 sabtime=get_time(d_zer);
         TCSR<CPX> *SumHamC = new TCSR<CPX>(Overlap->size,Overlap->n_nonzeros,Overlap->findx);
@@ -83,12 +83,12 @@ if (!worldrank) cout << "TIME FOR SumHamC " << get_time(sabtime) << endl;
 sabtime=get_time(d_zer);
             for (int i_bound_id=0;i_bound_id<n_bound_comm;i_bound_id++) {
                 int ibpos=i_bound_id+iseq*n_bound_comm;
-                if ( selfenergies[ibpos].Cutout(SumHamC,contactvec[ibpos],energy,method,parameter_sab,matrix_comm) ) return (LOGCERR, EXIT_FAILURE);
+                if ( selfenergies[ibpos].Cutout(SumHamC,contactvec[ibpos],energy,method,matrix_comm) ) return (LOGCERR, EXIT_FAILURE);
             }
 if (!worldrank) cout << "TIME FOR SIGMA CUTOUT " << get_time(sabtime) << endl;
 sabtime=get_time(d_zer);
             if (ipos<n_mu) {
-                if ( selfenergies[ipos].GetSigma(boundary_comm,evecpos) ) return (LOGCERR, EXIT_FAILURE);
+                if ( selfenergies[ipos].GetSigma(boundary_comm,evecpos,parameter_sab) ) return (LOGCERR, EXIT_FAILURE);
             }
 if (!worldrank) cout << "TIME FOR SIGMA GETSIGMA " << get_time(sabtime) << endl;
 sabtime=get_time(d_zer);
@@ -243,7 +243,7 @@ if (npror!=propnum[1]) cout << "WARNING: FOUND " << npror << " OF " << propnum[1
                 TCSR<CPX> *P_PBC = new TCSR<CPX>(OverlapPBC->size,OverlapPBC->n_nonzeros,OverlapPBC->findx);
                 P_PBC->copy_index(OverlapPBC);
                 for (int i_mu=0;i_mu<n_mu;i_mu++) {
-                    P_PBC->fill_pbc_block(HamSigG,ndof,bandwidth,contactvec[i_mu],matrix_comm);
+                    P_PBC->fill_pbc_block(HamSigG,ndof,bandwidth,contactvec[i_mu].inj_sign,matrix_comm);
                 }
                 Ps->add_real(P_PBC,-weight/M_PI*z_img);
                 OverlapPBC->atomdensity(P_PBC,-2.0*weight/M_PI*z_img,atom_of_bf,erhoperatom);
@@ -254,7 +254,7 @@ if (npror!=propnum[1]) cout << "WARNING: FOUND " << npror << " OF " << propnum[1
                 Green->copy_index(KohnSham);
                 Green->add(HamSigG,CPX(1.0,0.0));
                 for (int i_mu=0;i_mu<n_mu;i_mu++) {
-                    Green->replicate_cell(ndof,bandwidth,contactvec[i_mu],bandwidth,matrix_comm);
+                    Green->replicate_cell(ndof,bandwidth,contactvec[i_mu].inj_sign,bandwidth,matrix_comm);
                 }
                 Ps->add_real(Green,-weight/M_PI*z_img);
                 Overlap->atomdensity(Green,-2.0*weight/M_PI*z_img,atom_of_bf,erhoperatom);

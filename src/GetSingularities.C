@@ -1,15 +1,16 @@
 #include "GetSingularities.H"
 
-Singularities::Singularities(transport_parameters *parameter_sab,int pn_mu)
+Singularities::Singularities(transport_parameters *parameter_sab,contact_type *pcontactvec)
 {
+    contactvec=pcontactvec;
+
     eps_singularities=parameter_sab->eps_singularity_curvatures;
     n_k=parameter_sab->n_kpoint;
     n_cells=parameter_sab->n_cells;
     bandwidth=parameter_sab->bandwidth;
     noccunitcell=parameter_sab->n_occ/parameter_sab->n_cells; // THIS IS AN INTEGER DIVISION
     Temp=parameter_sab->temperature;
-
-    n_mu=pn_mu;
+    n_mu=parameter_sab->num_contacts;
 
     MPI_Comm_size(MPI_COMM_WORLD,&nprocs);
     MPI_Comm_rank(MPI_COMM_WORLD,&iam); 
@@ -27,7 +28,7 @@ Singularities::Singularities(transport_parameters *parameter_sab,int pn_mu)
     curvatures_matrix.resize(n_mu);
 }
 
-int Singularities::Execute(TCSR<double> *KohnSham,TCSR<double> *Overlap,int *contactvec)
+int Singularities::Execute(TCSR<double> *KohnSham,TCSR<double> *Overlap)
 /**  \brief Initialize array energies and fill it with n_energies energy points at which there are singularities in the DOS, in addition get integration range
  *
  *   \param KohnSham      H matrix in CSR format
@@ -44,7 +45,7 @@ int Singularities::Execute(TCSR<double> *KohnSham,TCSR<double> *Overlap,int *con
     CPX *H;
     CPX *S;
     for (int i_mu=0;i_mu<n_mu;i_mu++) {
-        if (contactvec[i_mu]==1) {
+        if (contactvec[i_mu].inj_sign==+1) {
             TCSR<double> *Hcut = new TCSR<double>(KohnSham,0,ndof,0,(bandwidth+1)*ndof);
             TCSR<double> *Hsp = new TCSR<double>(Hcut,MPI_COMM_WORLD);
             Hsp->shift_resize(0,ndof,0,(bandwidth+1)*ndof);
@@ -63,7 +64,7 @@ int Singularities::Execute(TCSR<double> *KohnSham,TCSR<double> *Overlap,int *con
             delete Ssp;
             for (int ibw=1;ibw<=bandwidth;ibw++)
                 full_transpose(ndof,ndof,&S[(bandwidth+ibw)*ndofsq],&S[(bandwidth-ibw)*ndofsq]);
-        } else if (contactvec[i_mu]==2) {
+        } else if (contactvec[i_mu].inj_sign==-1) {
             TCSR<double> *Hcut = new TCSR<double>(KohnSham,KohnSham->size_tot-ndof,ndof,KohnSham->size_tot-(bandwidth+1)*ndof,(bandwidth+1)*ndof);
             TCSR<double> *Hsp = new TCSR<double>(Hcut,MPI_COMM_WORLD);
             Hsp->shift_resize(KohnSham->size_tot-ndof,ndof,KohnSham->size_tot-(bandwidth+1)*ndof,(bandwidth+1)*ndof);

@@ -15,8 +15,8 @@
 
 class Singularities {
 public:
-Singularities(transport_parameters*,int);
-int Execute(TCSR<double>*,TCSR<double>*,int*);
+Singularities(transport_parameters*,contact_type*);
+int Execute(TCSR<double>*,TCSR<double>*);
 double determine_fermi(double,int);
 void write_bandstructure(int);
 std::vector< std::vector< std::vector<double> > > get_propagating(const std::vector<CPX>&);
@@ -41,6 +41,8 @@ int bandwidth;
 int noccunitcell;
 double Temp;
 int n_mu;
+
+contact_type *contactvec;
 
 std::vector< std::vector<double> > curvatures_extremum;
 std::vector< std::vector<double> > kval_extremum;
