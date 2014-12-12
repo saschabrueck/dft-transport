@@ -73,19 +73,26 @@ if (!iam) cout << "N_ATOMS " << NAtom_work << endl;
     if ( Overlap->size_tot%transport_params->n_cells || transport_params->bandwidth<1 ) return (LOGCERR, EXIT_FAILURE);
     int n_mu=transport_params->num_contacts;
     double *muvec = new double[n_mu];
-    int *contactvec = new int[n_mu];
-    contactvec[0]=1;
-    contactvec[1]=2;
+    contact_type *contactvec = new contact_type[n_mu];
+    for (int i_mu=0;i_mu<n_mu;i_mu++) {
+        contactvec[i_mu].bandwidth=transport_params->bandwidth;
+        contactvec[i_mu].ndof=Overlap->size_tot/transport_params->n_cells; // ONLY IF ALL CELLS EQUAL
+        contactvec[i_mu].n_occ=transport_params->n_occ/transport_params->n_cells; // THIS IS AN INTEGER DIVISION
+    }
+    contactvec[0].start=0;
+    contactvec[0].inj_sign=+1;
+    contactvec[1].start=Overlap->size_tot-contactvec[1].ndof*contactvec[1].bandwidth;
+    contactvec[1].inj_sign=-1;
 
     if (!do_semiself) {
-        Singularities singularities(transport_params,n_mu);
-        if ( singularities.Execute(KohnSham,Overlap,contactvec) ) return (LOGCERR, EXIT_FAILURE);
+        Singularities singularities(transport_params,contactvec);
+        if ( singularities.Execute(KohnSham,Overlap) ) return (LOGCERR, EXIT_FAILURE);
         for (int i_mu=0;i_mu<n_mu;i_mu++) muvec[i_mu]=singularities.determine_fermi(0.0,i_mu);
         double mu_avg=std::accumulate(muvec,muvec+n_mu,0.0)/n_mu;
         muvec[0]=mu_avg;
         muvec[1]=mu_avg;
         Energyvector energyvector;
-        if (energyvector.Execute(Overlap,KohnSham,n_mu,muvec,contactvec,rho_atom,drho_atom_dV,Vbf,NAtom_work,atom_of_bf,transport_params)) return (LOGCERR, EXIT_FAILURE);
+        if (energyvector.Execute(Overlap,KohnSham,muvec,contactvec,rho_atom,drho_atom_dV,Vbf,NAtom_work,atom_of_bf,transport_params)) return (LOGCERR, EXIT_FAILURE);
 if(!iam){
 stringstream mysstream;
 mysstream << "rhofile";
@@ -107,11 +114,8 @@ rhofile.close();
     for (int ia=0;ia<FEM->NAtom;ia++) {
         doping_cell[ia/(FEM->NAtom/transport_params->n_cells)]+=doping_atom[ia];
     }
-    double *dopingvec = new double[n_mu];
-    dopingvec[0]=doping_cell[0];
-    dopingvec[1]=doping_cell[transport_params->n_cells-1];
 
-if (!iam) cout << "DOPING " << dopingvec[0] << " " << dopingvec[1] << endl;
+if (!iam) cout << "DOPING " << doping_cell[0] << " " << doping_cell[transport_params->n_cells-1] << endl;
 
     double Vs=voltage->Vsmin;
     double Vd=voltage->Vdmin;
@@ -119,11 +123,12 @@ if (!iam) cout << "DOPING " << dopingvec[0] << " " << dopingvec[1] << endl;
     double Vm;
     double dV;
     {
-        Singularities singularities(transport_params,n_mu);
-        if ( singularities.Execute(KohnSham,Overlap,contactvec) ) return (LOGCERR, EXIT_FAILURE);
+        Singularities singularities(transport_params,contactvec);
+        if ( singularities.Execute(KohnSham,Overlap) ) return (LOGCERR, EXIT_FAILURE);
         for (int i_mu=0;i_mu<n_mu;i_mu++) muvec[i_mu]=singularities.determine_fermi(0.0,i_mu);
         Vm=std::accumulate(muvec,muvec+n_mu,0.0)/n_mu;
-        for (int i_mu=0;i_mu<n_mu;i_mu++) muvec[i_mu]=singularities.determine_fermi(dopingvec[i_mu],i_mu);
+        muvec[0]=singularities.determine_fermi(doping_cell[0],0);
+        muvec[1]=singularities.determine_fermi(doping_cell[transport_params->n_cells-1],1);
         double mu_avg=std::accumulate(muvec,muvec+n_mu,0.0)/n_mu;
         dV=(muvec[0]-muvec[1])/2.0;
         Vg+=mu_avg-*min_element(singularities.energies_cb.begin(),singularities.energies_cb.end());
@@ -214,7 +219,7 @@ rhofile.close();
             Vbf[ia]=Vm+Vnew[FEM->real_at_index[ia]];
         }
         Energyvector energyvector;
-        if (energyvector.Execute(Overlap,KohnSham,n_mu,muvec,contactvec,rho_atom,drho_atom_dV,Vbf,FEM->NAtom,atom_of_bf,transport_params)) return (LOGCERR, EXIT_FAILURE);
+        if (energyvector.Execute(Overlap,KohnSham,muvec,contactvec,rho_atom,drho_atom_dV,Vbf,FEM->NAtom,atom_of_bf,transport_params)) return (LOGCERR, EXIT_FAILURE);
 
         if (!iam) cout << "TIME FOR SCHROEDINGER " << get_time(sabtime) << endl;
 

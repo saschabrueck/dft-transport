@@ -72,27 +72,18 @@ int BoundarySelfEnergy::Set_master(MPI_Comm matrix_comm,MPI_Comm boundary_comm)
     return 0;
 }
 
-int BoundarySelfEnergy::Cutout(TCSR<CPX> *SumHamC,int pcontact,CPX penergy,transport_methods::transport_method method,transport_parameters *parameter_sab,MPI_Comm matrix_comm)
+int BoundarySelfEnergy::Cutout(TCSR<CPX> *SumHamC,contact_type pcontact,CPX penergy,transport_methods::transport_method method,MPI_Comm matrix_comm)
 {
     energy=penergy;
     if (method==transport_methods::WF) compute_inj=1;
     if (imag(energy) && compute_inj) return (LOGCERR, EXIT_FAILURE);
 
     contact=pcontact;
-    if (contact==1) {
-        inj_sign=+1;
-    } else if (contact==2) {
-        inj_sign=-1;
-    }
-
-    n_cells=parameter_sab->n_cells;
-    ndof=SumHamC->size_tot/n_cells;
-    bandwidth=parameter_sab->bandwidth;
+    int start=contact.start;
+    int inj_sign=contact.inj_sign;
+    int ndof=contact.ndof;
+    int bandwidth=contact.bandwidth;
     int ntriblock=bandwidth*ndof;
-
-    colzerothr=parameter_sab->colzero_threshold;
-    eps_limit=parameter_sab->eps_limit;
-    eps_decay=parameter_sab->eps_decay;
 
     int iam,nprocs;
     MPI_Comm_size(matrix_comm,&nprocs);
@@ -107,31 +98,19 @@ int BoundarySelfEnergy::Cutout(TCSR<CPX> *SumHamC,int pcontact,CPX penergy,trans
     }
     delete[] gathered_master_ranks;
 
-    int i0,j0,i1,j1;
-    if (contact==1) {
-        i0=0;
-        j0=i0;
-        i1=i0;
-        j1=j0+ntriblock;
-    } else if (contact==2) {
-        i0=SumHamC->size_tot-ntriblock;
-        j0=i0;
-        i1=i0;
-        j1=j0-ntriblock;
-    }
-    TCSR<CPX> *H0cut = new TCSR<CPX>(SumHamC,i0,ntriblock,j0,ntriblock);
-    TCSR<CPX> *H1cut = new TCSR<CPX>(SumHamC,i1,ntriblock,j1,ntriblock);
+    TCSR<CPX> *H0cut = new TCSR<CPX>(SumHamC,start,ntriblock,start,ntriblock);
+    TCSR<CPX> *H1cut = new TCSR<CPX>(SumHamC,start,ntriblock,start+inj_sign*ntriblock,ntriblock);
     H0 = new TCSR<CPX>(H0cut,master_rank,matrix_comm);
     H1 = new TCSR<CPX>(H1cut,master_rank,matrix_comm);
     delete H0cut;
     delete H1cut;
     if (iam==master_rank) {
-        H0->shift_resize(i0,ntriblock,j0,ntriblock);
-        H1->shift_resize(i1,ntriblock,j1,ntriblock);
+        H0->shift_resize(start,ntriblock,start,ntriblock);
+        H1->shift_resize(start,ntriblock,start+inj_sign*ntriblock,ntriblock);
         H1t = new TCSR<CPX>(H1->size,H1->n_nonzeros,H1->findx);
         H1t->sparse_transpose(H1);
         TCSR<CPX> **H = new TCSR<CPX>*[2*bandwidth+1];
-        if (contact==1) {
+        if (contact.inj_sign==+1) {
             for (int ibw=bandwidth;ibw<2*bandwidth;ibw++) {
                 H[ibw] = new TCSR<CPX>(H0,0,ndof,(ibw-bandwidth)*ndof,ndof);
                 H[ibw]->shift_resize(0,ndof,(ibw-bandwidth)*ndof,ndof);
@@ -142,7 +121,7 @@ int BoundarySelfEnergy::Cutout(TCSR<CPX> *SumHamC,int pcontact,CPX penergy,trans
                 H[bandwidth-ibw] = new TCSR<CPX>(H[bandwidth+ibw]);
                 H[bandwidth-ibw]->sparse_transpose(H[bandwidth+ibw]);
             }
-        } else if (contact==2) {
+        } else if (contact.inj_sign==-1) {
             H[0] =  new TCSR<CPX>(H1,ntriblock-ndof,ndof,ntriblock-ndof,ndof);
             H[0]->shift_resize(ntriblock-ndof,ndof,ntriblock-ndof,ndof);
             for (int ibw=1;ibw<bandwidth+1;ibw++) {
@@ -202,16 +181,14 @@ void BoundarySelfEnergy::Distribute(TCSR<CPX> *SumHamC,MPI_Comm matrix_comm)
 {
     int iam;
     MPI_Comm_rank(matrix_comm,&iam);
+    int start=contact.start;
+    int ndof=contact.ndof;
+    int bandwidth=contact.bandwidth;
     int ntriblock=bandwidth*ndof;
     TCSR<CPX> *spsigma = NULL;
     if (iam==master_rank) {
-        if (contact==1) {
-            spsigma = new TCSR<CPX>(SumHamC->size_tot,ntriblock*ntriblock,SumHamC->findx);
-            spsigma->full_to_sparse(sigma,ntriblock,ntriblock,0,0);
-        } else if (contact==2) {
-            spsigma = new TCSR<CPX>(SumHamC->size_tot,ntriblock*ntriblock,SumHamC->findx);
-            spsigma->full_to_sparse(sigma,ntriblock,ntriblock,SumHamC->size_tot-ntriblock,SumHamC->size_tot-ntriblock);
-        }
+        spsigma = new TCSR<CPX>(SumHamC->size_tot,ntriblock*ntriblock,SumHamC->findx);
+        spsigma->full_to_sparse(sigma,ntriblock,ntriblock,start,start);
         delete[] sigma;
         sigma = NULL;
     }
@@ -228,13 +205,8 @@ void BoundarySelfEnergy::Distribute(TCSR<CPX> *SumHamC,MPI_Comm matrix_comm)
         MPI_Bcast(lambdapro,n_propagating,MPI_DOUBLE_COMPLEX,master_rank,matrix_comm);
         TCSR<CPX> *spainj = NULL;
         if (iam==master_rank) {
-            if (contact==1) {
-                spainj = new TCSR<CPX>(SumHamC->size_tot,ntriblock*n_propagating,SumHamC->findx);
-                spainj->full_to_sparse(inj,ntriblock,n_propagating,0,0);
-            } else if (contact==2) {
-                spainj = new TCSR<CPX>(SumHamC->size_tot,ntriblock*n_propagating,SumHamC->findx);
-                spainj->full_to_sparse(inj,ntriblock,n_propagating,SumHamC->size_tot-ntriblock,0);
-            }
+            spainj = new TCSR<CPX>(SumHamC->size_tot,ntriblock*n_propagating,SumHamC->findx);
+            spainj->full_to_sparse(inj,ntriblock,n_propagating,start,0);
             delete[] inj;
             inj = NULL;
         }
@@ -243,7 +215,7 @@ void BoundarySelfEnergy::Distribute(TCSR<CPX> *SumHamC,MPI_Comm matrix_comm)
         }
 }
 
-int BoundarySelfEnergy::GetSigma(MPI_Comm boundary_comm,int evecpos)
+int BoundarySelfEnergy::GetSigma(MPI_Comm boundary_comm,int evecpos,transport_parameters *parameter_sab)
 {
     double d_one=1.0;
     double d_zer=0.0;
@@ -254,10 +226,17 @@ int BoundarySelfEnergy::GetSigma(MPI_Comm boundary_comm,int evecpos)
 // set parameters
     int complexenergypoint=0;
     if (imag(energy)) complexenergypoint=1;
+    int inj_sign=contact.inj_sign;
+    int ndof=contact.ndof;
+    int bandwidth=contact.bandwidth;
     int ndofsq=ndof*ndof;
     int nblocksband=2*bandwidth+1;
     int ntriblock=bandwidth*ndof;
     int triblocksize=ntriblock*ntriblock;
+    double colzerothr=parameter_sab->colzero_threshold;
+    double eps_limit=parameter_sab->eps_limit;
+    double eps_decay=parameter_sab->eps_decay;
+    double eps_eigval_degen=1.0E-6;
     int boundary_rank;
     MPI_Comm_rank(boundary_comm,&boundary_rank);
 int worldrank; MPI_Comm_rank(MPI_COMM_WORLD,&worldrank);
@@ -419,7 +398,7 @@ if (!worldrank) cout << "TIME FOR MATRIX MATRIX MULTIPLICATIONS FOR INVERSE OF G
     if (rcond<numeric_limits<double>::epsilon()) return (LOGCERR, EXIT_FAILURE);
     sigma = new CPX[triblocksize];
     CPX* RCOR = new CPX[ntriblock*neigbas];
-    int inversion_small_multmult = 1;
+    int inversion_small_multmult = 0;
     if (inversion_small_multmult) {
         full_transpose(neigbas,ntriblock,Vref,RCOR);
         c_zgetrs('N',neigbas,ntriblock,invgrs,neigbas,pivarrayg,RCOR,neigbas,&iinfo);
@@ -510,7 +489,7 @@ if (!worldrank) cout << "TIME FOR SYMMETRIZATION " << get_time(sabtime) << endl;
         for (int i=0;i<nprotra;i++) {
             int degeneracy=1;
             for (int j=0;j<i;j++) {
-                if (abs(lambdaref[i]-lambdaref[j])<1E-12 && abs(velref[i]-velref[j])<1E-12) {
+                if (abs(lambdaref[i]-lambdaref[j])<eps_eigval_degen && abs(velref[i]-velref[j])<eps_eigval_degen) {
                     degeneracy++;
                     CPX prod=c_zdotc(ntriblock,&Vref[i*ntriblock],1,&Vref[j*ntriblock],1);
                     c_zaxpy(ntriblock,-prod,&Vref[i*ntriblock],1,&Vref[j*ntriblock],1);
