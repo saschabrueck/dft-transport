@@ -32,13 +32,16 @@ Poisson *OMEN_Poisson_Solver;
 
 int main (int argc, char **argv)
 {
-   int error, f_env_id, natom, calc_force, n_el, n_el_pos, n_el_force;
-   int fcomm, init_mpi, finalize_mpi;
-   double e_pot;
+   int fcomm;
    char *input_file;
    char *output_file;
    char *command_file;
+#ifdef libcp2k
+   int init_mpi, finalize_mpi;
+   int error, f_env_id, natom, calc_force, n_el, n_el_pos, n_el_force;
+   double e_pot;
    double *pos, *force;
+#endif
 
    std::cout.precision(12);
 
@@ -57,26 +60,20 @@ int main (int argc, char **argv)
 
    MPI::Intercomm mpi_comm;
 
-   init_mpi = 0;
-   finalize_mpi = 0;
-   calc_force = 1;
-
    MPI::Init(argc, argv);
    MPI::COMM_WORLD.Set_errhandler(MPI::ERRORS_THROW_EXCEPTIONS);
    mpi_comm = MPI::COMM_WORLD;
    fcomm = MPI_Comm_c2f(mpi_comm);
 
-   int run_cp2k=1;
-   if (FILE *trpafile = fopen("TransportParams","r")) {
-      run_cp2k=0;
-      fclose(trpafile);
-   }
-   if (run_cp2k) {
-      cp_c_init_cp2k(&init_mpi, &error);
-      cp_c_create_fenv_comm(&f_env_id, input_file, output_file, &fcomm, &error);
-      cp_c_ext_method_set_ptr(&f_env_id, &c_scf_method, &error);
-      cp_c_get_natom(&f_env_id, &natom, &error);
-   }
+#ifdef libcp2k
+   init_mpi = 0;
+   finalize_mpi = 0;
+   calc_force = 1;
+
+   cp_c_init_cp2k(&init_mpi, &error);
+   cp_c_create_fenv_comm(&f_env_id, input_file, output_file, &fcomm, &error);
+   cp_c_ext_method_set_ptr(&f_env_id, &c_scf_method, &error);
+   cp_c_get_natom(&f_env_id, &natom, &error);
 
    n_el = natom*3;
    n_el_pos = natom*3;
@@ -85,6 +82,7 @@ int main (int argc, char **argv)
    force = new double[n_el_force];
    std::fill_n(pos, n_el_pos, 0);
    std::fill_n(force, n_el_force, 0);
+#endif
 
    int do_omen_poisson=0;
    if ((yyin = fopen(command_file,"r")) != NULL) do_omen_poisson=1;
@@ -114,58 +112,67 @@ int main (int argc, char **argv)
    int w_size, w_rank;
    MPI_Comm_size(MPI_COMM_WORLD,&w_size);
    MPI_Comm_rank(MPI_COMM_WORLD,&w_rank);
-   if (run_cp2k) {
-      if (!w_rank) std::cout << "Starting CP2K" << std::endl;
-      cp_c_calc_energy_force(&f_env_id, &calc_force, &error);
-      cp_c_get_energy(&f_env_id, &e_pot, &error);
-      cp_c_get_force(&f_env_id, force, &n_el_force, &error);
-      cp_c_get_pos(&f_env_id, pos, &n_el, &error);
-      cp_c_destroy_fenv(&f_env_id, &error);
-      cp_c_finalize_cp2k(&finalize_mpi, &error);
-   } else {
-      transport_parameters* transport_env_params = new transport_parameters();
-      ifstream paraminfile("TransportParams");
-      paraminfile >> transport_env_params->method;
-      paraminfile >> transport_env_params->bandwidth;
-      paraminfile >> transport_env_params->n_cells;
-      paraminfile >> transport_env_params->n_occ;
-      paraminfile >> transport_env_params->n_atoms;
-      paraminfile >> transport_env_params->n_abscissae;
-      paraminfile >> transport_env_params->n_kpoint;
-      paraminfile >> transport_env_params->num_interval;
-      paraminfile >> transport_env_params->num_contacts;
-      paraminfile >> transport_env_params->ndof;
-      paraminfile >> transport_env_params->tasks_per_point;
-      paraminfile >> transport_env_params->cores_per_node;
-      paraminfile >> transport_env_params->evoltfactor;
-      paraminfile >> transport_env_params->colzero_threshold;
-      paraminfile >> transport_env_params->eps_limit;
-      paraminfile >> transport_env_params->eps_decay;
-      paraminfile >> transport_env_params->eps_singularity_curvatures;
-      paraminfile >> transport_env_params->eps_mu;
-      paraminfile >> transport_env_params->eps_eigval_degen;
-      paraminfile >> transport_env_params->energy_interval;
-      paraminfile >> transport_env_params->min_interval;
-      paraminfile >> transport_env_params->temperature;
-      paraminfile.close();
-      TCSR<double>* KohnSham = new TCSR<double>("KohnSham",w_size,w_rank);
-      c_dscal(KohnSham->n_nonzeros,-1.0/transport_env_params->evoltfactor,KohnSham->nnz,1);
-      TCSR<double>* Overlap;
-      if (FILE *ovlfile = fopen("Overlap","r")) {
-         fclose(ovlfile);
-         Overlap = new TCSR<double>("Overlap",w_size,w_rank);
-      } else {
-         Overlap = new TCSR<double>(KohnSham);
-         c_dscal(Overlap->n_nonzeros,0.0,Overlap->nnz,1);
-         for (int i_diag=0;i_diag<Overlap->size;i_diag++) Overlap->nnz[Overlap->diag_pos[i_diag]]=1.0;
-      }
-      if (Overlap->additionalentries(KohnSham)) return (LOGCERR, EXIT_FAILURE);
-      if (KohnSham->additionalentries(Overlap)) return (LOGCERR, EXIT_FAILURE);
-      semiselfconsistent(Overlap,KohnSham,transport_env_params);
-      delete Overlap;
-      delete KohnSham;
-      delete transport_env_params;
+
+#ifdef libcp2k
+   if (!w_rank) std::cout << "Starting CP2K" << std::endl;
+   cp_c_calc_energy_force(&f_env_id, &calc_force, &error);
+   cp_c_get_energy(&f_env_id, &e_pot, &error);
+   cp_c_get_force(&f_env_id, force, &n_el_force, &error);
+   cp_c_get_pos(&f_env_id, pos, &n_el, &error);
+   cp_c_destroy_fenv(&f_env_id, &error);
+   cp_c_finalize_cp2k(&finalize_mpi, &error);
+#else
+   transport_parameters* transport_env_params = new transport_parameters();
+   ifstream paraminfile;
+   paraminfile.exceptions(ifstream::failbit);
+   try {
+      paraminfile.open("TransportParams");
    }
+   catch (ifstream::failure e) {
+      std::cout << "TransportParams file is missing." << std::endl;
+      return 0;
+   }
+   paraminfile >> transport_env_params->method;
+   paraminfile >> transport_env_params->bandwidth;
+   paraminfile >> transport_env_params->n_cells;
+   paraminfile >> transport_env_params->n_occ;
+   paraminfile >> transport_env_params->n_atoms;
+   paraminfile >> transport_env_params->n_abscissae;
+   paraminfile >> transport_env_params->n_kpoint;
+   paraminfile >> transport_env_params->num_interval;
+   paraminfile >> transport_env_params->num_contacts;
+   paraminfile >> transport_env_params->ndof;
+   paraminfile >> transport_env_params->tasks_per_point;
+   paraminfile >> transport_env_params->cores_per_node;
+   paraminfile >> transport_env_params->evoltfactor;
+   paraminfile >> transport_env_params->colzero_threshold;
+   paraminfile >> transport_env_params->eps_limit;
+   paraminfile >> transport_env_params->eps_decay;
+   paraminfile >> transport_env_params->eps_singularity_curvatures;
+   paraminfile >> transport_env_params->eps_mu;
+   paraminfile >> transport_env_params->eps_eigval_degen;
+   paraminfile >> transport_env_params->energy_interval;
+   paraminfile >> transport_env_params->min_interval;
+   paraminfile >> transport_env_params->temperature;
+   paraminfile.close();
+   TCSR<double>* KohnSham = new TCSR<double>("KohnSham",w_size,w_rank);
+   c_dscal(KohnSham->n_nonzeros,-1.0/transport_env_params->evoltfactor,KohnSham->nnz,1);
+   TCSR<double>* Overlap;
+   if (FILE *ovlfile = fopen("Overlap","r")) {
+      fclose(ovlfile);
+      Overlap = new TCSR<double>("Overlap",w_size,w_rank);
+   } else {
+      Overlap = new TCSR<double>(KohnSham);
+      c_dscal(Overlap->n_nonzeros,0.0,Overlap->nnz,1);
+      for (int i_diag=0;i_diag<Overlap->size;i_diag++) Overlap->nnz[Overlap->diag_pos[i_diag]]=1.0;
+   }
+   if (Overlap->additionalentries(KohnSham)) return (LOGCERR, EXIT_FAILURE);
+   if (KohnSham->additionalentries(Overlap)) return (LOGCERR, EXIT_FAILURE);
+   semiselfconsistent(Overlap,KohnSham,transport_env_params);
+   delete Overlap;
+   delete KohnSham;
+   delete transport_env_params;
+#endif
 
    if (do_omen_poisson) {
       delete OMEN_Poisson_Solver;
@@ -173,9 +180,11 @@ int main (int argc, char **argv)
       delete Wire;
       delete_parameters();
    }
-   
+
+#ifdef libcp2k   
    delete [] pos;
    delete [] force;
+#endif
    delete [] input_file;
    delete [] output_file;
    delete [] command_file;

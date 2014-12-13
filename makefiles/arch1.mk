@@ -43,7 +43,7 @@ LFLAGS   = -L$(CP2KLIB) -L$(SCALAPACK) -L$(LAZTEC) -L$(LMETIS) -L$(LPARMETIS) -L
            -L$(LMUMPS) -L$(LSPARSE) -L$(LSUITESPARSE) -L$(LQHULL) -L$(LARPACK) \
            -L$(LIBINT) -L$(LIBXC) -L$(LIBPEXSI)
 
-DFLAGS   = -DAdd_
+DFLAGS   = -Dlibcp2k -DAdd_ 
 
 PARDISO_SO = -L$(TOP_DIR)/pardiso/lib -lpardiso500-MPI-GNU472-X86-64 
 
