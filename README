@@ -14,6 +14,8 @@ Update CP2K:
 
 Compile and run:
 6) cd to makefiles/ and using the sample .mk file (arch1.mk) write a .mk file (say, myarch.mk) according to your local installations.
+   * In order to use CP2K add -Dlibcp2k to DFLAGS 
+
 7) create a Makefile and run make 
    > cd src/
    > ./configure --with-arch=myarch
