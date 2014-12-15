@@ -103,15 +103,13 @@ public:
     void scatter(TCSR<T>*,int,MPI_Comm);
     void reduce(int,MPI_Comm);
     void reducescatter(TCSR<T>*,MPI_Comm);
-    double psipsidagger(CPX*,int);
     void psipsidagger(CPX*,int,CPX);
     void psipsidagger(double*,int,double);
     void psipsidagger_transpose(double*,int,double);
-    void psipsidagger(CPX*,CPX*,CPX*,int,int,int,CPX);
-    void psipsidagger(CPX*,int,CPX,int*,double*);
+    double psipsidagger(TCSR<double>*,CPX*,CPX*,CPX*,int,int,int,CPX);
+    double psipsidagger_transpose(TCSR<double>*,CPX*,CPX*,CPX*,int,int,int,CPX);
     void psipsidagger(CPX*,int,CPX,int*,double*,double*,double);
-    void psipsidagger(CPX*,CPX*,int,CPX,int*,double*);
-    void atomdensity(TCSR<CPX>*,CPX,int*,double*);
+    void atom_allocate(int*,T*,T);
     double collect_density(double*,double*,int*);
     void settozeropbc(int,int);
     void removepbc(int,int);
@@ -1954,21 +1952,6 @@ void TCSR<T>::reducescatter(TCSR<T>*matdist,MPI_Comm my_comm)
 /************************************************************************************************/
 
 template <>
-inline double TCSR<double>::psipsidagger(CPX* psi,int nkval)
-{
-    int i,e;
-    double result=0;
-    for(i=0;i<size;i++){
-        for(e=edge_i[i]-findx;e<edge_i[i+1]-findx;e++){
-            result+=nnz[e]*real(c_zdotc(nkval,&psi[index_j[e]-findx],size_tot,&psi[first_row+i],size_tot));
-        }
-    }
-    return result;
-}
-
-/************************************************************************************************/
-
-template <>
 inline void TCSR<double>::psipsidagger(CPX* psi,int nkval,CPX factor)
 {
     int i,e;
@@ -2000,7 +1983,7 @@ inline void TCSR<double>::psipsidagger_transpose(double* psi,int nkval,double fa
     int i,e;
     for(i=0;i<size;i++){
         for(e=edge_i[i]-findx;e<edge_i[i+1]-findx;e++){
-            nnz[e]+=factor*c_ddot(nkval,&psi[(index_j[e]-findx)*size],1,&psi[i*size],1);
+            nnz[e]+=factor*c_ddot(nkval,&psi[(index_j[e]-findx)*nkval],1,&psi[(first_row+i)*nkval],1);
         }
     }
 }
@@ -2008,33 +1991,49 @@ inline void TCSR<double>::psipsidagger_transpose(double* psi,int nkval,double fa
 /************************************************************************************************/
 
 template <>
-inline void TCSR<double>::psipsidagger(CPX* psi,CPX* psil,CPX* psir,int nkval,int ndof,int bw,CPX factor)
+inline double TCSR<double>::psipsidagger(TCSR<double>* mat,CPX* psi,CPX* psil,CPX* psir,int nkval,int ndof,int bw,CPX factor)
 {
     int i,e;
+    CPX z;
+    double result=0.0;
     for(i=0;i<size;i++) {
         for(e=edge_i[i]-findx;e<edge_i[i+1]-findx;e++) {
             if ( (index_j[e]-findx)/ndof - (i+first_row)/ndof > bw ) {
-                nnz[e]+=real(factor*c_zdotc(nkval,&psil[index_j[e]-findx],size_tot,&psi[first_row+i],size_tot));
+                z=c_zdotc(nkval,&psil[index_j[e]-findx],size_tot,&psi[first_row+i],size_tot);
             } else if ( (index_j[e]-findx)/ndof - (i+first_row)/ndof < -bw ) {
-                nnz[e]+=real(factor*c_zdotc(nkval,&psir[index_j[e]-findx],size_tot,&psi[first_row+i],size_tot));
+                z=c_zdotc(nkval,&psir[index_j[e]-findx],size_tot,&psi[first_row+i],size_tot);
             } else {
-                nnz[e]+=real(factor*c_zdotc(nkval,&psi[index_j[e]-findx],size_tot,&psi[first_row+i],size_tot));
+                z=c_zdotc(nkval,&psi[index_j[e]-findx],size_tot,&psi[first_row+i],size_tot);
             }
+            result+=mat->nnz[e]*real(z);
+            nnz[e]+=real(factor*z);
         }
     }
+    return result;
 }
 
 /************************************************************************************************/
 
 template <>
-inline void TCSR<double>::psipsidagger(CPX* psi,int nkval,CPX factor,int* atom_of_bf,double* result)
+inline double TCSR<double>::psipsidagger_transpose(TCSR<double>* mat,CPX* psi,CPX* psil,CPX* psir,int nkval,int ndof,int bw,CPX factor)
 {
     int i,e;
-    for(i=0;i<size;i++){
-        for(e=edge_i[i]-findx;e<edge_i[i+1]-findx;e++){
-            result[atom_of_bf[first_row+i]]+=nnz[e]*real(factor*c_zdotc(nkval,&psi[index_j[e]-findx],size_tot,&psi[first_row+i],size_tot));
+    CPX z;
+    double result=0.0;
+    for(i=0;i<size;i++) {
+        for(e=edge_i[i]-findx;e<edge_i[i+1]-findx;e++) {
+            if ( (index_j[e]-findx)/ndof - (i+first_row)/ndof > bw ) {
+                z=c_zdotc(nkval,&psil[(index_j[e]-findx)*nkval],1,&psi[(first_row+i)*nkval],1);
+            } else if ( (index_j[e]-findx)/ndof - (i+first_row)/ndof < -bw ) {
+                z=c_zdotc(nkval,&psir[(index_j[e]-findx)*nkval],1,&psi[(first_row+i)*nkval],1);
+            } else {
+                z=c_zdotc(nkval,&psi[(index_j[e]-findx)*nkval],1,&psi[(first_row+i)*nkval],1);
+            }
+            result+=mat->nnz[e]*real(z);
+            nnz[e]+=real(factor*z);
         }
     }
+    return result;
 }
 
 /************************************************************************************************/
@@ -2054,40 +2053,15 @@ inline void TCSR<double>::psipsidagger(CPX* psi,int nkval,CPX factor,int* atom_o
 
 /************************************************************************************************/
 
-template <>
-inline void TCSR<double>::psipsidagger(CPX* psi,CPX* psi2,int nkval,CPX factor,int* atom_of_bf,double* result)
+template <class T>
+void TCSR<T>::atom_allocate(int* atom_of_bf,T* result,T factor)
 {
     int i,e;
     for(i=0;i<size;i++){
         for(e=edge_i[i]-findx;e<edge_i[i+1]-findx;e++){
-            result[atom_of_bf[first_row+i]]+=nnz[e]*real(factor*c_zdotc(nkval,&psi2[index_j[e]-findx],size_tot,&psi[first_row+i],size_tot));
+            result[atom_of_bf[first_row+i]]+=factor*nnz[e];
         }
     }
-}
-
-/************************************************************************************************/
-
-template <>
-inline void TCSR<double>::atomdensity(TCSR<CPX>* A,CPX factor,int* atom_of_bf,double* result)
-{
-    if (size      != A->size      ) throw CSR_Exception(__LINE__,__FILE__);
-    if (size_tot  != A->size_tot  ) throw CSR_Exception(__LINE__,__FILE__);
-    if (type      != A->type      ) throw CSR_Exception(__LINE__,__FILE__);
-    if (first_row != A->first_row ) throw CSR_Exception(__LINE__,__FILE__);
-
-    int i,e;
-    double *linefull=new double[size_tot];
-
-    for (i=0;i<size;i++) {
-        init_variable(linefull,size_tot);
-        for (e=A->edge_i[i]-A->findx;e<A->edge_i[i+1]-A->findx;e++) {
-            linefull[A->index_j[e]-A->findx]=real(factor*A->nnz[e]);
-        }
-        for (e=edge_i[i]-findx;e<edge_i[i+1]-findx;e++) {
-            result[atom_of_bf[first_row+i]]+=nnz[e]*linefull[index_j[e]-findx];
-        }
-    }
-    delete[] linefull;
 }
 
 /************************************************************************************************/

@@ -25,14 +25,12 @@ int Energyvector::Execute(TCSR<double> *Overlap,TCSR<double> *KohnSham,double *m
         if (!iam) cout << "Choose number of tasks per energy point as a divider of total number of tasks" << endl;
         return (LOGCERR, EXIT_FAILURE);
     }
-    int distribute_pmat=1;
 // allocate matrices to gather on every node
-    sabtime=get_time(0.0);
+sabtime=get_time(0.0);
     MPI_Comm matrix_comm;
     MPI_Comm eq_rank_matrix_comm;
     TCSR<double> *KohnShamCollect;
     TCSR<double> *OverlapCollect;
-    TCSR<double> *Ps = NULL;
     if (tasks_per_point > 1) {
         MPI_Comm KS_matrix_comm;
         MPI_Comm KS_eq_rank_matrix_comm;
@@ -47,28 +45,15 @@ int Energyvector::Execute(TCSR<double> *Overlap,TCSR<double> *KohnSham,double *m
         int matrix_rank, n_mat_comm;
         MPI_Comm_size(eq_rank_matrix_comm,&n_mat_comm);
         MPI_Comm_rank(matrix_comm,&matrix_rank);
-        if (distribute_pmat) {
-            Ps = new TCSR<double>(OverlapCollect);
-        } else {
-            int *master_ranks = new int[n_mat_comm];
-            if (matrix_rank==0) {
-                MPI_Gather(&iam,1,MPI_INT,master_ranks,1,MPI_INT,0,eq_rank_matrix_comm);
-            }
-            MPI_Bcast(master_ranks,n_mat_comm,MPI_INT,0,MPI_COMM_WORLD);
-            Ps = new TCSR<double>(Overlap,master_ranks,n_mat_comm,MPI_COMM_WORLD);
-            delete[] master_ranks;
-        }
-        Ps->init_variable(Ps->nnz,Ps->n_nonzeros);
     } else {
         KohnShamCollect = new TCSR<double>(KohnSham,MPI_COMM_WORLD);
         OverlapCollect = new TCSR<double>(Overlap,MPI_COMM_WORLD);
         MPI_Comm_split(MPI_COMM_WORLD,iam,iam,&matrix_comm);
         MPI_Comm_dup(MPI_COMM_WORLD,&eq_rank_matrix_comm);
-        Ps = new TCSR<double>(OverlapCollect->size,OverlapCollect->n_nonzeros,OverlapCollect->findx);
-        Ps->copy_index(OverlapCollect);
-        Ps->init_variable(Ps->nnz,Ps->n_nonzeros);
     }
-    if (!iam) cout << "TIME FOR DISTRIBUTING MATRICES " << get_time(sabtime) << endl;
+    TCSR<double> *Ps = new TCSR<double>(OverlapCollect);
+    Ps->init_variable(Ps->nnz,Ps->n_nonzeros);
+if (!iam) cout << "TIME FOR DISTRIBUTING MATRICES " << get_time(sabtime) << endl;
     std::vector<CPX> energyvector;
     std::vector<CPX> stepvector;
     std::vector<transport_methods::transport_method> methodvector;
@@ -77,14 +62,6 @@ int Energyvector::Execute(TCSR<double> *Overlap,TCSR<double> *KohnSham,double *m
     std::vector<double> currentvector(energyvector.size(),0.0);
     std::vector<double> transmission(energyvector.size(),0.0);
     std::vector<double> dos_profile(energyvector.size(),0.0);
-    double *eperatom = new double[n_atoms]();
-    double *dperatom = new double[n_atoms]();
-    int n_cells=transport_params->n_cells;
-    int ndof=Overlap->size_tot/n_cells;
-    TCSR<double> *OverlapCollectPBC = new TCSR<double>(OverlapCollect);
-    KohnShamCollect->settozeropbc(transport_params->bandwidth,ndof);
-    OverlapCollect->settozeropbc(transport_params->bandwidth,ndof);
-    c_daxpy(OverlapCollect->n_nonzeros,-1.0,OverlapCollect->nnz,1,OverlapCollectPBC->nnz,1);
     int matrix_id, n_mat_comm;
     MPI_Comm_size(eq_rank_matrix_comm,&n_mat_comm);
     MPI_Comm_rank(eq_rank_matrix_comm,&matrix_id);
@@ -93,18 +70,19 @@ int Energyvector::Execute(TCSR<double> *Overlap,TCSR<double> *KohnSham,double *m
     for (int iseq=0;iseq<int(ceil(double(energyvector.size())/n_mat_comm));iseq++)
         if ( (jpos=matrix_id+iseq*n_mat_comm)<energyvector.size())
             if (abs(stepvector[jpos])>0.0)
-                if (density(KohnShamCollect,OverlapCollect,OverlapCollectPBC,Ps,energyvector[jpos],stepvector[jpos],methodvector[jpos],muvec,contactvec,currentvector[jpos],transmission[jpos],dos_profile[jpos],propagating_sizes[jpos],atom_of_bf,eperatom,dperatom,Vatom,transport_params,distribute_pmat,jpos,matrix_comm))
+                if (density(KohnShamCollect,OverlapCollect,Ps,energyvector[jpos],stepvector[jpos],methodvector[jpos],muvec,contactvec,currentvector[jpos],transmission[jpos],dos_profile[jpos],propagating_sizes[jpos],atom_of_bf,Vatom,transport_params,jpos,matrix_comm))
                     return (LOGCERR, EXIT_FAILURE);
     if (!iam) cout << "TIME FOR DENSITY " << get_time(sabtime) << endl;
     delete KohnShamCollect;
+    double *eperatom = new double[n_atoms]();
+    for (int i=0;i<OverlapCollect->n_nonzeros;i++) OverlapCollect->nnz[i]*=Ps->nnz[i];
+    OverlapCollect->atom_allocate(atom_of_bf,eperatom,2.0);
     delete OverlapCollect;
-    delete OverlapCollectPBC;
     MPI_Allreduce(eperatom,electronchargeperatom,n_atoms,MPI_DOUBLE,MPI_SUM,MPI_COMM_WORLD);
-//    MPI_Allreduce(dperatom,derivativechargeperatom,n_atoms,MPI_DOUBLE,MPI_SUM,MPI_COMM_WORLD);
     delete[] eperatom;
-    delete[] dperatom;
     if (!iam) {
         cout << "Number of electrons per unit cell";
+        int n_cells=transport_params->n_cells;
         double e_total=0.0;
         for (int icell=0;icell<n_cells;icell++) {
             double e_per_unit_cell=0.0;

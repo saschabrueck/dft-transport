@@ -28,7 +28,7 @@ UMFPACKLIB    = $(LIB_TOP2)/UMFPACK/Lib/libumfpack.a
 PEXSI         = $(LIB_TOP)/pexsi_v0.6.0/src/libpexsi_hornet.a
 
 LFLAGS = -L$(LIB_TOP)/cp2k/lib/CRAY-XC30-gfortran/psmp/
-DFLAGS = -DAdd_
+DFLAGS = -DAdd_ -DHAVE_PEXSI -DHAVE_SUPERLU -DHAVE_UMFPACK
 LIBS = $(UMFPACKLIB) $(AMDLIB) $(AZTECLIB) $(QHULLLIB) $(ARPACKLIB) $(PEXSI) \
 	-lzmumps -lsuperlu_dist \
 	-lcp2k \
