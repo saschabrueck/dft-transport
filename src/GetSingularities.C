@@ -401,10 +401,10 @@ if (!worldrank) cout << "TIME FOR SINGULARITY DIAGONALIZATION " << get_time(sabt
     int do_curvatures=1;
     if (do_curvatures) {
 
-        c_zgemm('C','N',ndof,ndof,ndof,z_one,eigvec,ndof,H_Sum_dk,ndof,z_zer,ovlmat,ndof);
-        c_zgemm('N','N',ndof,ndof,ndof,z_one,ovlmat,ndof,eigvec,ndof,z_zer,H_Sum_dk,ndof);
-        c_zgemm('C','N',ndof,ndof,ndof,z_one,eigvec,ndof,S_Sum_dk,ndof,z_zer,ovlmat,ndof);
-        c_zgemm('N','N',ndof,ndof,ndof,z_one,ovlmat,ndof,eigvec,ndof,z_zer,S_Sum_dk,ndof);
+        c_zhemm('L','U',ndof,ndof,z_one,H_Sum_dk,ndof,eigvec,ndof,z_zer,ovlmat,ndof);
+        c_zgemm('C','N',ndof,ndof,ndof,z_one,eigvec,ndof,ovlmat,ndof,z_zer,H_Sum_dk,ndof);
+        c_zhemm('L','U',ndof,ndof,z_one,S_Sum_dk,ndof,eigvec,ndof,z_zer,ovlmat,ndof);
+        c_zgemm('C','N',ndof,ndof,ndof,z_one,eigvec,ndof,ovlmat,ndof,z_zer,S_Sum_dk,ndof);
  
         for (int ivec=0;ivec<ndof;ivec++) {
             curvatures_k[ivec]=-2.0*derivatives_k[ivec]*real(S_Sum_dk[ivec+ndof*ivec]);

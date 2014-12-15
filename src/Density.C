@@ -10,31 +10,38 @@ using namespace std;
 #include "ScaLapack.H"
 #include "CSC.H"
 #include "LinearSolver.H"
-#include "Umfpack.H"
-#include "MUMPS.H"
-#include "SuperLU.H"
 #include "tmprGF.H"
+#include "MUMPS.H"
+#ifdef HAVE_UMFPACK
+#include "Umfpack.H"
+#endif
+#ifdef HAVE_SUPERLU
+#include "SuperLU.H"
+#endif
+#ifdef HAVE_PEXSI
 #include "c_pexsi_interface.h"
-#include "GetSigma.H"
+#endif
 #ifdef HAVE_PARDISO
 #include "Pardiso.H"
 #include "SpikeSolver.H"
 #endif
+#include "GetSigma.H"
 #include "Density.H"
 
+#ifdef HAVE_SELINV
 extern "C" {
 int ldlt_preprocess__(int *, int *, int *, int *, int *, int *, int *);
 int ldlt_fact__(int *, int *, int *, CPX *);
 int ldlt_free__(int *);
 int ldlt_blkselinv__(int *, int*, int*, CPX *, int*);
 }
+#endif
 
-int density(TCSR<double> *KohnSham,TCSR<double> *Overlap,TCSR<double> *OverlapPBC,TCSR<double> *Ps,CPX energy,CPX weight,transport_methods::transport_method method,double *muvec,contact_type *contactvec,double &current,double &transm,double &dos,std::vector<int> propnum,int *atom_of_bf,double *erhoperatom,double *drhoperatom,double *Vatom,transport_parameters *parameter_sab,int distribute_pmat,int evecpos,MPI_Comm matrix_comm)
+int density(TCSR<double> *KohnSham,TCSR<double> *Overlap,TCSR<double> *Ps,CPX energy,CPX weight,transport_methods::transport_method method,double *muvec,contact_type *contactvec,double &current,double &transm,double &dos,std::vector<int> propnum,int *atom_of_bf,double *Vatom,transport_parameters *parameter_sab,int evecpos,MPI_Comm matrix_comm)
 {
     double d_one=1.0;
     double d_zer=0.0;
     CPX z_one=CPX(d_one,d_zer);
-    CPX z_zer=CPX(d_zer,d_zer);
     CPX z_img=CPX(d_zer,d_one);
     double sabtime;
     int iinfo;
@@ -197,26 +204,15 @@ if (npror!=propnum[1]) cout << "WARNING: FOUND " << npror << " OF " << propnum[1
 //we need the real part of hambig but my routines give me the imaginary one
 //        c_zscal(HamBigSparse->n_nonzeros,CPX(0.0,1.0),HamBigSparse->nnz,1);
         Ps->add_real(HamBigSparse,-weight/M_PI*z_img);
-        Overlap->atomdensity(HamBigSparse,-2.0*weight/M_PI*z_img,atom_of_bf,erhoperatom);
         delete HamBigSparse;
         delete[] HamBig0;
     } else if (method==transport_methods::GF) {
         sabtime=get_time(d_zer);
         int inversion_method=0;
         if (inversion_method==0) {
-            HamSig->change_findx(1);
-            int n_nonzeros_global;
-            MPI_Allreduce(&HamSig->n_nonzeros,&n_nonzeros_global,1,MPI_INT,MPI_SUM,matrix_comm);
-            double *HamSig_nnz = new double[2*HamSig->n_nonzeros];
-            c_dcopy(2*HamSig->n_nonzeros,(double*)HamSig->nnz,1,HamSig_nnz,1);
-            PSelInvComplexSymmetricInterface(HamSig->size_tot,n_nonzeros_global,HamSig->n_nonzeros,HamSig->size,HamSig->edge_i,HamSig->index_j,HamSig_nnz,2,1,matrix_comm,matrix_procs,1,(double*)HamSig->nnz,&iinfo);
-            Ps->add_real(HamSig,-weight/M_PI*z_img);
-            Overlap->atomdensity(HamSig,-2.0*weight/M_PI*z_img,atom_of_bf,erhoperatom);
-            delete HamSig;
-        } else if (inversion_method==3) {
             TCSR<CPX> *HamSigG = new TCSR<CPX>(HamSig,0,matrix_comm);
             if (ncells%bandwidth) return (LOGCERR, EXIT_FAILURE);
-            if (distribute_pmat && matrix_procs>1) {
+            if (matrix_procs>1) {
                 if (!matrix_rank) {
                     std::vector<int> Bvec(ncells/bandwidth,0);
                     for (int ii=0;ii<ncells/bandwidth;ii++) Bvec[ii]=(ii+1)*ntriblock-1;
@@ -227,7 +223,6 @@ if (npror!=propnum[1]) cout << "WARNING: FOUND " << npror << " OF " << propnum[1
                 HamSigG->scatter(HamSig,0,matrix_comm);
                 delete HamSigG;
                 Ps->add_real(HamSig,-weight/M_PI*z_img);
-                Overlap->atomdensity(HamSig,-2.0*weight/M_PI*z_img,atom_of_bf,erhoperatom);
                 delete HamSig;
             } else {
                 delete HamSig;
@@ -246,7 +241,6 @@ if (npror!=propnum[1]) cout << "WARNING: FOUND " << npror << " OF " << propnum[1
                     P_PBC->fill_pbc_block(HamSigG,ndof,bandwidth,contactvec[i_mu].inj_sign,matrix_comm);
                 }
                 Ps->add_real(P_PBC,-weight/M_PI*z_img);
-                OverlapPBC->atomdensity(P_PBC,-2.0*weight/M_PI*z_img,atom_of_bf,erhoperatom);
                 delete P_PBC;
 */
 // /*
@@ -257,70 +251,67 @@ if (npror!=propnum[1]) cout << "WARNING: FOUND " << npror << " OF " << propnum[1
                     Green->replicate_cell(ndof,bandwidth,contactvec[i_mu].inj_sign,bandwidth,matrix_comm);
                 }
                 Ps->add_real(Green,-weight/M_PI*z_img);
-                Overlap->atomdensity(Green,-2.0*weight/M_PI*z_img,atom_of_bf,erhoperatom);
-                OverlapPBC->atomdensity(Green,-2.0*weight/M_PI*z_img,atom_of_bf,erhoperatom);
                 for (int i_diag=0;i_diag<Green->size;i_diag++) dos+=imag(Green->nnz[Green->diag_pos[i_diag]]);
 // */ 
-//                if (matrix_procs==1) Overlap->atomdensity(HamSigG,-2.0*weight/M_PI*z_img,atom_of_bf,erhoperatom);
                 delete HamSigG;
             }
-#ifdef HAVE_PARDISO            
+#ifdef HAVE_PEXSI
         } else if (inversion_method==1) {
-            TCSR<CPX> *HamSigG = new TCSR<CPX>(HamSig,0,matrix_comm);
-            if (distribute_pmat && matrix_procs>1) {
+            HamSig->change_findx(1);
+            int n_nonzeros_global;
+            MPI_Allreduce(&HamSig->n_nonzeros,&n_nonzeros_global,1,MPI_INT,MPI_SUM,matrix_comm);
+            double *HamSig_nnz = new double[2*HamSig->n_nonzeros];
+            c_dcopy(2*HamSig->n_nonzeros,(double*)HamSig->nnz,1,HamSig_nnz,1);
+            PSelInvComplexSymmetricInterface(HamSig->size_tot,n_nonzeros_global,HamSig->n_nonzeros,HamSig->size,HamSig->edge_i,HamSig->index_j,HamSig_nnz,2,1,matrix_comm,matrix_procs,1,(double*)HamSig->nnz,&iinfo);
+            delete[] HamSig_nnz;
+            Ps->add_real(HamSig,-weight/M_PI*z_img);
+            delete HamSig;
+#endif
+#ifdef HAVE_PARDISO            
+        } else if (inversion_method==2) {
+            if (matrix_procs>1) {
+                TCSR<CPX> *HamSigG = new TCSR<CPX>(HamSig,0,matrix_comm);
                 if (!matrix_rank) {
                     Pardiso::sparse_invert(HamSigG);
                 }
                 HamSigG->scatter(HamSig,0,matrix_comm);
                 delete HamSigG;
                 Ps->add_real(HamSig,-weight/M_PI*z_img);
-                Overlap->atomdensity(HamSig,-2.0*weight/M_PI*z_img,atom_of_bf,erhoperatom);
                 delete HamSig;
             } else {
+                Pardiso::sparse_invert(HamSig);
+                Ps->add_real(HamSig,-weight/M_PI*z_img);
                 delete HamSig;
-                if (!matrix_rank) {
-                    Pardiso::sparse_invert(HamSigG);
-                    Ps->add_real(HamSigG,-weight/M_PI*z_img);
-                }
-                delete HamSigG;
             }
 #endif
 #ifdef HAVE_SELINV            
-        } else if (inversion_method==2) {
-            TCSR<CPX> *HamSigG = new TCSR<CPX>(HamSig,0,matrix_comm);
-            if (distribute_pmat && matrix_procs>1) return (LOGCERR, EXIT_FAILURE);
+        } else if (inversion_method==3 && matrix_procs==1) {
+            HamSig->change_findx(1);
+            TCSR<CPX> *HamSigTri= new TCSR<CPX>(HamSig->size,HamSig->n_nonzeros/2+HamSig->size,HamSig->findx);
+            HamSigTri->extract_lower_triangle(HamSig);
             delete HamSig;
-            if (!matrix_rank) {
-                HamSigG->change_findx(1);
-                TCSR<CPX> *HamSigTri= new TCSR<CPX>(HamSigG->size,HamSigG->n_nonzeros/2+HamSigG->size,HamSigG->findx);
-                HamSigTri->extract_lower_triangle(HamSigG);
-                delete HamSigG;
-                TCSC<CPX,int> *HamSigCSC=new TCSC<CPX,int>(HamSigTri,1);
-                delete HamSigTri;
-                int token=0;
-                int *perm = NULL;
-                int Lnnz;
-                int order=-1;
-                ldlt_preprocess__(&token, &HamSigCSC->size, HamSigCSC->edge_j, HamSigCSC->index_i, &Lnnz, &order, perm);   
-                ldlt_fact__(&token, HamSigCSC->edge_j, HamSigCSC->index_i, HamSigCSC->nnz);
-                delete HamSigCSC;
-                int dumpL=0;
-                TCSR<CPX> *InverseMatTrans=new TCSR<CPX>(Ps->size_tot,Lnnz,1);
-                ldlt_blkselinv__(&token, InverseMatTrans->edge_i, InverseMatTrans->index_j, InverseMatTrans->nnz, &dumpL);
-                ldlt_free__(&token);
-                TCSR<CPX> *InverseMat=new TCSR<CPX>(Ps->size_tot,Lnnz,1);
-                InverseMat->sparse_transpose(InverseMatTrans);
-                TCSR<CPX> *InverseMatTotal=new TCSR<CPX>(z_one,InverseMat,z_one,InverseMatTrans);
-                for (int idiag=0;idiag<InverseMatTotal->size;idiag++)
-                    InverseMatTotal->nnz[InverseMatTotal->diag_pos[idiag]]*=CPX(0.5,0.0);
-                delete InverseMat;
-                delete InverseMatTrans;
-                Ps->add_real(InverseMatTotal,-weight/M_PI*z_img);
-                if (matrix_procs==1) Overlap->atomdensity(InverseMatTotal,-2.0*weight/M_PI*z_img,atom_of_bf,erhoperatom);
-                delete InverseMatTotal;
-            } else {
-                delete HamSigG;
-            }
+            TCSC<CPX,int> *HamSigCSC=new TCSC<CPX,int>(HamSigTri,1);
+            delete HamSigTri;
+            int token=0;
+            int *perm = NULL;
+            int Lnnz;
+            int order=-1;
+            ldlt_preprocess__(&token, &HamSigCSC->size, HamSigCSC->edge_j, HamSigCSC->index_i, &Lnnz, &order, perm);   
+            ldlt_fact__(&token, HamSigCSC->edge_j, HamSigCSC->index_i, HamSigCSC->nnz);
+            delete HamSigCSC;
+            int dumpL=0;
+            TCSR<CPX> *InverseMatTrans=new TCSR<CPX>(Ps->size_tot,Lnnz,1);
+            ldlt_blkselinv__(&token, InverseMatTrans->edge_i, InverseMatTrans->index_j, InverseMatTrans->nnz, &dumpL);
+            ldlt_free__(&token);
+            TCSR<CPX> *InverseMat=new TCSR<CPX>(Ps->size_tot,Lnnz,1);
+            InverseMat->sparse_transpose(InverseMatTrans);
+            TCSR<CPX> *InverseMatTotal=new TCSR<CPX>(z_one,InverseMat,z_one,InverseMatTrans);
+            for (int idiag=0;idiag<InverseMatTotal->size;idiag++)
+                InverseMatTotal->nnz[InverseMatTotal->diag_pos[idiag]]*=CPX(0.5,0.0);
+            delete InverseMat;
+            delete InverseMatTrans;
+            Ps->add_real(InverseMatTotal,-weight/M_PI*z_img);
+            delete InverseMatTotal;
 #endif
         } else return (LOGCERR, EXIT_FAILURE);
 if (!worldrank) cout << "TIME FOR SPARSE INVERSION " << get_time(sabtime) << endl;
@@ -331,17 +322,21 @@ if (!worldrank) cout << "TIME FOR SPARSE INVERSION " << get_time(sabtime) << end
         delete H1cut;
         sabtime=get_time(d_zer);
         LinearSolver<CPX>* solver;
-        int solver_method=0;
+        int solver_method=1;
         if (solver_method==0) {
-            solver = new SuperLU<CPX>(HamSig,matrix_comm);
-        } else if (solver_method==1) {
             solver = new MUMPS<CPX>(HamSig,matrix_comm);
+#ifdef HAVE_SUPERLU 
+        } else if (solver_method==1) {
+            solver = new SuperLU<CPX>(HamSig,matrix_comm);
+#endif
 #ifdef HAVE_PARDISO            
         } else if (solver_method==2) {
             solver = new SpikeSolver<CPX>(HamSig,matrix_comm);
 #endif
+#ifdef HAVE_UMFPACK 
         } else if (solver_method==3 && matrix_procs==1) {
             solver = new Umfpack<CPX>(HamSig,matrix_comm);
+#endif
         } else return (LOGCERR, EXIT_FAILURE);
         solver->prepare();
         CPX* sol = new CPX[dist_sol[matrix_rank]*(nprol+npror)]();
@@ -383,46 +378,35 @@ if (!worldrank) cout << "TIME FOR WAVEFUNCTION SPARSE SOLVER WITH "<< ncells <<"
         }
 //        double dfermil=fermi(real(energy),muvec[0],Temp,2);
 //        double dfermir=fermi(real(energy),muvec[1],Temp,2);
-        sabtime=get_time(d_zer);
-        if (distribute_pmat || matrix_procs==1) {
-            Ps->psipsidagger(Sol,Soll,Solr,nprol,ndof,bandwidth,+weight*fermil);
-            Ps->psipsidagger(&Sol[Ps->size_tot*nprol],&Soll[Ps->size_tot*nprol],&Solr[Ps->size_tot*nprol],npror,ndof,bandwidth,+weight*fermir);
-            dos=Overlap->psipsidagger(Sol,nprol+npror);
-//            dos=Overlap->psipsidagger(Sol,nprol);
-//            dos=Overlap->psipsidagger(&Sol[Ps->size_tot*nprol],npror);
+sabtime=get_time(d_zer);
+        CPX* SolT = new CPX[solsize*max(nprol,npror)];
+        CPX* SollT = new CPX[solsize*max(nprol,npror)];
+        CPX* SolrT = new CPX[solsize*max(nprol,npror)];
+        full_transpose(nprol,solsize,Sol,SolT);
+        full_transpose(nprol,solsize,Soll,SollT);
+        full_transpose(nprol,solsize,Solr,SolrT);
+        double dosl=Ps->psipsidagger_transpose(Overlap,SolT,SollT,SolrT,nprol,ndof,bandwidth,+weight*fermil);
+        full_transpose(npror,solsize,&Sol[solsize*nprol],SolT);
+        full_transpose(npror,solsize,&Soll[solsize*nprol],SollT);
+        full_transpose(npror,solsize,&Solr[solsize*nprol],SolrT);
+        double dosr=Ps->psipsidagger_transpose(Overlap,SolT,SollT,SolrT,npror,ndof,bandwidth,+weight*fermir);
+        delete[] SolT;
+        delete[] SollT;
+        delete[] SolrT;
 /*
-if (parameter_sab->n_abscissae) {
+        double dosl=Ps->psipsidagger(Overlap,Sol,Soll,Solr,nprol,ndof,bandwidth,+weight*fermil);
+        double dosr=Ps->psipsidagger(Overlap,&Sol[Ps->size_tot*nprol],&Soll[Ps->size_tot*nprol],&Solr[Ps->size_tot*nprol],npror,ndof,bandwidth,+weight*fermir);
 */
-            Overlap->psipsidagger(Sol,nprol,+2.0*weight*fermil,atom_of_bf,erhoperatom);
-            OverlapPBC->psipsidagger(Sol,Soll,nprol,+2.0*weight*fermil,atom_of_bf,erhoperatom);
-            OverlapPBC->psipsidagger(Sol,Solr,nprol,+2.0*weight*fermil,atom_of_bf,erhoperatom);
-            Overlap->psipsidagger(&Sol[Ps->size_tot*nprol],npror,+2.0*weight*fermir,atom_of_bf,erhoperatom);
-            OverlapPBC->psipsidagger(&Sol[Ps->size_tot*nprol],&Soll[Ps->size_tot*nprol],npror,+2.0*weight*fermir,atom_of_bf,erhoperatom);
-            OverlapPBC->psipsidagger(&Sol[Ps->size_tot*nprol],&Solr[Ps->size_tot*nprol],npror,+2.0*weight*fermir,atom_of_bf,erhoperatom);
+        dos=dosl+dosr;
+if (!worldrank) cout << "TIME FOR CONSTRUCTION OF S-PATTERN DENSITY MATRIX " << get_time(sabtime) << endl;
 /*
-} else {
+if (!parameter_sab->n_abscissae) { // I NEED TO CONSTRUCT Ps WITH THE HELP OF Vatom HERE INSTEAD OF HOW I DO IT ABOVE
             Overlap->psipsidagger(Sol,nprol,+2.0*weight*fermil,atom_of_bf,erhoperatom,Vatom,real(energy));
             Overlap->psipsidagger(&Sol[Ps->size_tot*nprol],npror,+2.0*weight*fermir,atom_of_bf,erhoperatom,Vatom,real(energy));
 }
 */
-/*
-            Overlap->psipsidagger(Sol,nprol,-2.0*weight*dfermil,atom_of_bf,drhoperatom);
-            OverlapPBC->psipsidagger(Sol,Soll,nprol,-2.0*weight*dfermil,atom_of_bf,drhoperatom);
-            OverlapPBC->psipsidagger(Sol,Solr,nprol,-2.0*weight*dfermil,atom_of_bf,drhoperatom);
-            Overlap->psipsidagger(&Sol[Ps->size_tot*nprol],npror,-2.0*weight*dfermir,atom_of_bf,drhoperatom);
-            OverlapPBC->psipsidagger(&Sol[Ps->size_tot*nprol],&Soll[Ps->size_tot*nprol],npror,-2.0*weight*dfermir,atom_of_bf,drhoperatom);
-            OverlapPBC->psipsidagger(&Sol[Ps->size_tot*nprol],&Solr[Ps->size_tot*nprol],npror,-2.0*weight*dfermir,atom_of_bf,drhoperatom);
-*/
-        } else {
-            if (!matrix_rank) {
-                Ps->psipsidagger(Sol,Soll,Solr,nprol,ndof,bandwidth,+weight*fermil);
-                Ps->psipsidagger(&Sol[Ps->size_tot*nprol],&Soll[Ps->size_tot*nprol],&Solr[Ps->size_tot*nprol],npror,ndof,bandwidth,+weight*fermir);
-                dos=Overlap->psipsidagger(Sol,nprol+npror);
-            }
-        }
         delete[] Soll;
         delete[] Solr;
-if (!worldrank) cout << "TIME FOR CONSTRUCTION OF S-PATTERN DENSITY MATRIX " << get_time(sabtime) << endl;
 // transmission
         if (!matrix_rank) {
             CPX *vecoutdof=new CPX[ntriblock];
