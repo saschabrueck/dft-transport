@@ -71,7 +71,7 @@ sabtime=get_time(d_zer);
 if (!worldrank) cout << "TIME FOR SumHamC " << get_time(sabtime) << endl;
 // set pbc to zero 
         SumHamC->settozeropbc(bandwidth,ndof);
-SumHamC->remove_thr(1.0E-6);
+//SumHamC->remove_thr(1.0E-6);
 // compute self energies
         vector<BoundarySelfEnergy> selfenergies(n_mu);
         if (matrix_procs>1 && matrix_procs%n_mu) {
