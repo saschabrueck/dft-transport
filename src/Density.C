@@ -71,7 +71,7 @@ sabtime=get_time(d_zer);
 if (!worldrank) cout << "TIME FOR SumHamC " << get_time(sabtime) << endl;
 // set pbc to zero 
         SumHamC->settozeropbc(bandwidth,ndof);
-//SumHamC->remove_thr(1.0E-6);
+SumHamC->remove_thr(1.0E-6);
 // compute self energies
         vector<BoundarySelfEnergy> selfenergies(n_mu);
         if (matrix_procs>1 && matrix_procs%n_mu) {
@@ -129,18 +129,19 @@ if (!worldrank) cout << "TIME FOR ADDING SIGMA " << get_time(sabtime) << endl;
             c_zcopy(npror,selfenergies[1].lambdapro,1,&lambda[nprol],1);
 if (nprol!=propnum[0]) cout << "WARNING: FOUND " << nprol << " OF " << propnum[0] << " LEFT MODES AT " << real(energy) << endl;
 if (npror!=propnum[1]) cout << "WARNING: FOUND " << npror << " OF " << propnum[1] << " RIGHT MODES AT " << real(energy) << endl;
-            inj = new CPX[HamSig->size*(nprol+npror)]();
-            if (selfenergies[0].spainjdist->n_nonzeros) {
-                selfenergies[0].spainjdist->sparse_to_full(inj,HamSig->size,nprol);
-            }
-            if (selfenergies[1].spainjdist->n_nonzeros) {
-                selfenergies[1].spainjdist->sparse_to_full(&inj[HamSig->size*nprol],HamSig->size,npror);
-            }
             dist_sol = new int[matrix_procs];
             MPI_Allgather(&HamSig->size,1,MPI_INT,dist_sol,1,MPI_INT,matrix_comm);
             displc_sol = new int[matrix_procs+1]();
             for (int iii=1;iii<matrix_procs+1;iii++) {
                 displc_sol[iii]=displc_sol[iii-1]+dist_sol[iii-1];
+            }
+            int injsize_loc_max=*max_element(dist_sol,dist_sol+matrix_procs);
+            inj = new CPX[injsize_loc_max*(nprol+npror)]();
+            if (selfenergies[0].spainjdist->n_nonzeros) {
+                selfenergies[0].spainjdist->sparse_to_full(inj,HamSig->size,nprol);
+            }
+            if (selfenergies[1].spainjdist->n_nonzeros) {
+                selfenergies[1].spainjdist->sparse_to_full(&inj[HamSig->size*nprol],HamSig->size,npror);
             }
         }
         if (method==transport_methods::NEGF) {
@@ -322,7 +323,7 @@ if (!worldrank) cout << "TIME FOR SPARSE INVERSION " << get_time(sabtime) << end
         delete H1cut;
         sabtime=get_time(d_zer);
         LinearSolver<CPX>* solver;
-        int solver_method=1;
+        int solver_method=0;
         if (solver_method==0) {
             solver = new MUMPS<CPX>(HamSig,matrix_comm);
 #ifdef HAVE_SUPERLU 
