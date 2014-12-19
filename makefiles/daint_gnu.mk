@@ -35,7 +35,7 @@ LINLIN = $(LIB_TOP)/CSelInv/EXAMPLES/C2Finterface.o $(LIB_TOP)/CSelInv/LIB/libcs
 DMALLOC = -L/apps/daint/ddt/4.3rc7/lib/64/ -ldmallocthcxx -z muldefs
 
 LFLAGS = -L$(LIB_TOP)/cp2k/lib/CRAY-XC30-gfortran/psmp/
-DFLAGS = -DAdd_
+DFLAGS = -DAdd_ -DHAVE_SUPERLU -DHAVE_PEXSI -DHAVE_UMFPACK -Dlibcp2k
 LIBS = $(UMFPACKLIB) $(AMDLIB) $(AZTECLIB) $(QHULLLIB) $(ARPACKLIB) $(PEXSILIB) \
 	-lzmumps -lsuperlu_dist \
 	-lcp2k /project/cray/alazzaro/libsmm/affinity/sandybridge_gcc_4.9.0/lib/libsmm_dnn_cray.gnu.a \
