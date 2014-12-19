@@ -35,7 +35,7 @@ QHULLLIB      = $(LIB_TOP)/QHULL/src/libqhull.a
 UMFPACKLIB    = $(LIB_TOP)/UMFPACK/Lib/libumfpack.a
 
 # CP2K library path
-CP2KLIB = /usr/ela/home/bruecks/cp2k/lib/iis_gcc_mkl/psmp
+CP2KLIB = /home/nanotcad/sw/cp2k/lib/iis_gcc_mkl/popt
 
 CPP = /home/nanotcad/sw/mpich/3.1-gcc-4.8.2/dahu/bin/mpicxx
 GCC = icc
@@ -43,9 +43,11 @@ GCC = icc
 CFLAGS = -g -fopenmp
 CXXFLAGS = $(CFLAGS)
 
+DMALLOC = -L/usr/local/allinea/tools/lib/64/  -ldmallocthcxx -z muldefs
+
 LFLAGS = -L$(CP2KLIB) -L$(MKLLIB) -L$(INTLIB)
 
-DFLAGS = -DAdd_ -DMPICH_IGNORE_CXX_SEEK
+DFLAGS = -DAdd_ -DMPICH_IGNORE_CXX_SEEK -DHAVE_UMFPACK -Dlibcp2k
 
 LINLIN = /home/bruecks/CSelInv/EXAMPLES/C2Finterface.o /home/bruecks/CSelInv/LIB/libcsupldlt.a
 
