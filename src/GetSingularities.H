@@ -6,12 +6,7 @@
 #define __SINGULARITIES
 
 #include "CSR.H"
-#undef min
-#undef max
 #include <vector>
-#include <valarray>
-#include <limits>
-#include "Utilities.H"
 
 class Singularities {
 public:
@@ -32,15 +27,18 @@ std::vector<double> energies_vb;
 std::vector<double> energies_cb;
 
 private:
-int iam, nprocs;
-int ndof;
 double eps_singularities;
 int n_k;
-int n_cells;
-int bandwidth;
-int noccunitcell;
 double Temp;
 int n_mu;
+
+int iam;
+int k_rank;
+MPI_Comm bs_comm;
+int size_bs_comm;
+int rank_bs_comm;
+MPI_Comm equal_bs_rank_comm;
+std::vector<int> master_ranks;
 
 contact_type *contactvec;
 
@@ -51,9 +49,8 @@ std::vector< std::vector<double> > energies_matrix;
 std::vector< std::vector<double> > derivatives_matrix;
 std::vector< std::vector<double> > curvatures_matrix;
 
-int determine_velocities(CPX*,CPX*,double,double*,double*,double*);
-int determine_imaginary_bandstructure(CPX*,CPX*,double,CPX*);
-int eigen(CPX*,CPX*,CPX*,CPX*,CPX,double*);
+int determine_velocities(CPX*,CPX*,double,double*,double*,double*,int,int);
+int determine_imaginary_bandstructure(CPX*,CPX*,double,CPX*,int);
 void follow_band(int);
 
 };
