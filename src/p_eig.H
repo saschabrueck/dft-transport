@@ -10,9 +10,6 @@ inline int p_eig(double *KSfull,double *OVfull,double *eigval,int nvec,MPI_Comm 
     MPI_Comm_rank(p_eig_comm,&iam);
     int icontxt=MPI_Comm_c2f(p_eig_comm);
 
-    double sabtime;
-    int iinfo;
-
     int nprow, npcol, myrow, mycol;
     nprow=int(sqrt(double(nprocs)));
     npcol=nprocs/nprow;
@@ -20,7 +17,6 @@ inline int p_eig(double *KSfull,double *OVfull,double *eigval,int nvec,MPI_Comm 
         nprow++;
         npcol=nprocs/nprow;
     } // end while
-    if (!iam) cout <<"Procs "<<nprocs<<" Rows "<<nprow<<" Cols "<<npcol<<endl;
     char gridr[1] = {'R'};
     Cblacs_gridinit(&icontxt,gridr,nprow,npcol);
     Cblacs_gridinfo(icontxt,&nprow,&npcol,&myrow,&mycol);
@@ -35,6 +31,7 @@ inline int p_eig(double *KSfull,double *OVfull,double *eigval,int nvec,MPI_Comm 
     int rloc      = max(1,c_numroc(nvec,nbl,myrow,0,nprow));
     int cloc      = c_numroc(nvec,nbl,mycol,0,npcol);
 
+    int iinfo;
     int descKSfull[9],descOVfull[9];
     c_descinit(descKSfull,nvec,nvec,nvec,nvec,0,0,icontxt,nvec,&iinfo);
     c_descinit(descOVfull,nvec,nvec,nvec,nvec,0,0,icontxt,nvec,&iinfo);
@@ -66,12 +63,10 @@ inline int p_eig(double *KSfull,double *OVfull,double *eigval,int nvec,MPI_Comm 
     int liworky   = iworkytest[0];
     double *worky = new double[lworky];
     int *iworky   = new int[liworky];
-    if (!iam) sabtime=get_time(0.0);
     c_pdsygvx(1,'V','A','U',nvec,KSloc,1,1,descKS,OVloc,1,1,descOV,\
               0.0,0.0,1,1,abstol,&mout,&nzout,eigval,eps_eigval_degen,Zloc,1,1,descZ,\
               worky,lworky,iworky,liworky,ifail,iclu,dgap,&iinfo);
     if (iinfo) return (LOGCERR, EXIT_FAILURE);
-    if (!iam) cout << "Time after Diag " << get_time(sabtime) << endl;
     delete[] worky;
     delete[] iworky;
     delete[] ifail;
@@ -96,9 +91,6 @@ inline int p_eig(CPX *KSfull,CPX *OVfull,double *eigval,int nvec,MPI_Comm p_eig_
     MPI_Comm_rank(p_eig_comm,&iam);
     int icontxt=MPI_Comm_c2f(p_eig_comm);
 
-    double sabtime;
-    int iinfo;
-
     int nprow, npcol, myrow, mycol;
     nprow=int(sqrt(double(nprocs)));
     npcol=nprocs/nprow;
@@ -106,7 +98,6 @@ inline int p_eig(CPX *KSfull,CPX *OVfull,double *eigval,int nvec,MPI_Comm p_eig_
         nprow++;
         npcol=nprocs/nprow;
     } // end while
-    if (!iam) cout <<"Procs "<<nprocs<<" Rows "<<nprow<<" Cols "<<npcol<<endl;
     char gridr[1] = {'R'};
     Cblacs_gridinit(&icontxt,gridr,nprow,npcol);
     Cblacs_gridinfo(icontxt,&nprow,&npcol,&myrow,&mycol);
@@ -121,6 +112,7 @@ inline int p_eig(CPX *KSfull,CPX *OVfull,double *eigval,int nvec,MPI_Comm p_eig_
     int rloc      = max(1,c_numroc(nvec,nbl,myrow,0,nprow));
     int cloc      = c_numroc(nvec,nbl,mycol,0,npcol);
 
+    int iinfo;
     int descKSfull[9],descOVfull[9];
     c_descinit(descKSfull,nvec,nvec,nvec,nvec,0,0,icontxt,nvec,&iinfo);
     c_descinit(descOVfull,nvec,nvec,nvec,nvec,0,0,icontxt,nvec,&iinfo);
@@ -155,12 +147,10 @@ inline int p_eig(CPX *KSfull,CPX *OVfull,double *eigval,int nvec,MPI_Comm p_eig_
     CPX *worky      = new CPX[lworky];
     double *rworky  = new double[lrworky];
     int *iworky     = new int[liworky];
-    if (!iam) sabtime=get_time(0.0);
     c_pzhegvx(1,'V','A','U',nvec,KSloc,1,1,descKS,OVloc,1,1,descOV,\
               0.0,0.0,1,1,abstol,&mout,&nzout,eigval,eps_eigval_degen,Zloc,1,1,descZ,\
               worky,lworky,rworky,lrworky,iworky,liworky,ifail,iclu,dgap,&iinfo);
     if (iinfo) return (LOGCERR, EXIT_FAILURE);
-    if (!iam) cout << "Time after Diag " << get_time(sabtime) << endl;
     delete[] worky;
     delete[] rworky;
     delete[] iworky;

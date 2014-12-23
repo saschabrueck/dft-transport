@@ -1,4 +1,10 @@
 #include "GetSingularities.H"
+#undef min
+#undef max
+#include <valarray>
+#include <limits>
+#include "Utilities.H"
+#include "p_eig.H"
 
 Singularities::Singularities(transport_parameters *parameter_sab,contact_type *pcontactvec)
 {
@@ -6,16 +12,14 @@ Singularities::Singularities(transport_parameters *parameter_sab,contact_type *p
 
     eps_singularities=parameter_sab->eps_singularity_curvatures;
     n_k=parameter_sab->n_kpoint;
-    n_cells=parameter_sab->n_cells;
-    bandwidth=parameter_sab->bandwidth;
-    noccunitcell=parameter_sab->n_occ/parameter_sab->n_cells; // THIS IS AN INTEGER DIVISION
     Temp=parameter_sab->temperature;
     n_mu=parameter_sab->num_contacts;
 
+    int nprocs;
     MPI_Comm_size(MPI_COMM_WORLD,&nprocs);
     MPI_Comm_rank(MPI_COMM_WORLD,&iam); 
 
-    energy_gs= (numeric_limits<double>::max)();
+    energy_gs=(numeric_limits<double>::max)();
     energies_vb.resize(n_mu,-(numeric_limits<double>::max)());
     energies_cb.resize(n_mu, (numeric_limits<double>::max)());
 
@@ -26,6 +30,30 @@ Singularities::Singularities(transport_parameters *parameter_sab,contact_type *p
     energies_matrix.resize(n_mu);
     derivatives_matrix.resize(n_mu);
     curvatures_matrix.resize(n_mu);
+
+    size_bs_comm = max(1,nprocs/n_k);
+    int color = iam / size_bs_comm;
+    if (iam>=size_bs_comm*n_k) color = MPI_UNDEFINED;
+    MPI_Comm_split(MPI_COMM_WORLD,color,iam,&bs_comm);
+    MPI_Comm_rank(bs_comm,&rank_bs_comm);
+    color = rank_bs_comm;
+    if (iam>=size_bs_comm*n_k) {
+        color = MPI_UNDEFINED;
+        rank_bs_comm = -1;
+    }
+    MPI_Comm_split(MPI_COMM_WORLD,color,iam,&equal_bs_rank_comm);
+    MPI_Comm_rank(equal_bs_rank_comm,&k_rank);
+    master_ranks.resize(max(1,nprocs/size_bs_comm));
+    if (!rank_bs_comm) {
+        MPI_Gather(&iam,1,MPI_INT,&master_ranks[0],1,MPI_INT,0,equal_bs_rank_comm);
+    }
+    MPI_Bcast(&master_ranks[0],master_ranks.size(),MPI_INT,0,MPI_COMM_WORLD);
+}
+
+Singularities::~Singularities()
+{
+    MPI_Comm_free(&bs_comm);
+    MPI_Comm_free(&equal_bs_rank_comm);
 }
 
 int Singularities::Execute(TCSR<double> *KohnSham,TCSR<double> *Overlap)
@@ -37,70 +65,87 @@ int Singularities::Execute(TCSR<double> *KohnSham,TCSR<double> *Overlap)
 {
     std::vector<double> k(n_k);
     for (int i=1;i<n_k;i++) k[i]=i*M_PI/(n_k-1);
-    int seq_per_cpu=int(ceil(double(n_k)/nprocs));
-    ndof=Overlap->size_tot/n_cells;
-    int ndofsq=ndof*ndof;
-    int ndofsqbw=ndofsq*(2*bandwidth+1);
+    int seq_per_cpu=int(ceil(double(n_k)/master_ranks.size()));
     int kpos;
-    CPX *H;
-    CPX *S;
+    CPX *H = NULL;
+    CPX *S = NULL;
     for (int i_mu=0;i_mu<n_mu;i_mu++) {
+        int inj_sign=contactvec[i_mu].inj_sign;
+//        int contact_start=contactvec[i_mu].start;
+        int bandwidth=contactvec[i_mu].bandwidth;
+        int ndof=contactvec[i_mu].ndof;
+        int noccunitcell=contactvec[i_mu].n_occ;
+        int ndofsq=ndof*ndof;
+        int ndofsqbw=ndofsq*(2*bandwidth+1);
         if (contactvec[i_mu].inj_sign==+1) {
             TCSR<double> *Hcut = new TCSR<double>(KohnSham,0,ndof,0,(bandwidth+1)*ndof);
-            TCSR<double> *Hsp = new TCSR<double>(Hcut,MPI_COMM_WORLD);
-            Hsp->shift_resize(0,ndof,0,(bandwidth+1)*ndof);
+            TCSR<double> *Hsp = new TCSR<double>(Hcut,&master_ranks[0],master_ranks.size(),MPI_COMM_WORLD);
             delete Hcut;
-            H = new CPX[ndofsqbw];
-            Hsp->sparse_to_cmp_full(&H[bandwidth*ndofsq],ndof,(bandwidth+1)*ndof);
+            if (!rank_bs_comm) {
+                Hsp->shift_resize(0,ndof,0,(bandwidth+1)*ndof);
+                H = new CPX[ndofsqbw];
+                Hsp->sparse_to_cmp_full(&H[bandwidth*ndofsq],ndof,(bandwidth+1)*ndof);
+                for (int ibw=1;ibw<=bandwidth;ibw++)
+                    full_transpose(ndof,ndof,&H[(bandwidth+inj_sign*ibw)*ndofsq],&H[(bandwidth-inj_sign*ibw)*ndofsq]);
+            }
             delete Hsp;
-            for (int ibw=1;ibw<=bandwidth;ibw++)
-                full_transpose(ndof,ndof,&H[(bandwidth+ibw)*ndofsq],&H[(bandwidth-ibw)*ndofsq]);
             TCSR<double> *Scut = new TCSR<double>(Overlap,0,ndof,0,(bandwidth+1)*ndof);
-            TCSR<double> *Ssp = new TCSR<double>(Scut,MPI_COMM_WORLD);
-            Ssp->shift_resize(0,ndof,0,(bandwidth+1)*ndof);
+            TCSR<double> *Ssp = new TCSR<double>(Scut,&master_ranks[0],master_ranks.size(),MPI_COMM_WORLD);
             delete Scut;
-            S = new CPX[ndofsqbw];
-            Ssp->sparse_to_cmp_full(&S[bandwidth*ndofsq],ndof,(bandwidth+1)*ndof);
+            if (!rank_bs_comm) {
+                Ssp->shift_resize(0,ndof,0,(bandwidth+1)*ndof);
+                S = new CPX[ndofsqbw];
+                Ssp->sparse_to_cmp_full(&S[bandwidth*ndofsq],ndof,(bandwidth+1)*ndof);
+                for (int ibw=1;ibw<=bandwidth;ibw++)
+                    full_transpose(ndof,ndof,&S[(bandwidth+inj_sign*ibw)*ndofsq],&S[(bandwidth-inj_sign*ibw)*ndofsq]);
+            }
             delete Ssp;
-            for (int ibw=1;ibw<=bandwidth;ibw++)
-                full_transpose(ndof,ndof,&S[(bandwidth+ibw)*ndofsq],&S[(bandwidth-ibw)*ndofsq]);
         } else if (contactvec[i_mu].inj_sign==-1) {
             TCSR<double> *Hcut = new TCSR<double>(KohnSham,KohnSham->size_tot-ndof,ndof,KohnSham->size_tot-(bandwidth+1)*ndof,(bandwidth+1)*ndof);
-            TCSR<double> *Hsp = new TCSR<double>(Hcut,MPI_COMM_WORLD);
-            Hsp->shift_resize(KohnSham->size_tot-ndof,ndof,KohnSham->size_tot-(bandwidth+1)*ndof,(bandwidth+1)*ndof);
+            TCSR<double> *Hsp = new TCSR<double>(Hcut,&master_ranks[0],master_ranks.size(),MPI_COMM_WORLD);
             delete Hcut;
-            H = new CPX[ndofsqbw];
-            Hsp->sparse_to_cmp_full(H,ndof,(bandwidth+1)*ndof);
+            if (!rank_bs_comm) {
+                Hsp->shift_resize(KohnSham->size_tot-ndof,ndof,KohnSham->size_tot-(bandwidth+1)*ndof,(bandwidth+1)*ndof);
+                H = new CPX[ndofsqbw];
+                Hsp->sparse_to_cmp_full(H,ndof,(bandwidth+1)*ndof);
+                for (int ibw=1;ibw<=bandwidth;ibw++)
+                    full_transpose(ndof,ndof,&H[(bandwidth+inj_sign*ibw)*ndofsq],&H[(bandwidth-inj_sign*ibw)*ndofsq]);
+            }
             delete Hsp;
-            for (int ibw=1;ibw<=bandwidth;ibw++)
-                full_transpose(ndof,ndof,&H[(bandwidth-ibw)*ndofsq],&H[(bandwidth+ibw)*ndofsq]);
             TCSR<double> *Scut = new TCSR<double>(Overlap,Overlap->size_tot-ndof,ndof,Overlap->size_tot-(bandwidth+1)*ndof,(bandwidth+1)*ndof);
-            TCSR<double> *Ssp = new TCSR<double>(Scut,MPI_COMM_WORLD);
-            Ssp->shift_resize(Overlap->size_tot-ndof,ndof,Overlap->size_tot-(bandwidth+1)*ndof,(bandwidth+1)*ndof);
+            TCSR<double> *Ssp = new TCSR<double>(Scut,&master_ranks[0],master_ranks.size(),MPI_COMM_WORLD);
             delete Scut;
-            S = new CPX[ndofsqbw];
-            Ssp->sparse_to_cmp_full(S,ndof,(bandwidth+1)*ndof);
+            if (!rank_bs_comm) {
+                Ssp->shift_resize(Overlap->size_tot-ndof,ndof,Overlap->size_tot-(bandwidth+1)*ndof,(bandwidth+1)*ndof);
+                S = new CPX[ndofsqbw];
+                Ssp->sparse_to_cmp_full(S,ndof,(bandwidth+1)*ndof);
+                for (int ibw=1;ibw<=bandwidth;ibw++)
+                    full_transpose(ndof,ndof,&S[(bandwidth+inj_sign*ibw)*ndofsq],&S[(bandwidth-inj_sign*ibw)*ndofsq]);
+            }
             delete Ssp;
-            for (int ibw=1;ibw<=bandwidth;ibw++)
-                full_transpose(ndof,ndof,&S[(bandwidth-ibw)*ndofsq],&S[(bandwidth+ibw)*ndofsq]);
         }
         double *energies_local = new double[ndof*seq_per_cpu]();
         double *derivatives_local = new double[ndof*seq_per_cpu]();
         double *curvatures_local = new double[ndof*seq_per_cpu]();
         for (int iseq=0;iseq<seq_per_cpu;iseq++)
-            if ( (kpos=iseq+iam*seq_per_cpu)<n_k )
-                if (determine_velocities(H,S,k[kpos],&energies_local[iseq*ndof],&derivatives_local[iseq*ndof],&curvatures_local[iseq*ndof]))
+            if ( (kpos=iseq+k_rank*seq_per_cpu)<n_k && rank_bs_comm>=0 ) {
+                if (determine_velocities(H,S,k[kpos],&energies_local[iseq*ndof],&derivatives_local[iseq*ndof],&curvatures_local[iseq*ndof],ndof,bandwidth))
                     return (LOGCERR, EXIT_FAILURE);
-        delete[] H;
-        delete[] S;
-        if (!iam) {
-            energies_matrix[i_mu].resize(ndof*nprocs*seq_per_cpu);
-            derivatives_matrix[i_mu].resize(ndof*nprocs*seq_per_cpu);
-            curvatures_matrix[i_mu].resize(ndof*nprocs*seq_per_cpu);
+}
+        if (!rank_bs_comm) {
+            delete[] H;
+            delete[] S;
         }
-        MPI_Gather(energies_local,ndof*seq_per_cpu,MPI_DOUBLE,&energies_matrix[i_mu][0],ndof*seq_per_cpu,MPI_DOUBLE,0,MPI_COMM_WORLD);
-        MPI_Gather(derivatives_local,ndof*seq_per_cpu,MPI_DOUBLE,&derivatives_matrix[i_mu][0],ndof*seq_per_cpu,MPI_DOUBLE,0,MPI_COMM_WORLD);
-        MPI_Gather(curvatures_local,ndof*seq_per_cpu,MPI_DOUBLE,&curvatures_matrix[i_mu][0],ndof*seq_per_cpu,MPI_DOUBLE,0,MPI_COMM_WORLD);
+        if (!iam) {
+            energies_matrix[i_mu].resize(ndof*int(master_ranks.size())*seq_per_cpu);
+            derivatives_matrix[i_mu].resize(ndof*int(master_ranks.size())*seq_per_cpu);
+            curvatures_matrix[i_mu].resize(ndof*int(master_ranks.size())*seq_per_cpu);
+        }
+        if (!rank_bs_comm) {
+            MPI_Gather(energies_local,ndof*seq_per_cpu,MPI_DOUBLE,&energies_matrix[i_mu][0],ndof*seq_per_cpu,MPI_DOUBLE,0,equal_bs_rank_comm);
+            MPI_Gather(derivatives_local,ndof*seq_per_cpu,MPI_DOUBLE,&derivatives_matrix[i_mu][0],ndof*seq_per_cpu,MPI_DOUBLE,0,equal_bs_rank_comm);
+            MPI_Gather(curvatures_local,ndof*seq_per_cpu,MPI_DOUBLE,&curvatures_matrix[i_mu][0],ndof*seq_per_cpu,MPI_DOUBLE,0,equal_bs_rank_comm);
+        }
         delete[] energies_local;
         delete[] derivatives_local;
         delete[] curvatures_local;
@@ -130,16 +175,14 @@ int Singularities::Execute(TCSR<double> *KohnSham,TCSR<double> *Overlap)
     return 0;
 }
 
-Singularities::~Singularities()
-{
-}
-
 std::vector< std::vector< std::vector<double> > > Singularities::get_propagating(const std::vector<CPX> &evec)
 {
     if (!iam) {
         std::vector< std::vector< std::vector<double> > > prop(n_mu);
         for (int i_mu=0;i_mu<n_mu;i_mu++) {
             prop[i_mu].resize(evec.size());
+            int ndof=contactvec[i_mu].ndof;
+// #pragma omp parallel for num_threads(num_threads_bc)
             for (uint ie=0;ie<evec.size();ie++) {
                 if (!imag(evec[ie])) {
                     for (int iband=0;iband<ndof;iband++) {
@@ -174,6 +217,8 @@ double Singularities::determine_fermi(double doping,int i_mu) //slightly differs
 //doping=2.0;
         double nocctol=max(1.0E-2/n_k*abs(doping),1.0E-4/n_k);//WHAT IS THE MAX PRECISION I CAN GET DEPENDING ON n_k?
         cout << "Fermi Level / Number of Electrons with precision " << nocctol << endl;
+        int noccunitcell=contactvec[i_mu].n_occ;
+        int ndof=contactvec[i_mu].ndof;
         mu=(energies_matrix[i_mu][noccunitcell-1]+energies_matrix[i_mu][noccunitcell])/2;
         double nocciter = 0.0;
         for (int j=0;j<n_k;j++) {
@@ -245,6 +290,7 @@ cout << mu << " / " << nocciter << " NEWTON" << endl;
 
 void Singularities::follow_band(int i_mu)
 {
+    int ndof=contactvec[i_mu].ndof;
     valarray<double> searchvec(ndof);
     for (int iband=0;iband<ndof;iband++) {
         for (int i_k=1;i_k<n_k;i_k++) {
@@ -264,6 +310,7 @@ void Singularities::follow_band(int i_mu)
 void Singularities::write_bandstructure(int i_mu)
 {
     if (!iam) {
+        int ndof=contactvec[i_mu].ndof;
         ofstream myfile;
         stringstream mysstream;
         mysstream << "EnergiesWRTk" << i_mu;
@@ -312,10 +359,11 @@ void Singularities::write_bandstructure(int i_mu)
     }
 }
 
-int Singularities::determine_imaginary_bandstructure(CPX *H,CPX *S,double kimag_in,CPX *lambda)
+int Singularities::determine_imaginary_bandstructure(CPX *H,CPX *S,double kimag_in,CPX *lambda,int i_mu)
 {
     double kval=exp(-kimag_in);
-    int N=ndof;
+    int N=contactvec[i_mu].ndof;
+    int bandwidth=contactvec[i_mu].bandwidth;
     double* areal = new double[N*N]();
     double* breal = new double[N*N]();
 
@@ -357,7 +405,7 @@ int Singularities::determine_imaginary_bandstructure(CPX *H,CPX *S,double kimag_
     return 0;
 }
 
-int Singularities::determine_velocities(CPX *H,CPX *S,double k_in,double *energies_k,double *derivatives_k,double *curvatures_k)
+int Singularities::determine_velocities(CPX *H,CPX *S,double k_in,double *energies_k,double *derivatives_k,double *curvatures_k,int ndof,int bandwidth)
 /**  \brief Determine energies where velocity vanishes and their number for a given k
  *
  *   \param H             H matrix
@@ -376,160 +424,108 @@ int Singularities::determine_velocities(CPX *H,CPX *S,double k_in,double *energi
 
     CPX kval=exp(CPX(d_zer,k_in));
 
-    CPX *eigvec = new CPX[ndofsq];
-    CPX *ovlmat = new CPX[ndofsq];
+    CPX *eigvec = new CPX[ndofsq]();
+    CPX *ovlmat = NULL;
+    if (!rank_bs_comm) {
+        ovlmat = new CPX[ndofsq]();
+        for (int ibandw=-bandwidth;ibandw<=bandwidth;ibandw++) {
+            c_zaxpy(ndofsq,pow(kval,ibandw),&H[(bandwidth+ibandw)*ndofsq],1,eigvec,1);
+            c_zaxpy(ndofsq,pow(kval,ibandw),&S[(bandwidth+ibandw)*ndofsq],1,ovlmat,1);
+        }
+    }
 
-    double sabtime=get_time(0.0);
-    if (eigen(eigvec,ovlmat,H,S,kval,energies_k)) return (LOGCERR, EXIT_FAILURE);
+double sabtime=get_time(0.0);
+    if (p_eig(eigvec,ovlmat,energies_k,ndof,bs_comm)) return (LOGCERR, EXIT_FAILURE);
+    MPI_Bcast(eigvec,ndofsq,MPI_DOUBLE_COMPLEX,0,bs_comm);
 int worldrank; MPI_Comm_rank(MPI_COMM_WORLD,&worldrank);
 if (!worldrank) cout << "TIME FOR SINGULARITY DIAGONALIZATION " << get_time(sabtime) << endl;
 
     CPX *H_Sum_dk = new CPX[ndofsq]();
     CPX *S_Sum_dk = new CPX[ndofsq]();
-    for (int ibandw=-bandwidth;ibandw<=bandwidth;ibandw++) {
-        c_zaxpy(ndofsq,z_img*CPX(ibandw,d_zer)*pow(kval,ibandw),&H[(bandwidth+ibandw)*ndofsq],1,H_Sum_dk,1);
-        c_zaxpy(ndofsq,z_img*CPX(ibandw,d_zer)*pow(kval,ibandw),&S[(bandwidth+ibandw)*ndofsq],1,S_Sum_dk,1);
+    if (!rank_bs_comm) {
+        for (int ibandw=-bandwidth;ibandw<=bandwidth;ibandw++) {
+            c_zaxpy(ndofsq,z_img*CPX(ibandw,d_zer)*pow(kval,ibandw),&H[(bandwidth+ibandw)*ndofsq],1,H_Sum_dk,1);
+            c_zaxpy(ndofsq,z_img*CPX(ibandw,d_zer)*pow(kval,ibandw),&S[(bandwidth+ibandw)*ndofsq],1,S_Sum_dk,1);
+        }
     }
+    MPI_Bcast(H_Sum_dk,ndofsq,MPI_DOUBLE_COMPLEX,0,bs_comm);
+    MPI_Bcast(S_Sum_dk,ndofsq,MPI_DOUBLE_COMPLEX,0,bs_comm);
 
     CPX *vector = new CPX[ndof];
-    for (int ivec=0;ivec<ndof;ivec++) {
-        c_zgemv('N',ndof,ndof,z_one,H_Sum_dk,ndof,&eigvec[ivec*ndof],1,z_zer,vector,1);
-        c_zgemv('N',ndof,ndof,CPX(-energies_k[ivec],d_zer),S_Sum_dk,ndof,&eigvec[ivec*ndof],1,z_one,vector,1);
-        derivatives_k[ivec]=real(c_zdotc(ndof,&eigvec[ivec*ndof],1,vector,1));
+    double *tmp = new double[ndof]();
+    int seq_per_cpu=int(ceil(double(ndof)/size_bs_comm));
+    int ivec;
+    for (int iseq=0;iseq<seq_per_cpu;iseq++) {
+        if ( (ivec=iseq+rank_bs_comm*seq_per_cpu)<ndof ) {
+            c_zgemv('N',ndof,ndof,z_one,H_Sum_dk,ndof,&eigvec[ivec*ndof],1,z_zer,vector,1);
+            c_zgemv('N',ndof,ndof,CPX(-energies_k[ivec],d_zer),S_Sum_dk,ndof,&eigvec[ivec*ndof],1,z_one,vector,1);
+            tmp[ivec]=real(c_zdotc(ndof,&eigvec[ivec*ndof],1,vector,1));
+        }
     }
-
+    MPI_Allreduce(tmp,derivatives_k,ndof,MPI_DOUBLE,MPI_SUM,bs_comm);
+ 
     int do_curvatures=1;
     if (do_curvatures) {
 
-        c_zhemm('L','U',ndof,ndof,z_one,H_Sum_dk,ndof,eigvec,ndof,z_zer,ovlmat,ndof);
-        c_zgemm('C','N',ndof,ndof,ndof,z_one,eigvec,ndof,ovlmat,ndof,z_zer,H_Sum_dk,ndof);
-        c_zhemm('L','U',ndof,ndof,z_one,S_Sum_dk,ndof,eigvec,ndof,z_zer,ovlmat,ndof);
-        c_zgemm('C','N',ndof,ndof,ndof,z_one,eigvec,ndof,ovlmat,ndof,z_zer,S_Sum_dk,ndof);
+        c_dscal(ndof,d_zer,tmp,1);
+
+        if (!rank_bs_comm) {
  
-        for (int ivec=0;ivec<ndof;ivec++) {
-            curvatures_k[ivec]=-2.0*derivatives_k[ivec]*real(S_Sum_dk[ivec+ndof*ivec]);
-        }
-
-        c_zcopy(ndofsq,S_Sum_dk,1,ovlmat,1);
-        for (int ivec=0;ivec<ndof;ivec++) {
-            c_zscal(ndof,CPX(-energies_k[ivec],d_zer),&S_Sum_dk[ivec*ndof],1);
-        }
-        c_zaxpy(ndofsq,z_one,S_Sum_dk,1,H_Sum_dk,1);
-
-        for (int ii=0;ii<ndof;ii++) {
-            for (int jj=0;jj<ndof;jj++) {
-                double delta_e=energies_k[jj]-energies_k[ii];
-                double delta_o=abs(-conj(H_Sum_dk[jj+ndof*ii])/delta_e+H_Sum_dk[ii+ndof*jj]/delta_e+ovlmat[ii+ndof*jj]);
-                if (delta_o<1.0E-12 && abs(delta_e)>1.0E-6) {
-                    curvatures_k[jj]+=2.0*norm(H_Sum_dk[ii+ndof*jj])/delta_e;
+            c_zhemm('L','U',ndof,ndof,z_one,H_Sum_dk,ndof,eigvec,ndof,z_zer,ovlmat,ndof);
+            c_zgemm('C','N',ndof,ndof,ndof,z_one,eigvec,ndof,ovlmat,ndof,z_zer,H_Sum_dk,ndof);
+            c_zhemm('L','U',ndof,ndof,z_one,S_Sum_dk,ndof,eigvec,ndof,z_zer,ovlmat,ndof);
+            c_zgemm('C','N',ndof,ndof,ndof,z_one,eigvec,ndof,ovlmat,ndof,z_zer,S_Sum_dk,ndof);
+  
+            for (int ivec=0;ivec<ndof;ivec++) {
+                tmp[ivec]=-2.0*derivatives_k[ivec]*real(S_Sum_dk[ivec+ndof*ivec]);
+            }
+ 
+            c_zcopy(ndofsq,S_Sum_dk,1,ovlmat,1);
+            for (int ivec=0;ivec<ndof;ivec++) {
+                c_zscal(ndof,CPX(-energies_k[ivec],d_zer),&S_Sum_dk[ivec*ndof],1);
+            }
+            c_zaxpy(ndofsq,z_one,S_Sum_dk,1,H_Sum_dk,1);
+ 
+            for (int ii=0;ii<ndof;ii++) {
+                for (int jj=0;jj<ndof;jj++) {
+                    double delta_e=energies_k[jj]-energies_k[ii];
+                    double delta_o=abs(-conj(H_Sum_dk[jj+ndof*ii])/delta_e+H_Sum_dk[ii+ndof*jj]/delta_e+ovlmat[ii+ndof*jj]);
+                    if (delta_o<1.0E-12 && abs(delta_e)>1.0E-6) {
+                        tmp[jj]+=2.0*norm(H_Sum_dk[ii+ndof*jj])/delta_e;
+                    }
                 }
             }
-        }
 
+            delete[] ovlmat;
+
+        }
+ 
         c_zscal(ndofsq,z_zer,H_Sum_dk,1);
         c_zscal(ndofsq,z_zer,S_Sum_dk,1);
-        for (int ibandw=-bandwidth;ibandw<=bandwidth;ibandw++) {
-            c_zaxpy(ndofsq,-CPX(ibandw,d_zer)*CPX(ibandw,d_zer)*pow(kval,ibandw),&H[(bandwidth+ibandw)*ndofsq],1,H_Sum_dk,1);
-            c_zaxpy(ndofsq,-CPX(ibandw,d_zer)*CPX(ibandw,d_zer)*pow(kval,ibandw),&S[(bandwidth+ibandw)*ndofsq],1,S_Sum_dk,1);
+        if (!rank_bs_comm) {
+            for (int ibandw=-bandwidth;ibandw<=bandwidth;ibandw++) {
+                c_zaxpy(ndofsq,-CPX(ibandw,d_zer)*CPX(ibandw,d_zer)*pow(kval,ibandw),&H[(bandwidth+ibandw)*ndofsq],1,H_Sum_dk,1);
+                c_zaxpy(ndofsq,-CPX(ibandw,d_zer)*CPX(ibandw,d_zer)*pow(kval,ibandw),&S[(bandwidth+ibandw)*ndofsq],1,S_Sum_dk,1);
+            }
         }
+        MPI_Bcast(H_Sum_dk,ndofsq,MPI_DOUBLE_COMPLEX,0,bs_comm);
+        MPI_Bcast(S_Sum_dk,ndofsq,MPI_DOUBLE_COMPLEX,0,bs_comm);
+  
+        for (int iseq=0;iseq<seq_per_cpu;iseq++) {
+            if ( (ivec=iseq+rank_bs_comm*seq_per_cpu)<ndof ) {
+                c_zgemv('N',ndof,ndof,z_one,H_Sum_dk,ndof,&eigvec[ivec*ndof],1,z_zer,vector,1);
+                c_zgemv('N',ndof,ndof,CPX(-energies_k[ivec],d_zer),S_Sum_dk,ndof,&eigvec[ivec*ndof],1,z_one,vector,1);
+                tmp[ivec]+=real(c_zdotc(ndof,&eigvec[ivec*ndof],1,vector,1));
+            }
+        }
+        MPI_Allreduce(tmp,curvatures_k,ndof,MPI_DOUBLE,MPI_SUM,bs_comm);
  
-        for (int ivec=0;ivec<ndof;ivec++) {
-            c_zgemv('N',ndof,ndof,z_one,H_Sum_dk,ndof,&eigvec[ivec*ndof],1,z_zer,vector,1);
-            c_zgemv('N',ndof,ndof,CPX(-energies_k[ivec],d_zer),S_Sum_dk,ndof,&eigvec[ivec*ndof],1,z_one,vector,1);
-            curvatures_k[ivec]+=real(c_zdotc(ndof,&eigvec[ivec*ndof],1,vector,1));
-        }
-
     }
-
+    delete[] vector;
+    delete[] tmp;
+    delete[] eigvec;
     delete[] H_Sum_dk;
     delete[] S_Sum_dk;
-    delete[] vector;
-    delete[] eigvec;
-    delete[] ovlmat;
-
-    return 0;
-}
-
-int Singularities::eigen(CPX *H_Sum_k,CPX *S_Sum_k,CPX *H,CPX *S,CPX kval,double *energies_k)
-{
-    CPX z_zer=CPX(0.0,0.0);
-    CPX z_one=CPX(1.0,0.0);
-    int ndofsq=ndof*ndof;
-
-    c_zscal(ndofsq,z_zer,H_Sum_k,1);
-    c_zscal(ndofsq,z_zer,S_Sum_k,1);
-    for (int ibandw=-bandwidth;ibandw<=bandwidth;ibandw++) {
-        c_zaxpy(ndofsq,pow(kval,ibandw),&H[(bandwidth+ibandw)*ndofsq],1,H_Sum_k,1);
-        c_zaxpy(ndofsq,pow(kval,ibandw),&S[(bandwidth+ibandw)*ndofsq],1,S_Sum_k,1);
-    }
-
-    int do_extended=0;
-    if (do_extended) {
-        int iinfo;
-        CPX twork;
-        int mfound;
-        double abstol=2.0*c_dlamch('S');
-        CPX *zmat=new CPX[ndofsq];
-        double *rwork=new double[7*ndof];
-        int *iwork=new int[5*ndof];
-        int *ifail=new int[ndof];
-        c_zhegvx(1,'V','A','U',ndof,H_Sum_k,ndof,S_Sum_k,ndof,0.0,0.0,0,0,abstol,&mfound,energies_k,zmat,ndof,&twork,-1,rwork,iwork,ifail,&iinfo);
-        if (iinfo) return (LOGCERR, EXIT_FAILURE);
-        int lwork=int(real(twork));
-        CPX *work = new CPX[lwork];
-        c_zhegvx(1,'V','A','U',ndof,H_Sum_k,ndof,S_Sum_k,ndof,0.0,0.0,0,0,abstol,&mfound,energies_k,zmat,ndof,work,lwork,rwork,iwork,ifail,&iinfo);
-        if (iinfo) return (LOGCERR, EXIT_FAILURE);
-        if (mfound!=ndof) return (LOGCERR, EXIT_FAILURE);
-        delete[] work;
-        delete[] rwork;
-        delete[] iwork;
-        delete[] ifail;
-        c_zcopy(ndofsq,zmat,1,H_Sum_k,1);
-        delete[] zmat;
-    } else {
-        int iinfo;
-        CPX twork;
-        double *rwork = new double[3*ndof-2];
-        c_zhegv(1,'V','U',ndof,H_Sum_k,ndof,S_Sum_k,ndof,energies_k,&twork,-1,rwork,&iinfo);
-        if (iinfo) return (LOGCERR, EXIT_FAILURE);
-        int lwork=int(real(twork));
-        CPX *work = new CPX[lwork];
-        c_zhegv(1,'V','U',ndof,H_Sum_k,ndof,S_Sum_k,ndof,energies_k,work,lwork,rwork,&iinfo);
-        if (iinfo>ndof) {
-            cout << "Overlap matrix not positive definite" << endl;
-            c_zscal(ndofsq,z_zer,S_Sum_k,1);
-            for (int ibandw=-bandwidth;ibandw<=bandwidth;ibandw++) {
-                c_zaxpy(ndofsq,pow(kval,ibandw),&S[(bandwidth+ibandw)*ndofsq],1,S_Sum_k,1);
-            }
-            int iiinfo;
-            c_zheev('V','U',ndof,S_Sum_k,ndof,energies_k,&twork,-1,rwork,&iiinfo);
-            if (iiinfo) return (LOGCERR, EXIT_FAILURE);
-            int lworke=int(real(twork));
-            CPX *worke = new CPX[lwork];
-            c_zheev('V','U',ndof,S_Sum_k,ndof,energies_k,worke,lworke,rwork,&iiinfo);
-            if (iiinfo) return (LOGCERR, EXIT_FAILURE);
-            delete[] worke;
-            c_zcopy(ndofsq,S_Sum_k,1,H_Sum_k,1);
-            for (int ie=0;ie<ndof;ie++) {
-                double eigele=energies_k[ie];
-                if (eigele<=0.0) {
-                    eigele=1.0E-3;
-                } else {
-                    eigele=sqrt(eigele);
-                }
-                c_zscal(ndof,eigele,&H_Sum_k[ie*ndof],1);
-            }
-            c_zgemm('N','C',ndof,ndof,ndof,z_one,H_Sum_k,ndof,H_Sum_k,ndof,z_zer,S_Sum_k,ndof);
-            c_zscal(ndofsq,z_zer,H_Sum_k,1);
-            for (int ibandw=-bandwidth;ibandw<=bandwidth;ibandw++) {
-                c_zaxpy(ndofsq,pow(kval,ibandw),&H[(bandwidth+ibandw)*ndofsq],1,H_Sum_k,1);
-            }
-            c_zhegv(1,'V','U',ndof,H_Sum_k,ndof,S_Sum_k,ndof,energies_k,work,lwork,rwork,&iiinfo);
-            if (iiinfo) return (LOGCERR, EXIT_FAILURE);
-        } else if (iinfo) return (LOGCERR, EXIT_FAILURE);
-        delete[] work;
-        delete[] rwork;
-    }
 
     return 0;
 }
