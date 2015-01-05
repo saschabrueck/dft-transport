@@ -5,10 +5,9 @@ Prepare CP2K:
 1) (optional) if you already have CP2K on your machine, update your working copy of CP2K using svn -update
 
 Update CP2K:
-2-1) copy "CP2Kupdates/modules/c_int_low.F" to the "cp2k/cp2k/src/start" directory of CP2K 
-2-2) copy the rest of the files in the "CP2Kupdates/modules/" directory to "cp2k/cp2k/src" 
-3) copy "CP2Kupdates/patchfiles/patch.interface_[date].diff" to the src directory of CP2K
-4) in the src directory of CP2K run : "patch -p0 < patch.interface_[date].diff"
+2-1) copy "CP2Kupdates/modules/poisson/*.F" to the "cp2k/cp2k/src/pw" directory of CP2K 
+3) copy "CP2Kupdates/patchfiles/patch.poisson_[date].diff" to the src directory of CP2K
+4) in the src directory of CP2K run : "patch -p0 < patch.poisson_[date].diff"
 5) compile CP2K with popt or pdbg with target libcp2k : "make -j ARCH=...  VERSION=pdbg libcp2k"
    and make sure it works with an arbitray input file
 
@@ -60,3 +59,62 @@ TEMPERATURE                 REAL    (double)     default value 300.0
 
 (*)  TO DO: keywords to be defined as constants to avoid confusion  
 
+Poisson solver :
+- To activate the new Poisson solver: under the input section DFT/POISSON add 
+      POISSON_SOLVER IMPLICIT
+  If the keyword already exists just change the type of the solver into IMPLICIT
+- Add the subsection IMPLICIT with the following subsection and keywords:
+&IMPLICIT
+  BOUNDARY_CONDITIONS <type>               type of boundary conditions {PERIODIC, MIXED_PERIODIC, MIXED}
+  ZERO_INITIAL_GUESS  <logical>            whether or not to use zero initial guess (optional)
+  MAX_ITER            <integer>            maximum number of iterations
+  TOL                 <real>               stopping tolerance
+  OMEGA               <real>               over-relaxation parameter (use for large dielectric constants)
+  &DIELECTRIC        dielectric constant settings
+    eps0              <real>               dielectric constant 
+    rho_min           <real>               lower density threshold (default: 1.0E-4)
+    rho_max           <real>               upper density threshold (default: 1.0E-3)
+    derivative_method <method>             preferred method for evaluating the gradient of ln(eps) {fft, fft_use_deps, fft_use_drho, cd3, cd5, cd7}
+  &END DIELECTRIC
+  &DIRICHLET_BC      dirichlet BC settings (the subsections are optional and can also be repeated as many times as needed)
+    &AA_PLANAR       axis-aligned planar region 
+      v_D             <real>               value at the Dirichlet boundary 
+      X_xtnt          <real> <real>        the extents of the plane in the x direction (specify, has no default)
+      Y_xtnt          <real> <real>        the extents of the plane in the y direction (specify, has no default)
+      Z_xtnt          <real> <real>        the extents of the plane in the z direction (specify, has no default)
+      n_prtn          <int> <int> <int>    # of partitions in the x, y and z directions for tiling the plane (default: 1 1 1)
+      SMOOTH          <logical>            whether or not to smoothen (mollify) the dirichlet boundary region (optional)
+      smoothing_width <real>               the width of the standard mollifier (optional)
+    &END AA_PLANAR
+    &AA_CUBOIDAL     axis-aligned cuboidal region
+      v_D             <real>               value at the Dirichlet boundary 
+      X_xtnt          <real> <real>        the extents of the plane in the x direction (specify, has no default)
+      Y_xtnt          <real> <real>        the extents of the plane in the y direction (specify, has no default)
+      Z_xtnt          <real> <real>        the extents of the plane in the z direction (specify, has no default)
+      n_prtn          <int> <int> <int>    # of partitions in the x, y and z directions for tiling the cuboid (default: 1 1 1)
+      SMOOTH          <logical>            whether or not to smoothen (mollify) the dirichlet boundary region (optional)
+      smoothing_width <real>               the width of the standard mollifier (optional)
+    &END AA_CUBOIDAL
+    &XAA_CYLINDRICAL x-axis-aligned cylindrical region
+      v_D             <real>               value at the Dirichlet boundary
+      X_xtnt          <real> <real>        the extents of the cylinder in the x direction (specify, has no default)
+      base_center     <real> <real>        the y and z coordinates of the cylinder's base center (specify, has no default)
+      base_radius     <real>               the base radius of the cylinder (specify, has no default)
+      apx_type        <type>               the type of the n-gonal prism approximating the cylinder {CIRCUMSCRIBED, INSCRIBED}
+      n_sides         <int>                # of sides os the n-gonal prism approximating the cylinder (default: 5) 
+      n_prtn          <int> <int> <int>    # of partitions in the x, y and z directions for tiling the cuboid (default: 1 1 1)
+      SMOOTH          <logical>            whether or not to smoothen (mollify) the dirichlet boundary region (optional)
+      smoothing_width <real>               the width of the standard mollifier (optional)
+    &END XAA_CYLINDRICAL
+    &PLANAR          arbitrary planar region
+      v_D             <real>               value at the Dirichlet boundary
+      A               <real> <real> <real> coordinates of the vertex A (specify, has no default) 
+      B               <real> <real> <real> coordinates of the vertex B (specify, has no default)
+      C               <real> <real> <real> coordinates of the vertex C (specify, has no default)
+      D               <real> <real> <real> coordinates of the vertex D (specify, has no default)
+      n_prtn          <int> <int> <int>    # of partitions in the x, y and z directions for tiling the plane (default: 1 1 1)
+      SMOOTH          <logical>            whether or not to smoothen (mollify) the dirichlet boundary region (optional)
+      smoothing_width <real>               the width of the standard mollifier (optional)
+    &END PLANAR
+ &END DIRICHLET_BC
+&END IMPLICIT
