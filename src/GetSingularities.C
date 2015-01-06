@@ -434,11 +434,8 @@ int Singularities::determine_velocities(CPX *H,CPX *S,double k_in,double *energi
         }
     }
 
-double sabtime=get_time(0.0);
     if (p_eig(eigvec,ovlmat,energies_k,ndof,bs_comm)) return (LOGCERR, EXIT_FAILURE);
     MPI_Bcast(eigvec,ndofsq,MPI_DOUBLE_COMPLEX,0,bs_comm);
-int worldrank; MPI_Comm_rank(MPI_COMM_WORLD,&worldrank);
-if (!worldrank) cout << "TIME FOR SINGULARITY DIAGONALIZATION " << get_time(sabtime) << endl;
 
     CPX *H_Sum_dk = new CPX[ndofsq]();
     CPX *S_Sum_dk = new CPX[ndofsq]();
@@ -464,63 +461,108 @@ if (!worldrank) cout << "TIME FOR SINGULARITY DIAGONALIZATION " << get_time(sabt
     }
     MPI_Allreduce(tmp,derivatives_k,ndof,MPI_DOUBLE,MPI_SUM,bs_comm);
  
-    int do_curvatures=1;
-    if (do_curvatures) {
+    c_dscal(ndof,d_zer,tmp,1);
 
-        c_dscal(ndof,d_zer,tmp,1);
+    if (size_bs_comm==1) {
 
-        if (!rank_bs_comm) {
- 
-            c_zhemm('L','U',ndof,ndof,z_one,H_Sum_dk,ndof,eigvec,ndof,z_zer,ovlmat,ndof);
-            c_zgemm('C','N',ndof,ndof,ndof,z_one,eigvec,ndof,ovlmat,ndof,z_zer,H_Sum_dk,ndof);
-            c_zhemm('L','U',ndof,ndof,z_one,S_Sum_dk,ndof,eigvec,ndof,z_zer,ovlmat,ndof);
-            c_zgemm('C','N',ndof,ndof,ndof,z_one,eigvec,ndof,ovlmat,ndof,z_zer,S_Sum_dk,ndof);
-  
-            for (int ivec=0;ivec<ndof;ivec++) {
-                tmp[ivec]=-2.0*derivatives_k[ivec]*real(S_Sum_dk[ivec+ndof*ivec]);
-            }
- 
-            c_zcopy(ndofsq,S_Sum_dk,1,ovlmat,1);
-            for (int ivec=0;ivec<ndof;ivec++) {
-                c_zscal(ndof,CPX(-energies_k[ivec],d_zer),&S_Sum_dk[ivec*ndof],1);
-            }
-            c_zaxpy(ndofsq,z_one,S_Sum_dk,1,H_Sum_dk,1);
- 
-            for (int ii=0;ii<ndof;ii++) {
-                for (int jj=0;jj<ndof;jj++) {
-                    double delta_e=energies_k[jj]-energies_k[ii];
-                    double delta_o=abs(-conj(H_Sum_dk[jj+ndof*ii])/delta_e+H_Sum_dk[ii+ndof*jj]/delta_e+ovlmat[ii+ndof*jj]);
-                    if (delta_o<1.0E-12 && abs(delta_e)>1.0E-6) {
-                        tmp[jj]+=2.0*norm(H_Sum_dk[ii+ndof*jj])/delta_e;
-                    }
+        c_zhemm('L','U',ndof,ndof,z_one,H_Sum_dk,ndof,eigvec,ndof,z_zer,ovlmat,ndof);
+        c_zgemm('C','N',ndof,ndof,ndof,z_one,eigvec,ndof,ovlmat,ndof,z_zer,H_Sum_dk,ndof);
+        c_zhemm('L','U',ndof,ndof,z_one,S_Sum_dk,ndof,eigvec,ndof,z_zer,ovlmat,ndof);
+        c_zgemm('C','N',ndof,ndof,ndof,z_one,eigvec,ndof,ovlmat,ndof,z_zer,S_Sum_dk,ndof);
+
+    } else {
+
+        int icontxt=MPI_Comm_c2f(bs_comm);
+        int nprow = size_bs_comm;
+        int npcol = 1;
+        int myrow, mycol;
+        int nbl = 64;
+        char gridr[1] = {'R'};
+        Cblacs_gridinit(&icontxt,gridr,nprow,npcol);
+        Cblacs_gridinfo(icontxt,&nprow,&npcol,&myrow,&mycol);
+        int rloc      = max(1,c_numroc(ndof,nbl,myrow,0,nprow));
+        int cloc      = c_numroc(ndof,nbl,mycol,0,npcol);
+
+        int iinfo;
+        int descH_Sum_dk[9],descS_Sum_dk[9],desceigvec[9];
+        c_descinit(descH_Sum_dk,ndof,ndof,ndof,ndof,0,0,icontxt,ndof,&iinfo);
+        c_descinit(descS_Sum_dk,ndof,ndof,ndof,ndof,0,0,icontxt,ndof,&iinfo);
+        c_descinit(desceigvec,ndof,ndof,ndof,ndof,0,0,icontxt,ndof,&iinfo);
+        int descSumLoc[9],descTmpLoc[9],descEigLoc[9];
+        c_descinit(descSumLoc,ndof,ndof,nbl,nbl,0,0,icontxt,rloc,&iinfo);
+        c_descinit(descTmpLoc,ndof,ndof,nbl,nbl,0,0,icontxt,rloc,&iinfo);
+        c_descinit(descEigLoc,ndof,ndof,nbl,nbl,0,0,icontxt,rloc,&iinfo);
+
+        CPX *SumLoc = new CPX[rloc*cloc];
+        CPX *TmpLoc = new CPX[rloc*cloc];
+        CPX *EigLoc = new CPX[rloc*cloc];
+
+        c_pzgeadd('N',ndof,ndof,z_one,eigvec,1,1,desceigvec,z_zer,EigLoc,1,1,descEigLoc);
+
+        c_pzgeadd('N',ndof,ndof,z_one,H_Sum_dk,1,1,descH_Sum_dk,z_zer,SumLoc,1,1,descSumLoc);
+        c_pzgemm('N','N',ndof,ndof,ndof,z_one,SumLoc,1,1,descSumLoc,EigLoc,1,1,descEigLoc,z_zer,TmpLoc,1,1,descTmpLoc);
+        c_pzgemm('C','N',ndof,ndof,ndof,z_one,EigLoc,1,1,descEigLoc,TmpLoc,1,1,descTmpLoc,z_zer,SumLoc,1,1,descSumLoc);
+        c_pzgeadd('N',ndof,ndof,z_one,SumLoc,1,1,descSumLoc,z_zer,H_Sum_dk,1,1,descH_Sum_dk);
+
+        c_pzgeadd('N',ndof,ndof,z_one,S_Sum_dk,1,1,descS_Sum_dk,z_zer,SumLoc,1,1,descSumLoc);
+        c_pzgemm('N','N',ndof,ndof,ndof,z_one,SumLoc,1,1,descSumLoc,EigLoc,1,1,descEigLoc,z_zer,TmpLoc,1,1,descTmpLoc);
+        c_pzgemm('C','N',ndof,ndof,ndof,z_one,EigLoc,1,1,descEigLoc,TmpLoc,1,1,descTmpLoc,z_zer,SumLoc,1,1,descSumLoc);
+        c_pzgeadd('N',ndof,ndof,z_one,SumLoc,1,1,descSumLoc,z_zer,S_Sum_dk,1,1,descS_Sum_dk);
+
+        delete[] SumLoc;
+        delete[] TmpLoc;
+        delete[] EigLoc;
+
+        Cblacs_gridexit(icontxt);
+
+    }
+
+    if (!rank_bs_comm) {
+
+        for (int ivec=0;ivec<ndof;ivec++) {
+            tmp[ivec]=-2.0*derivatives_k[ivec]*real(S_Sum_dk[ivec+ndof*ivec]);
+        }
+
+        c_zcopy(ndofsq,S_Sum_dk,1,ovlmat,1);
+        for (int ivec=0;ivec<ndof;ivec++) {
+            c_zscal(ndof,CPX(-energies_k[ivec],d_zer),&S_Sum_dk[ivec*ndof],1);
+        }
+        c_zaxpy(ndofsq,z_one,S_Sum_dk,1,H_Sum_dk,1);
+
+        for (int ii=0;ii<ndof;ii++) {
+            for (int jj=0;jj<ndof;jj++) {
+                double delta_e=energies_k[jj]-energies_k[ii];
+                double delta_o=abs(-conj(H_Sum_dk[jj+ndof*ii])/delta_e+H_Sum_dk[ii+ndof*jj]/delta_e+ovlmat[ii+ndof*jj]);
+                if (delta_o<1.0E-12 && abs(delta_e)>1.0E-6) {
+                    tmp[jj]+=2.0*norm(H_Sum_dk[ii+ndof*jj])/delta_e;
                 }
             }
+        }
 
-            delete[] ovlmat;
+        delete[] ovlmat;
 
-        }
- 
-        c_zscal(ndofsq,z_zer,H_Sum_dk,1);
-        c_zscal(ndofsq,z_zer,S_Sum_dk,1);
-        if (!rank_bs_comm) {
-            for (int ibandw=-bandwidth;ibandw<=bandwidth;ibandw++) {
-                c_zaxpy(ndofsq,-CPX(ibandw,d_zer)*CPX(ibandw,d_zer)*pow(kval,ibandw),&H[(bandwidth+ibandw)*ndofsq],1,H_Sum_dk,1);
-                c_zaxpy(ndofsq,-CPX(ibandw,d_zer)*CPX(ibandw,d_zer)*pow(kval,ibandw),&S[(bandwidth+ibandw)*ndofsq],1,S_Sum_dk,1);
-            }
-        }
-        MPI_Bcast(H_Sum_dk,ndofsq,MPI_DOUBLE_COMPLEX,0,bs_comm);
-        MPI_Bcast(S_Sum_dk,ndofsq,MPI_DOUBLE_COMPLEX,0,bs_comm);
-  
-        for (int iseq=0;iseq<seq_per_cpu;iseq++) {
-            if ( (ivec=iseq+rank_bs_comm*seq_per_cpu)<ndof ) {
-                c_zgemv('N',ndof,ndof,z_one,H_Sum_dk,ndof,&eigvec[ivec*ndof],1,z_zer,vector,1);
-                c_zgemv('N',ndof,ndof,CPX(-energies_k[ivec],d_zer),S_Sum_dk,ndof,&eigvec[ivec*ndof],1,z_one,vector,1);
-                tmp[ivec]+=real(c_zdotc(ndof,&eigvec[ivec*ndof],1,vector,1));
-            }
-        }
-        MPI_Allreduce(tmp,curvatures_k,ndof,MPI_DOUBLE,MPI_SUM,bs_comm);
- 
     }
+
+    c_zscal(ndofsq,z_zer,H_Sum_dk,1);
+    c_zscal(ndofsq,z_zer,S_Sum_dk,1);
+    if (!rank_bs_comm) {
+        for (int ibandw=-bandwidth;ibandw<=bandwidth;ibandw++) {
+            c_zaxpy(ndofsq,-CPX(ibandw,d_zer)*CPX(ibandw,d_zer)*pow(kval,ibandw),&H[(bandwidth+ibandw)*ndofsq],1,H_Sum_dk,1);
+            c_zaxpy(ndofsq,-CPX(ibandw,d_zer)*CPX(ibandw,d_zer)*pow(kval,ibandw),&S[(bandwidth+ibandw)*ndofsq],1,S_Sum_dk,1);
+        }
+    }
+    MPI_Bcast(H_Sum_dk,ndofsq,MPI_DOUBLE_COMPLEX,0,bs_comm);
+    MPI_Bcast(S_Sum_dk,ndofsq,MPI_DOUBLE_COMPLEX,0,bs_comm);
+
+    for (int iseq=0;iseq<seq_per_cpu;iseq++) {
+        if ( (ivec=iseq+rank_bs_comm*seq_per_cpu)<ndof ) {
+            c_zgemv('N',ndof,ndof,z_one,H_Sum_dk,ndof,&eigvec[ivec*ndof],1,z_zer,vector,1);
+            c_zgemv('N',ndof,ndof,CPX(-energies_k[ivec],d_zer),S_Sum_dk,ndof,&eigvec[ivec*ndof],1,z_one,vector,1);
+            tmp[ivec]+=real(c_zdotc(ndof,&eigvec[ivec*ndof],1,vector,1));
+        }
+    }
+    MPI_Allreduce(tmp,curvatures_k,ndof,MPI_DOUBLE,MPI_SUM,bs_comm);
+ 
     delete[] vector;
     delete[] tmp;
     delete[] eigvec;
