@@ -125,8 +125,8 @@ inline int p_eig(CPX *KSfull,CPX *OVfull,double *eigval,int nvec,MPI_Comm p_eig_
     CPX *OVloc = new CPX[rloc*cloc];
     CPX *Zloc  = new CPX[rloc*cloc];
 
-    c_pzgeadd('N',nvec,nvec,1.0,KSfull,1,1,descKSfull,0.0,KSloc,1,1,descKS);
-    c_pzgeadd('N',nvec,nvec,1.0,OVfull,1,1,descOVfull,0.0,OVloc,1,1,descOV);
+    c_pzgeadd('N',nvec,nvec,CPX(1.0,0.0),KSfull,1,1,descKSfull,CPX(0.0,0.0),KSloc,1,1,descKS);
+    c_pzgeadd('N',nvec,nvec,CPX(1.0,0.0),OVfull,1,1,descOVfull,CPX(0.0,0.0),OVloc,1,1,descOV);
 
     double eps_eigval_degen=1.0E-6;
     double abstol = 2.0*c_pdlamch(icontxt,'S');
@@ -142,7 +142,7 @@ inline int p_eig(CPX *KSfull,CPX *OVfull,double *eigval,int nvec,MPI_Comm p_eig_
               0.0,0.0,1,1,abstol,&mout,&nzout,eigval,eps_eigval_degen,Zloc,1,1,descZ,\
               workytest,-1,rworkytest,-1,iworkytest,-1,ifail,iclu,dgap,&iinfo);
     int lworky      = int(real(workytest[0]));
-    int lrworky     = int(rworkytest[0])+nvec;
+    int lrworky     = int(rworkytest[0])+3*nvec;
     int liworky     = iworkytest[0];
     CPX *worky      = new CPX[lworky];
     double *rworky  = new double[lrworky];
