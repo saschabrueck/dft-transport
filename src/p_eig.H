@@ -47,6 +47,7 @@ inline int p_eig(double *KSfull,double *OVfull,double *eigval,int nvec,MPI_Comm 
     c_pdgeadd('N',nvec,nvec,1.0,KSfull,1,1,descKSfull,0.0,KSloc,1,1,descKS);
     c_pdgeadd('N',nvec,nvec,1.0,OVfull,1,1,descOVfull,0.0,OVloc,1,1,descOV);
 
+    int fac_degen=5;
     double eps_eigval_degen=1.0E-6;
     double abstol = 2.0*c_pdlamch(icontxt,'S');
     double workytest[3];
@@ -59,7 +60,7 @@ inline int p_eig(double *KSfull,double *OVfull,double *eigval,int nvec,MPI_Comm 
     c_pdsygvx(1,'V','A','U',nvec,KSloc,1,1,descKS,OVloc,1,1,descOV,\
               0.0,0.0,1,1,abstol,&mout,&nzout,eigval,eps_eigval_degen,Zloc,1,1,descZ,\
               workytest,-1,iworkytest,-1,ifail,iclu,dgap,&iinfo);
-    int lworky    = int(workytest[0])+nvec;
+    int lworky    = int(workytest[0])+fac_degen*nvec;
     int liworky   = iworkytest[0];
     double *worky = new double[lworky];
     int *iworky   = new int[liworky];
@@ -128,6 +129,7 @@ inline int p_eig(CPX *KSfull,CPX *OVfull,double *eigval,int nvec,MPI_Comm p_eig_
     c_pzgeadd('N',nvec,nvec,CPX(1.0,0.0),KSfull,1,1,descKSfull,CPX(0.0,0.0),KSloc,1,1,descKS);
     c_pzgeadd('N',nvec,nvec,CPX(1.0,0.0),OVfull,1,1,descOVfull,CPX(0.0,0.0),OVloc,1,1,descOV);
 
+    int fac_degen=3;
     double eps_eigval_degen=1.0E-6;
     double abstol = 2.0*c_pdlamch(icontxt,'S');
     CPX workytest[3];
@@ -142,7 +144,7 @@ inline int p_eig(CPX *KSfull,CPX *OVfull,double *eigval,int nvec,MPI_Comm p_eig_
               0.0,0.0,1,1,abstol,&mout,&nzout,eigval,eps_eigval_degen,Zloc,1,1,descZ,\
               workytest,-1,rworkytest,-1,iworkytest,-1,ifail,iclu,dgap,&iinfo);
     int lworky      = int(real(workytest[0]));
-    int lrworky     = int(rworkytest[0])+3*nvec;
+    int lrworky     = int(rworkytest[0])+fac_degen*nvec;
     int liworky     = iworkytest[0];
     CPX *worky      = new CPX[lworky];
     double *rworky  = new double[lrworky];

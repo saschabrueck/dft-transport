@@ -262,7 +262,7 @@ int worldrank; MPI_Comm_rank(MPI_COMM_WORLD,&worldrank);
 // FEAST
     int do_feast=0;
     if (do_feast) {
-        InjectionFeast<CPX> *k_inj = new InjectionFeast<CPX>(complexenergypoint,2*bandwidth,10);
+        InjectionFeast<CPX> *k_inj = new InjectionFeast<CPX>(complexenergypoint,2*bandwidth,10,eps_decay);
         int neigfeast=50;
         k_inj->initialize(2*ntriblock,2*ntriblock,neigfeast);
         int Ntr;
