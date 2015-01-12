@@ -38,7 +38,7 @@ if (!iam) cout << "Time for p_eig " << get_time(sabtime) << endl;
     c_dscal(OverlapCollect->n_nonzeros,0.0,OverlapCollect->nnz,1);
 if (!iam) sabtime=get_time(0.0);
 //    if (!iam) OverlapCollect->psipsidagger(KSfull,nocc,1.0); THIS TAKES REALLY A LOT OF TIME
-    if (!iam) full_transpose(nvec,nvec,KSfull,OVfull);
+    if (!iam) full_transpose(nocc,nvec,KSfull,OVfull);
     if (!iam) OverlapCollect->psipsidagger_transpose(OVfull,nocc,1.0);
 
 if (!iam) cout << "Time for Dens " << get_time(sabtime) << endl;

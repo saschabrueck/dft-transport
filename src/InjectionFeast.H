@@ -20,7 +20,7 @@ template<class T>
 class InjectionFeast : public Injection<T>{
 public:
     
-    InjectionFeast(int,int,double);
+    InjectionFeast(int,int,double,double);
 
     virtual ~InjectionFeast();
 
@@ -85,10 +85,9 @@ private:
 };
 
 template<class T>
-InjectionFeast<T>::InjectionFeast(int cpxpoint,int pslab_per_bc,double pfeast_radius)
+InjectionFeast<T>::InjectionFeast(int cpxpoint,int pslab_per_bc,double pfeast_radius,double pimag_limit)
 {
-    error_criterion = 1.0e-3;
-    imag_limit      = 5.0e-5;
+    error_criterion = 1.0e-2;
     mult_factor     = 1.2;
     max_iteration   = 2;
     NQDR            = 16;
@@ -98,7 +97,7 @@ InjectionFeast<T>::InjectionFeast(int cpxpoint,int pslab_per_bc,double pfeast_ra
 
     slab_per_bc     = pslab_per_bc;
     feast_radius    = pfeast_radius;
-    imag_limit      = slab_per_bc*imag_limit;
+    imag_limit      = pimag_limit;
 
     MPI_Comm_size(MPI_COMM_WORLD,&mpi_size);
     MPI_Comm_rank(MPI_COMM_WORLD,&mpi_rank);
@@ -384,17 +383,10 @@ void InjectionFeast<T>::calc_kphase(TCSR<T> *D,TCSR<T> *P,TCSR<CPX> *T01,int ND,
                     }
                     std::sort(qvec.begin(),qvec.end());
                     if(abs(qvec[ND/4]-abs(lambdaR[IM]))/abs(lambdaR[IM])<error_criterion){ 
-		  
-//		    if(abs(AR[IM*(1+NM)]/BR[IM*(1+NM)]-lambdaR[IM])/abs(lambdaR[IM])*100<error_criterion){
 
-		        if(abs(lambdaR[IM]*conj(lambdaR[IM])-CPX(1.0,0.0))<error_criterion){
-			    index_to_keep[IM]   = 2;
-			    prop_index[no_prop] = IM;
-			    no_prop++;
-			}else{
-			    index_to_keep[IM] = 1;
-			}
+			index_to_keep[IM] = 1;
 			no_ev++;
+
 		    }
 		}
 	    }
@@ -443,7 +435,6 @@ void InjectionFeast<T>::calc_kphase(TCSR<T> *D,TCSR<T> *P,TCSR<CPX> *T01,int ND,
 		    no_ev++;
 		}
 	    }
-	    */
 
 	    for(IM=0;IM<no_prop;IM++){
 
@@ -463,6 +454,7 @@ void InjectionFeast<T>::calc_kphase(TCSR<T> *D,TCSR<T> *P,TCSR<CPX> *T01,int ND,
 		    }
 		}
 	    }
+	    */
 
 	    IN = 0;
 	    for(IM=0;IM<NM;IM++){
@@ -924,7 +916,7 @@ int InjectionFeast<T>::get_type(TCSR<CPX> *T01,CPX* Vin,CPX kin,double *dEk_dk,i
 
     *dEk_dk = 0.0;
     
-    if(((imag(kin)<imag_limit)&&(imag(kin)>-imag_limit))&&(ind_to_keep==2)){
+    if(((imag(kin)<imag_limit)&&(imag(kin)>-imag_limit))){
         
         *dEk_dk = sign*calc_derivative(T01,Vin,kin);
  

@@ -43,7 +43,10 @@ Singularities::Singularities(transport_parameters *parameter_sab,contact_type *p
     }
     MPI_Comm_split(MPI_COMM_WORLD,color,iam,&equal_bs_rank_comm);
     MPI_Comm_rank(equal_bs_rank_comm,&k_rank);
-    master_ranks.resize(max(1,nprocs/size_bs_comm));
+    int k_size;
+    if (!iam) MPI_Comm_size(equal_bs_rank_comm,&k_size);
+    MPI_Bcast(&k_size,1,MPI_INT,0,MPI_COMM_WORLD);
+    master_ranks.resize(k_size);
     if (!rank_bs_comm) {
         MPI_Gather(&iam,1,MPI_INT,&master_ranks[0],1,MPI_INT,0,equal_bs_rank_comm);
     }
