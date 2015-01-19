@@ -122,7 +122,19 @@ if (!iam) cout << "DOPING " << doping_cell[0] << " " << doping_cell[transport_pa
     double Vg=-voltage->Vgmin[0];
     double Vm;
     double dV;
-    {
+    ifstream fermilevelfile("OMEN_F");
+    if (fermilevelfile) {
+        for (int i_mu=0;i_mu<n_mu;i_mu++) fermilevelfile >> muvec[i_mu];
+        Vm=std::accumulate(muvec,muvec+n_mu,0.0)/n_mu;
+        for (int i_mu=0;i_mu<n_mu;i_mu++) fermilevelfile >> muvec[i_mu];
+        double mu_avg=std::accumulate(muvec,muvec+n_mu,0.0)/n_mu;
+        dV=(muvec[0]-muvec[1])/2.0;
+        double min_cond_band_edge;
+        fermilevelfile >> min_cond_band_edge;
+        Vg+=mu_avg-min_cond_band_edge;
+        muvec[0]=mu_avg-Vs;
+        muvec[1]=mu_avg-Vd;
+    } else {
         Singularities singularities(transport_params,contactvec);
         if ( singularities.Execute(KohnSham,Overlap) ) return (LOGCERR, EXIT_FAILURE);
         for (int i_mu=0;i_mu<n_mu;i_mu++) muvec[i_mu]=singularities.determine_fermi(0.0,i_mu);
@@ -135,6 +147,7 @@ if (!iam) cout << "DOPING " << doping_cell[0] << " " << doping_cell[transport_pa
         muvec[0]=mu_avg-Vs;
         muvec[1]=mu_avg-Vd;
     }
+    fermilevelfile.close();
 
 if (!iam) cout << "FERMI LEVEL LEFT " << muvec[0] << " RIGHT " << muvec[1] << endl;
 if (!iam) cout << "GATE POTENTIAL " << Vg << endl;

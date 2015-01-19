@@ -153,7 +153,6 @@ int Singularities::Execute(TCSR<double> *KohnSham,TCSR<double> *Overlap)
         delete[] derivatives_local;
         delete[] curvatures_local;
         if (!iam) {
-            follow_band(i_mu);
             for (int i=0;i<ndof;i++) {
                 for (int j=0;j<n_k-1;j++) {
                     double xval=-derivatives_matrix[i_mu][i+j*ndof]/curvatures_matrix[i_mu][i+j*ndof];
@@ -313,6 +312,7 @@ void Singularities::follow_band(int i_mu)
 void Singularities::write_bandstructure(int i_mu)
 {
     if (!iam) {
+        follow_band(i_mu);
         int ndof=contactvec[i_mu].ndof;
         ofstream myfile;
         stringstream mysstream;
