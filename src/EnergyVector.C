@@ -139,32 +139,7 @@ if (!iam) cout << "TIME FOR DISTRIBUTING MATRICES " << get_time(sabtime) << endl
 
 int Energyvector::determine_energyvector(std::vector<CPX> &energyvector,std::vector<CPX> &stepvector,std::vector<transport_methods::transport_method> &methodvector,std::vector< std::vector<int> > &propagating_sizes,TCSR<double> *KohnSham,TCSR<double> *Overlap,double *muvec,contact_type *contactvec,transport_parameters *transport_params)
 {
-    double sabtime=get_time(0.0);
     int n_mu=transport_params->num_contacts;
-    double Temp=transport_params->temperature;
-    Singularities singularities(transport_params,contactvec);
-    if ( singularities.Execute(KohnSham,Overlap) ) return (LOGCERR, EXIT_FAILURE);
-    if (!iam) cout << "TIME FOR SINGULARITIES " << get_time(sabtime) << endl;
-    for (int i_mu=0;i_mu<n_mu;i_mu++) singularities.write_bandstructure(i_mu);
-
-    double delta_eps_fermi=-log((numeric_limits<double>::epsilon)())*K_BOLTZMANN*Temp;
-    double muvec_min=*min_element(muvec,muvec+n_mu);
-    double muvec_max=*max_element(muvec,muvec+n_mu);
-    double nonequi_start=muvec_min-delta_eps_fermi;
-    double nonequi_end=muvec_max+delta_eps_fermi;
-    double energy_vb=*max_element(singularities.energies_vb.begin(),singularities.energies_vb.end());
-    double energy_cb=*min_element(singularities.energies_cb.begin(),singularities.energies_cb.end());
-
-    if (!transport_params->n_abscissae) {
-        add_real_axis_energies(energy_cb,nonequi_end,energyvector,stepvector,methodvector,singularities.energies_extremum,transport_params);
-    } else if (transport_params->method==1) {
-        add_cmpx_cont_energies(singularities.energy_gs,singularities.energy_gs,muvec_min,energyvector,stepvector,methodvector,transport_params); //FOR PEX ONLY MU AND EM
-    } else {
-// all localized states with lowest fermi level corresponding to occupation of localized states in bandgap
-        add_cmpx_cont_energies(singularities.energy_gs,singularities.energy_gs,muvec_min,energyvector,stepvector,methodvector,transport_params);
-        add_real_axis_energies(nonequi_start,nonequi_end,energyvector,stepvector,methodvector,singularities.energies_extremum,transport_params);
-    }
-
     ifstream evecfile("OMEN_E");
     if (evecfile) {
         energyvector.clear();
@@ -182,32 +157,59 @@ int Energyvector::determine_energyvector(std::vector<CPX> &energyvector,std::vec
             }
             stepvector.push_back((energyvector[energyvector.size()-1]-energyvector[energyvector.size()-2])/2.0);
         }
+        propagating_sizes.resize(energyvector.size());
+        for (uint ie=0;ie<energyvector.size();ie++) propagating_sizes[ie].resize(n_mu,-1);
+    } else {
+double sabtime=get_time(0.0);
+        double Temp=transport_params->temperature;
+        Singularities singularities(transport_params,contactvec);
+        if ( singularities.Execute(KohnSham,Overlap) ) return (LOGCERR, EXIT_FAILURE);
+if (!iam) cout << "TIME FOR SINGULARITIES " << get_time(sabtime) << endl;
+//for (int i_mu=0;i_mu<n_mu;i_mu++) singularities.write_bandstructure(i_mu);
+ 
+        double delta_eps_fermi=-log((numeric_limits<double>::epsilon)())*K_BOLTZMANN*Temp;
+        double muvec_min=*min_element(muvec,muvec+n_mu);
+        double muvec_max=*max_element(muvec,muvec+n_mu);
+        double nonequi_start=muvec_min-delta_eps_fermi;
+        double nonequi_end=muvec_max+delta_eps_fermi;
+        double energy_vb=*max_element(singularities.energies_vb.begin(),singularities.energies_vb.end());
+        double energy_cb=*min_element(singularities.energies_cb.begin(),singularities.energies_cb.end());
+ 
+        if (!transport_params->n_abscissae) {
+            add_real_axis_energies(energy_cb,nonequi_end,energyvector,stepvector,methodvector,singularities.energies_extremum,transport_params);
+        } else if (transport_params->method==1) {
+            add_cmpx_cont_energies(singularities.energy_gs,singularities.energy_gs,muvec_min,energyvector,stepvector,methodvector,transport_params); //FOR PEX ONLY MU AND EM
+        } else {
+// all localized states with lowest fermi level corresponding to occupation of localized states in bandgap
+            add_cmpx_cont_energies(singularities.energy_gs,singularities.energy_gs,muvec_min,energyvector,stepvector,methodvector,transport_params);
+            add_real_axis_energies(nonequi_start,nonequi_end,energyvector,stepvector,methodvector,singularities.energies_extremum,transport_params);
+        }
+        if (!iam) {
+            ofstream myfile;
+            myfile.open("E_dat");
+            myfile.precision(15);
+            myfile << energyvector.size() << endl;
+            for (uint iele=0;iele<energyvector.size();iele++)
+                myfile << real(energyvector[iele]) << endl;
+            myfile.close();
+        }
+// get propagating modes from bandstructure
+        propagating_sizes.resize(energyvector.size());
+        for (uint ie=0;ie<energyvector.size();ie++) propagating_sizes[ie].resize(n_mu);
+        if (!iam) {
+            std::vector< std::vector< std::vector<double> > > propagating = singularities.get_propagating(energyvector);
+            for (uint ie=0;ie<energyvector.size();ie++) {
+                for (int i_mu=0;i_mu<n_mu;i_mu++) {
+                    propagating_sizes[ie][i_mu]=propagating[i_mu][ie].size();
+                }
+            }
+        }
+        for (uint ie=0;ie<energyvector.size();ie++) {
+            MPI_Bcast(&propagating_sizes[ie][0],n_mu,MPI_INT,0,MPI_COMM_WORLD);
+        }
     }
     evecfile.close();
     if (!iam) cout << "Size of Energyvector " << energyvector.size() << endl;
-    if (!iam) {
-        ofstream myfile;
-        myfile.open("E_dat");
-        myfile.precision(15);
-        myfile << energyvector.size() << endl;
-        for (uint iele=0;iele<energyvector.size();iele++)
-            myfile << real(energyvector[iele]) << endl;
-        myfile.close();
-    }
-// get propagating modes from bandstructure
-    propagating_sizes.resize(energyvector.size());
-    for (uint ie=0;ie<energyvector.size();ie++) propagating_sizes[ie].resize(n_mu);
-    if (!iam) {
-        std::vector< std::vector< std::vector<double> > > propagating = singularities.get_propagating(energyvector);
-        for (uint ie=0;ie<energyvector.size();ie++) {
-            for (int i_mu=0;i_mu<n_mu;i_mu++) {
-                propagating_sizes[ie][i_mu]=propagating[i_mu][ie].size();
-            }
-        }
-    }
-    for (uint ie=0;ie<energyvector.size();ie++) {
-        MPI_Bcast(&propagating_sizes[ie][0],n_mu,MPI_INT,0,MPI_COMM_WORLD);
-    }
     return 0;
 }
 

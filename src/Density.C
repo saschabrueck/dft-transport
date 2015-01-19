@@ -127,8 +127,8 @@ if (!worldrank) cout << "TIME FOR ADDING SIGMA " << get_time(sabtime) << endl;
             lambda = new CPX[nprol+npror];
             c_zcopy(nprol,selfenergies[0].lambdapro,1,lambda,1);
             c_zcopy(npror,selfenergies[1].lambdapro,1,&lambda[nprol],1);
-if (nprol!=propnum[0]) if (!matrix_rank) cout << "WARNING: FOUND " << nprol << " OF " << propnum[0] << " MODES AT E=" << real(energy) << " POSITION " << evecpos << " LEFT" << endl;
-if (npror!=propnum[1]) if (!matrix_rank) cout << "WARNING: FOUND " << npror << " OF " << propnum[1] << " MODES AT E=" << real(energy) << " POSITION " << evecpos << " RIGHT" << endl;
+if (nprol!=propnum[0] && propnum[0]>=0) if (!matrix_rank) cout << "WARNING: FOUND " << nprol << " OF " << propnum[0] << " MODES AT E=" << real(energy) << " POSITION " << evecpos << " LEFT" << endl;
+if (npror!=propnum[1] && propnum[1]>=0) if (!matrix_rank) cout << "WARNING: FOUND " << npror << " OF " << propnum[1] << " MODES AT E=" << real(energy) << " POSITION " << evecpos << " RIGHT" << endl;
             dist_sol = new int[matrix_procs];
             MPI_Allgather(&HamSig->size,1,MPI_INT,dist_sol,1,MPI_INT,matrix_comm);
             displc_sol = new int[matrix_procs+1]();
@@ -423,7 +423,7 @@ if (!parameter_sab->n_abscissae) { // I NEED TO CONSTRUCT Ps WITH THE HELP OF Va
                 transmr+=4*M_PI*imag(c_zdotc(ntriblock,&Sol[Ps->size_tot*ipro+tra_block*ntriblock],1,vecoutdof,1));
             }
             delete[] vecoutdof;
-            if (abs(abs(transml)-abs(transmr))>0.1) return (LOGCERR, EXIT_FAILURE);
+if (abs(abs(transml)-abs(transmr))/abs(abs(transml)+abs(transmr))>0.1) cout << "CAUTION: TRANSMISSION " << transml << " " << transmr << " AT ENERGY " << real(energy) << " AT POSITION " << evecpos << endl;
             transm=transml;
             double diff_fermi=fermi(real(energy),muvec[0],Temp,0)-fermi(real(energy),muvec[1],Temp,0);
             current=2.0*E_ELECTRON*E_ELECTRON/(2.0*M_PI*H_BAR)*diff_fermi*transm;
