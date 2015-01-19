@@ -497,6 +497,7 @@ if (!worldrank) cout << "TIME FOR SYMMETRIZATION " << get_time(sabtime) << endl;
                     c_zscal(ntriblock,norm,&Vref[j*ntriblock],1);
                 }
             }
+if (degeneracy==2) cout << "DEGENERATE ON " << evecpos << endl;
             if (degeneracy>2) return (LOGCERR, EXIT_FAILURE);
         }
         inj = new CPX[ntriblock*nprotra];

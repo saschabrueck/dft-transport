@@ -423,7 +423,7 @@ if (!parameter_sab->n_abscissae) { // I NEED TO CONSTRUCT Ps WITH THE HELP OF Va
                 transmr+=4*M_PI*imag(c_zdotc(ntriblock,&Sol[Ps->size_tot*ipro+tra_block*ntriblock],1,vecoutdof,1));
             }
             delete[] vecoutdof;
-if (abs(abs(transml)-abs(transmr))/abs(abs(transml)+abs(transmr))>0.1) cout << "CAUTION: TRANSMISSION " << transml << " " << transmr << " AT ENERGY " << real(energy) << " AT POSITION " << evecpos << endl;
+if (abs(abs(transml)-abs(transmr))/max(1.0,abs(abs(transml)+abs(transmr)))>0.1) cout << "CAUTION: TRANSMISSION " << transml << " " << transmr << " AT ENERGY " << real(energy) << " AT POSITION " << evecpos << endl;
             transm=transml;
             double diff_fermi=fermi(real(energy),muvec[0],Temp,0)-fermi(real(energy),muvec[1],Temp,0);
             current=2.0*E_ELECTRON*E_ELECTRON/(2.0*M_PI*H_BAR)*diff_fermi*transm;

@@ -87,10 +87,10 @@ private:
 template<class T>
 InjectionFeast<T>::InjectionFeast(int cpxpoint,int pslab_per_bc,double pfeast_radius,double pimag_limit)
 {
-    error_criterion = 1.0e-2;
+    error_criterion = 1.0e-3;
     mult_factor     = 1.2;
     max_iteration   = 2;
-    NQDR            = 16;
+    NQDR            = 32;
     factor_lwork    = 20;
     contour_factor  = 2-cpxpoint;
     init_f_matrix   = 0;
