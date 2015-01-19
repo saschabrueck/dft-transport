@@ -3,10 +3,6 @@
 
 #include "FEMGrid.H"
 #include "Poisson.H"
-#include "GetSingularities.H"
-#include "EnergyVector.H"
-#include <numeric>
-#include <iterator>
 
 extern WireStructure *nanowire;
 extern WireGenerator* Wire;

@@ -5,6 +5,7 @@
 #include "EnergyVector.H"
 #include "pole.hpp"
 #include <iterator>
+#include <limits>
 
 Energyvector::Energyvector()
 {
