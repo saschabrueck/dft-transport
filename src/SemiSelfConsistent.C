@@ -1,3 +1,8 @@
+#include "GetSingularities.H"
+#include "EnergyVector.H"
+#include <numeric>
+#include <iterator>
+#include <limits>
 #include "SemiSelfConsistent.H"
  
 int semiselfconsistent(TCSR<double> *Overlap,TCSR<double> *KohnSham,transport_parameters *transport_params)
