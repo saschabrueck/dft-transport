@@ -15,18 +15,24 @@
       N_ABSCISSAE 64
       N_CELLS ${NCELLS}
     &END
-    &PRINT
-     &E_DENSITY_CUBE
-      &EACH
-       QS_SCF 1
-      &END
-     &END
-     &TOT_DENSITY_CUBE
-      &EACH
-       QS_SCF 1
-      &END
-     &END
-    &END
+!   &PRINT
+!    &V_HARTREE_CUBE
+!    &END
+!    &MO_CUBES
+!      NHOMO 10
+!      NLUMO 10
+!    &END
+!    &E_DENSITY_CUBE
+!     &EACH
+!      QS_SCF 1
+!     &END
+!    &END
+!    &TOT_DENSITY_CUBE
+!     &EACH
+!      QS_SCF 1
+!     &END
+!    &END
+!   &END
     BASIS_SET_FILE_NAME ../BASIS_ZIJLSTRA
     POTENTIAL_FILE_NAME ../POTENTIAL 
     &MGRID
@@ -45,7 +51,7 @@
       &END
     &END QS
     &LS_SCF
-      MAX_SCF    1
+      MAX_SCF    20
       EPS_FILTER 1.0E-5
       EPS_SCF    1.0E-5
       MU        -0.05
@@ -53,8 +59,14 @@
       REPORT_ALL_SPARSITIES OFF
       PERFORM_MU_SCAN OFF
       S_PRECONDITIONER NONE
+      PURIFICATION_METHOD TRS4
+      &CURVY_STEPS
+      &END
+      !RESTART_READ
+      RESTART_WRITE
     &END
     &SCF
+      !SCF_GUESS RESTART
       MAX_SCF    30
       EPS_SCF    1.0E-6
       &OT
@@ -64,7 +76,7 @@
          EPS_SCF    1.0E-6
       &END
       &PRINT
-        &RESTART OFF
+        &RESTART ON
         &END
       &END
     &END
@@ -752,7 +764,7 @@ C 83.780000 2.228632 -2.228632
      SUBCOMMUNICATORS .TRUE.
      COMM_THREAD_LOAD 80
   &END
-  PROJECT SI
+  PROJECT CNT_DOPING
   RUN_TYPE ENERGY
   PRINT_LEVEL MEDIUM
   &TIMINGS
