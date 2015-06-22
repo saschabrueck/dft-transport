@@ -20,38 +20,14 @@ Energyvector::~Energyvector()
 int Energyvector::Execute(TCSR<double> *Overlap,TCSR<double> *KohnSham,double *muvec, contact_type *contactvec,double *electronchargeperatom,double *derivativechargeperatom,double *Vatom,int n_atoms,int *atom_of_bf,transport_parameters *transport_params)
 {
     double sabtime;
-    int tasks_per_point=transport_params->tasks_per_point;
-    if (!iam) cout << "Distributing matrix over " << tasks_per_point << " tasks" << endl;
-    if ( nprocs%tasks_per_point ) {
-        if (!iam) cout << "Choose number of tasks per energy point as a divider of total number of tasks" << endl;
-        return (LOGCERR, EXIT_FAILURE);
-    }
 // allocate matrices to gather on every node
 sabtime=get_time(0.0);
     MPI_Comm matrix_comm;
     MPI_Comm eq_rank_matrix_comm;
-    TCSR<double> *KohnShamCollect;
-    TCSR<double> *OverlapCollect;
-    if (tasks_per_point > 1) {
-        MPI_Comm KS_matrix_comm;
-        MPI_Comm KS_eq_rank_matrix_comm;
-        KohnShamCollect = new TCSR<double>(KohnSham,MPI_COMM_WORLD,tasks_per_point,&KS_matrix_comm,&KS_eq_rank_matrix_comm);
-        OverlapCollect = new TCSR<double>(Overlap,MPI_COMM_WORLD,tasks_per_point,&matrix_comm,&eq_rank_matrix_comm);
-        int comm_result, eq_comm_result;
-        MPI_Comm_compare(KS_matrix_comm,matrix_comm,&comm_result);
-        MPI_Comm_compare(KS_eq_rank_matrix_comm,eq_rank_matrix_comm,&eq_comm_result);
-        if (comm_result!=MPI_CONGRUENT || eq_comm_result!=MPI_CONGRUENT) return (LOGCERR, EXIT_FAILURE);
-        MPI_Comm_free(&KS_matrix_comm);
-        MPI_Comm_free(&KS_eq_rank_matrix_comm);
-        int matrix_rank, n_mat_comm;
-        MPI_Comm_size(eq_rank_matrix_comm,&n_mat_comm);
-        MPI_Comm_rank(matrix_comm,&matrix_rank);
-    } else {
-        KohnShamCollect = new TCSR<double>(KohnSham,MPI_COMM_WORLD);
-        OverlapCollect = new TCSR<double>(Overlap,MPI_COMM_WORLD);
-        MPI_Comm_split(MPI_COMM_WORLD,iam,iam,&matrix_comm);
-        MPI_Comm_dup(MPI_COMM_WORLD,&eq_rank_matrix_comm);
-    }
+    MPI_Comm_split(MPI_COMM_WORLD,iam/transport_params->tasks_per_point,iam,&matrix_comm);
+    MPI_Comm_split(MPI_COMM_WORLD,iam%transport_params->tasks_per_point,iam,&eq_rank_matrix_comm);
+    TCSR<double> *KohnShamCollect = new TCSR<double>(eq_rank_matrix_comm,KohnSham);
+    TCSR<double> *OverlapCollect  = new TCSR<double>(eq_rank_matrix_comm,Overlap);
     TCSR<double> *Ps = new TCSR<double>(OverlapCollect);
     Ps->init_variable(Ps->nnz,Ps->n_nonzeros);
 if (!iam) cout << "TIME FOR DISTRIBUTING MATRICES " << get_time(sabtime) << endl;
@@ -120,17 +96,7 @@ if (!iam) cout << "TIME FOR DISTRIBUTING MATRICES " << get_time(sabtime) << endl
     }
     if (!iam) cout << "CURRENT IS " << c_ddot(energyvector.size(),&currentvector2[0],1,(double*)&stepvector[0],2) << endl;
 
-    if (tasks_per_point > 1) {
-        int matrix_rank, matrix_size;
-        MPI_Comm_size(matrix_comm,&matrix_size);
-        MPI_Comm_rank(matrix_comm,&matrix_rank);
-        Ps->reduce(0,eq_rank_matrix_comm);
-        for (int i_rank=0;i_rank<matrix_size;i_rank++) {
-            Ps->scatter(Overlap,i_rank,MPI_COMM_WORLD);
-        }
-    } else {
-        Ps->reducescatter(Overlap,MPI_COMM_WORLD);
-    }
+    MPI_Reduce(Ps->nnz,Overlap->nnz,Ps->n_nonzeros,MPI_DOUBLE,MPI_SUM,0,eq_rank_matrix_comm);
     delete Ps;
     MPI_Comm_free(&matrix_comm);
     MPI_Comm_free(&eq_rank_matrix_comm);

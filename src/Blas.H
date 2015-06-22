@@ -98,6 +98,10 @@ extern "C" {
                                      CPX *b,int *ldb, double *vl, double *vu, int *il,int *iu,double *abstol,\
                                      int *m,double *w,CPX *z,int *ldz,CPX *work,int *lwork,double *rwork,\
                                      int *iwork,int *ifail,int *info);
+    void fortran_name(dgesdd,DGESDD)(char *jobz,int *m,int *n,double *a,int *lda,double *s,double *u,int *ldu,\
+                                     double *vt,int *ldvt,double *work,int *lwork,int *iwork,int *info);
+    void fortran_name(zgesdd,ZGESDD)(char *jobz,int *m,int *n,CPX *a,int *lda,double *s,CPX *u,int *ldu,\
+                                     CPX *vt,int *ldvt,CPX *work,int *lwork,double *rwork,int *iwork,int *info);
     double fortran_name(dlamch,DLAMCH)(char*);
     double fortran_name(pdlamch,PDLAMCH)(int*,char*);
     void fortran_name(dlasrt,DLASRT)(char*,int*,double*,int*);
@@ -537,6 +541,22 @@ inline void c_zhegvx(int itype,char jobz,char range,char uplo,int n,CPX *a,int l
 {
     fortran_name(zhegvx,ZHEGVX)(&itype,&jobz,&range,&uplo,&n,a,&lda,b,&ldb,&vl,&vu,&il,&iu,&abstol,\
                               m,w,z,&ldz,work,&lwork,rwork,iwork,ifail,info);
+}
+
+/************************************************************************************************/
+
+inline void c_dgesdd(char jobz,int m,int n,double *a,int lda,double *s,double *u,int ldu,\
+                     double *vt,int ldvt,double *work,int lwork,int *iwork,int *info)
+{
+    fortran_name(dgesdd,DGESDD)(&jobz,&m,&n,a,&lda,s,u,&ldu,vt,&ldvt,work,&lwork,iwork,info);
+}
+
+/************************************************************************************************/
+
+inline void c_zgesdd(char jobz,int m,int n,CPX *a,int lda,double *s,CPX *u,int ldu,\
+                     CPX *vt,int ldvt,CPX *work,int lwork,double *rwork,int *iwork,int *info)
+{
+    fortran_name(zgesdd,ZGESDD)(&jobz,&m,&n,a,&lda,s,u,&ldu,vt,&ldvt,work,&lwork,rwork,iwork,info);
 }
 
 /************************************************************************************************/

@@ -49,6 +49,7 @@ public:
     TCSR(TCSR<T>*,int,MPI_Comm);
     TCSR(TCSR<T>*,int*,int,MPI_Comm);
     TCSR(TCSR<T>*,MPI_Comm,int,MPI_Comm*,MPI_Comm*);
+    TCSR(MPI_Comm,TCSR<T>*);
 //distribute matrix according to pattern
     TCSR(TCSR<T>*,TCSR<T>*,int,MPI_Comm);
 // sab end
@@ -76,6 +77,7 @@ public:
     void spec_mat_vec_mult(T*,T*,int,int*,int*,int,int);
     void spec_mat_vec_mult(T*,T*,int,int*,int*,int,int,int*);
     void sparse_to_full(T*,int,int);
+    void add_sparse_to_full(T*,int,int,T);
     void sparse_to_cmp_full(CPX*,int,int);
     void full_to_sparse(T*,int,int);
     void sparse_to_full_trans(T *,int ,int );
@@ -631,6 +633,51 @@ inline TCSR<T>::TCSR(TCSR<T> *matlocal,MPI_Comm my_comm_in,int size_my_comm_out,
 
     get_row_edge();
     get_diag_pos();
+}
+
+/******************** written by SAB ********************/
+
+template <class T>
+inline TCSR<T>::TCSR(MPI_Comm comm,TCSR<T> *mat)
+{
+    int rank;
+    MPI_Comm_rank(comm,&rank);
+
+    if (!rank) {
+        size       = mat->size;
+        size_tot   = mat->size_tot;
+        type       = mat->type;
+        n_nonzeros = mat->n_nonzeros;
+        findx      = mat->findx;
+        first_row  = mat->first_row;
+    }
+
+    MPI_Bcast(&size      ,1,MPI_INT,0,comm);
+    MPI_Bcast(&size_tot  ,1,MPI_INT,0,comm);
+    MPI_Bcast(&type      ,1,MPI_INT,0,comm);
+    MPI_Bcast(&n_nonzeros,1,MPI_INT,0,comm);
+    MPI_Bcast(&findx     ,1,MPI_INT,0,comm);
+    MPI_Bcast(&first_row ,1,MPI_INT,0,comm);
+
+    nnz      = new T[n_nonzeros];
+    index_i  = new int[size];
+    index_j  = new int[n_nonzeros];
+    edge_i   = new int[size+1];
+    diag_pos = new int[size];
+
+    if (!rank) {
+        c_tcopy(n_nonzeros,mat->nnz,1,nnz,1);
+        c_icopy(size,mat->index_i,1,index_i,1);
+        c_icopy(n_nonzeros,mat->index_j,1,index_j,1);
+        c_icopy(size+1,mat->edge_i,1,edge_i,1);
+        c_icopy(size,mat->diag_pos,1,diag_pos,1);
+    }
+
+    MPI_Bcast(nnz,n_nonzeros    ,give_me_MPI_datatype(nnz),0,comm);
+    MPI_Bcast(index_i,size      ,MPI_INT                  ,0,comm);
+    MPI_Bcast(index_j,n_nonzeros,MPI_INT                  ,0,comm);
+    MPI_Bcast(edge_i,size+1     ,MPI_INT                  ,0,comm);
+    MPI_Bcast(diag_pos,size     ,MPI_INT                  ,0,comm);
 }
 
 /******************** written by SAB ********************/
@@ -1542,6 +1589,22 @@ void TCSR<T>::sparse_to_full(T *B,int nrow,int ncol)
         for(e=edge_i[i]-findx;e<edge_i[i+1]-findx;e++){
             if ((j=index_j[e]-findx)<ncol){
                 B[i+j*nrow] = nnz[e];
+            }
+        }
+    }
+}
+
+/*SAB********************************************************************************************/
+
+template <class T>
+void TCSR<T>::add_sparse_to_full(T *B,int nrow,int ncol,T fac)
+{
+    int i,j,e;
+
+    for(i=0;i<min(nrow,size);i++){
+        for(e=edge_i[i]-findx;e<edge_i[i+1]-findx;e++){
+            if ((j=index_j[e]-findx)<ncol){
+                B[i+j*nrow] += fac*nnz[e];
             }
         }
     }
@@ -2592,7 +2655,7 @@ inline void TCSR<double>::write(const char* filename)
     myfile.precision(8);
     for(i=0;i<size;i++){
         for(j=0;j<index_i[i];j++){
-            myfile<<i+1<<" "<<index_j[u]+1-findx<<" "<<nnz[u]<<"\n";
+            myfile<<i+1+first_row<<" "<<index_j[u]+1-findx<<" "<<nnz[u]<<"\n";
             u++;
         }
     }
@@ -2611,7 +2674,7 @@ inline void TCSR<CPX>::write(const char* filename)
     myfile.precision(8);
     for(i=0;i<size;i++){
         for(j=0;j<index_i[i];j++){
-            myfile<<i+1<<" "<<index_j[u]+1-findx<<" "<<real(nnz[u])<<" "\
+            myfile<<i+1+first_row<<" "<<index_j[u]+1-findx<<" "<<real(nnz[u])<<" "\
                   <<imag(nnz[u])<<"\n";
             u++;
         }
