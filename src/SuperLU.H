@@ -45,16 +45,8 @@ SuperLU<T>::SuperLU(TCSR<T>* mat,MPI_Comm solver_comm)
     MPI_Comm_size(slu_comm,&mpi_size);
     MPI_Comm_rank(slu_comm,&mpi_rank);
 
-    options.Fact              = DOFACT;
-    options.Equil             = YES;
-    options.ParSymbFact       = NO;
-    options.ColPerm           = MMD_AT_PLUS_A;
-    options.RowPerm           = LargeDiag;
-    options.ReplaceTinyPivot  = YES;
-    options.Trans             = NOTRANS;
+    set_default_options_dist(&options);
     options.IterRefine        = NOREFINE;
-    options.SolveInitialized  = NO;
-    options.RefineInitialized = NO;
     options.PrintStat         = NO;
     
     fortran_index             = mat->findx;
