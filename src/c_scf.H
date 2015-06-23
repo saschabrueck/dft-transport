@@ -39,7 +39,7 @@ void cp2kCSR_to_CSR (cp2k_csr_interop_type& cp2kCSRmat, TCSR<T>* CSRmat)
    CSRmat->size = N;
    CSRmat->size_tot = cp2kCSRmat.nrows_total;
    CSRmat->n_nonzeros = n_nnz;
-   CSRmat->type = 3;
+   CSRmat->type = 0;
    CSRmat->findx = 1;
    CSRmat->first_row = cp2kCSRmat.first_row;
 
@@ -56,10 +56,8 @@ void cp2kCSR_to_CSR (cp2k_csr_interop_type& cp2kCSRmat, TCSR<T>* CSRmat)
 template <class T>
 void CSR_to_cp2kCSR (TCSR<T>* CSRmat, cp2k_csr_interop_type& cp2kCSRmat)
 {
-   int rank;
    MPI::Intercomm Comm;
    Comm = MPI::COMM_WORLD;
-   rank = Comm.Get_rank();
 
    c_icopy(CSRmat->size+1, CSRmat->edge_i, 1, cp2kCSRmat.rowptr_local, 1);
    c_icopy(CSRmat->n_nonzeros, CSRmat->index_j, 1, cp2kCSRmat.colind_local, 1);
