@@ -11,31 +11,13 @@ using namespace std;
 #include "CSC.H"
 #include "LinearSolver.H"
 #include "tmprGF.H"
+#ifdef HAVE_MUMPS
 #include "MUMPS.H"
-#ifdef HAVE_UMFPACK
-#include "Umfpack.H"
 #endif
-#ifdef HAVE_SUPERLU
 #include "SuperLU.H"
-#endif
-#ifdef HAVE_PEXSI
 #include "c_pexsi_interface.h"
-#endif
-#ifdef HAVE_PARDISO
-#include "Pardiso.H"
-#include "SpikeSolver.H"
-#endif
 #include "GetSigma.H"
 #include "Density.H"
-
-#ifdef HAVE_SELINV
-extern "C" {
-int ldlt_preprocess__(int *, int *, int *, int *, int *, int *, int *);
-int ldlt_fact__(int *, int *, int *, CPX *);
-int ldlt_free__(int *);
-int ldlt_blkselinv__(int *, int*, int*, CPX *, int*);
-}
-#endif
 
 int density(TCSR<double> *KohnSham,TCSR<double> *Overlap,TCSR<double> *Ps,CPX energy,CPX weight,transport_methods::transport_method method,double *muvec,contact_type *contactvec,double &current,double &transm,double &dos,std::vector<int> propnum,int *atom_of_bf,double *Vatom,transport_parameters *parameter_sab,int evecpos,MPI_Comm matrix_comm)
 {
@@ -62,7 +44,7 @@ int worldrank; MPI_Comm_rank(MPI_COMM_WORLD,&worldrank);
     int ndof=Overlap->size_tot/parameter_sab->n_cells;
     int ntriblock=bandwidth*ndof;
     vector<TCSR<CPX>*> Gamma(n_mu);
-    {
+    if (method!=transport_methods::PBC) {
 sabtime=get_time(d_zer);
         TCSR<CPX> *SumHamC = new TCSR<CPX>(Overlap->size,Overlap->n_nonzeros,Overlap->findx);
         SumHamC->copy_contain(Overlap,d_one);
@@ -145,177 +127,46 @@ if (npror!=propnum[1] && propnum[1]>=0) if (!matrix_rank) cout << "WARNING: FOUN
             }
         }
         if (method==transport_methods::NEGF) {
-            if (matrix_procs>1) return (LOGCERR, EXIT_FAILURE);
-            for (int i_mu=0;i_mu<n_mu;i_mu++) {
-/*
-                TCSR<CPX> *Sigma_H = new TCSR<CPX>(selfenergies[i_mu].spsigmadist);
-                Sigma_H->sparse_transpose(selfenergies[i_mu].spsigmadist);
-                c_dscal(Sigma_H->n_nonzeros,-d_one,((double*)Sigma_H->nnz)+1,2);
-                Gamma[i_mu] = new TCSR<CPX>(z_one,selfenergies[i_mu].spsigmadist,-z_one,Sigma_H);
-                delete Sigma_H;
-*/
-//OR JUST USE IMAGINARY PART OF SIGMA INSTEAD
-            }
+            //Gamma
         }
     }
-    if (method==transport_methods::NEGF) {
-        int HamSigsize_tot=HamSig->size_tot;
-        int HamSigfindx=HamSig->findx;
-        int *pivarrays = new int[HamSigsize_tot];
-        CPX *HamBig0 = new CPX[HamSigsize_tot*HamSigsize_tot]();
-        HamSig->sparse_to_full(HamBig0,HamSigsize_tot,HamSigsize_tot);
-        delete HamSig;
-        sabtime=get_time(d_zer);
-        c_zgetrf(HamSigsize_tot,HamSigsize_tot,HamBig0,HamSigsize_tot,pivarrays,&iinfo);
-        if (!worldrank) cout << "TIME FOR LU " << get_time(sabtime) << endl;
-        if (iinfo) return (LOGCERR, EXIT_FAILURE);
-        CPX nworks;
-        c_zgetri(HamSigsize_tot,HamBig0,HamSigsize_tot,pivarrays,&nworks,-1,&iinfo);
-        int lworks=int(real(nworks));
-        CPX* works=new CPX[lworks];
-        sabtime=get_time(d_zer);
-        c_zgetri(HamSigsize_tot,HamBig0,HamSigsize_tot,pivarrays,works,lworks,&iinfo);
-        if (!worldrank) cout << "TIME FOR INV " << get_time(sabtime) << endl;
-        delete[] works;
-        delete[] pivarrays;
-        CPX *HamBig1 = new CPX[HamSigsize_tot*HamSigsize_tot]();
-        CPX *HamBig2 = new CPX[HamSigsize_tot*HamSigsize_tot]();
-        c_zcopy(HamSigsize_tot*HamSigsize_tot,HamBig0,1,HamBig1,1);
-        c_dscal(HamSigsize_tot*HamSigsize_tot,-d_one,((double*)HamBig1)+1,2);
-        sabtime=get_time(d_zer);
-        Gamma[1]->trans_mat_vec_mult(HamBig1,HamBig2,HamSigsize_tot,1);
-        if (!worldrank) cout << "TIME FOR MULT A " << get_time(sabtime) << endl;
-        full_transpose(HamSigsize_tot,HamSigsize_tot,HamBig2,HamBig1);
-        TCSR<CPX> *Gamma_G = new TCSR<CPX>(HamSigsize_tot,HamSigsize_tot*ntriblock,HamSigfindx);
-        Gamma_G->full_to_sparse(HamBig1,HamSigsize_tot,HamSigsize_tot);
-        c_zcopy(HamSigsize_tot*HamSigsize_tot,HamBig0,1,HamBig1,1);
-        sabtime=get_time(d_zer);
-        Gamma_G->trans_mat_vec_mult(HamBig1,HamBig2,HamSigsize_tot,1);
-        if (!worldrank) cout << "TIME FOR MULT B " << get_time(sabtime) << endl;
-        delete Gamma_G;
-        sabtime=get_time(d_zer);
-        Gamma[0]->trans_mat_vec_mult(HamBig2,HamBig1,HamSigsize_tot,1);
-        if (!worldrank) cout << "TIME FOR MULT C " << get_time(sabtime) << endl;
-        for (int i=0;i<HamSigsize_tot;i++) transm+=-real(HamBig1[(HamSigsize_tot+1)*i]);
-        full_transpose(HamSigsize_tot,HamSigsize_tot,HamBig2,HamBig1);
-        delete[] HamBig2;
-        TCSR<CPX> *HamBigSparse = new TCSR<CPX>(HamSigsize_tot,HamSigsize_tot*HamSigsize_tot,HamSigfindx);
-        HamBigSparse->full_to_sparse(HamBig1,HamSigsize_tot,HamSigsize_tot);
-        delete[] HamBig1;
-//we need the real part of hambig but my routines give me the imaginary one
-//        c_zscal(HamBigSparse->n_nonzeros,CPX(0.0,1.0),HamBigSparse->nnz,1);
-        Ps->add_real(HamBigSparse,-weight/M_PI*z_img);
-        delete HamBigSparse;
-        delete[] HamBig0;
-    } else if (method==transport_methods::GF) {
-        sabtime=get_time(d_zer);
-        int inversion_method=0;
-        if (inversion_method==0) {
-            TCSR<CPX> *HamSigG = new TCSR<CPX>(HamSig,0,matrix_comm);
-            if (ncells%bandwidth) return (LOGCERR, EXIT_FAILURE);
-            if (matrix_procs>1) {
-                if (!matrix_rank) {
-                    std::vector<int> Bvec(ncells/bandwidth,0);
-                    for (int ii=0;ii<ncells/bandwidth;ii++) Bvec[ii]=(ii+1)*ntriblock-1;
-                    omp_set_num_threads(omp_get_max_threads()*matrix_procs);
-                    tmprGF::sparse_invert(HamSigG,Bvec);
-                    omp_set_num_threads(omp_get_max_threads()/matrix_procs);
-                }
-                HamSigG->scatter(HamSig,0,matrix_comm);
-                delete HamSigG;
-                Ps->add_real(HamSig,-weight/M_PI*z_img);
-                delete HamSig;
-            } else {
-                delete HamSig;
-                if (!matrix_rank) {
-                    std::vector<int> Bvec(ncells/bandwidth,0);
-                    for (int ii=0;ii<ncells/bandwidth;ii++) Bvec[ii]=(ii+1)*ntriblock-1;
-                    omp_set_num_threads(omp_get_max_threads()*matrix_procs);
-                    tmprGF::sparse_invert(HamSigG,Bvec);
-                    omp_set_num_threads(omp_get_max_threads()/matrix_procs);
-//                    Ps->add_real(HamSigG,-weight/M_PI*z_img);
-                }
-/*
-                TCSR<CPX> *P_PBC = new TCSR<CPX>(OverlapPBC->size,OverlapPBC->n_nonzeros,OverlapPBC->findx);
-                P_PBC->copy_index(OverlapPBC);
-                for (int i_mu=0;i_mu<n_mu;i_mu++) {
-                    P_PBC->fill_pbc_block(HamSigG,ndof,bandwidth,contactvec[i_mu].inj_sign,matrix_comm);
-                }
-                Ps->add_real(P_PBC,-weight/M_PI*z_img);
-                delete P_PBC;
-*/
-// /*
-                TCSR<CPX> *Green = new TCSR<CPX>(KohnSham->size,KohnSham->n_nonzeros,KohnSham->findx);
-                Green->copy_index(KohnSham);
-                Green->add(HamSigG,CPX(1.0,0.0));
-                for (int i_mu=0;i_mu<n_mu;i_mu++) {
-                    Green->replicate_cell(ndof,bandwidth,contactvec[i_mu].inj_sign,bandwidth,matrix_comm);
-                }
-                Ps->add_real(Green,-weight/M_PI*z_img);
-                for (int i_diag=0;i_diag<Green->size;i_diag++) dos+=imag(Green->nnz[Green->diag_pos[i_diag]]);
-// */ 
-                delete HamSigG;
-            }
-#ifdef HAVE_PEXSI
-        } else if (inversion_method==1) {
-            HamSig->change_findx(1);
-            int n_nonzeros_global;
-            MPI_Allreduce(&HamSig->n_nonzeros,&n_nonzeros_global,1,MPI_INT,MPI_SUM,matrix_comm);
-            double *HamSig_nnz = new double[2*HamSig->n_nonzeros];
-            c_dcopy(2*HamSig->n_nonzeros,(double*)HamSig->nnz,1,HamSig_nnz,1);
-            PSelInvComplexSymmetricInterface(HamSig->size_tot,n_nonzeros_global,HamSig->n_nonzeros,HamSig->size,HamSig->edge_i,HamSig->index_j,HamSig_nnz,2,1,matrix_comm,matrix_procs,1,(double*)HamSig->nnz,&iinfo);
-            delete[] HamSig_nnz;
-            Ps->add_real(HamSig,-weight/M_PI*z_img);
-            delete HamSig;
-#endif
-#ifdef HAVE_PARDISO            
-        } else if (inversion_method==2) {
-            if (matrix_procs>1) {
-                TCSR<CPX> *HamSigG = new TCSR<CPX>(HamSig,0,matrix_comm);
-                if (!matrix_rank) {
-                    Pardiso::sparse_invert(HamSigG);
-                }
-                HamSigG->scatter(HamSig,0,matrix_comm);
-                delete HamSigG;
-                Ps->add_real(HamSig,-weight/M_PI*z_img);
-                delete HamSig;
-            } else {
-                Pardiso::sparse_invert(HamSig);
-                Ps->add_real(HamSig,-weight/M_PI*z_img);
-                delete HamSig;
-            }
-#endif
-#ifdef HAVE_SELINV            
-        } else if (inversion_method==3 && matrix_procs==1) {
-            HamSig->change_findx(1);
-            TCSR<CPX> *HamSigTri= new TCSR<CPX>(HamSig->size,HamSig->n_nonzeros/2+HamSig->size,HamSig->findx);
-            HamSigTri->extract_lower_triangle(HamSig);
-            delete HamSig;
-            TCSC<CPX,int> *HamSigCSC=new TCSC<CPX,int>(HamSigTri,1);
-            delete HamSigTri;
-            int token=0;
-            int *perm = NULL;
-            int Lnnz;
-            int order=-1;
-            ldlt_preprocess__(&token, &HamSigCSC->size, HamSigCSC->edge_j, HamSigCSC->index_i, &Lnnz, &order, perm);   
-            ldlt_fact__(&token, HamSigCSC->edge_j, HamSigCSC->index_i, HamSigCSC->nnz);
-            delete HamSigCSC;
-            int dumpL=0;
-            TCSR<CPX> *InverseMatTrans=new TCSR<CPX>(Ps->size_tot,Lnnz,1);
-            ldlt_blkselinv__(&token, InverseMatTrans->edge_i, InverseMatTrans->index_j, InverseMatTrans->nnz, &dumpL);
-            ldlt_free__(&token);
-            TCSR<CPX> *InverseMat=new TCSR<CPX>(Ps->size_tot,Lnnz,1);
-            InverseMat->sparse_transpose(InverseMatTrans);
-            TCSR<CPX> *InverseMatTotal=new TCSR<CPX>(z_one,InverseMat,z_one,InverseMatTrans);
-            for (int idiag=0;idiag<InverseMatTotal->size;idiag++)
-                InverseMatTotal->nnz[InverseMatTotal->diag_pos[idiag]]*=CPX(0.5,0.0);
-            delete InverseMat;
-            delete InverseMatTrans;
-            Ps->add_real(InverseMatTotal,-weight/M_PI*z_img);
-            delete InverseMatTotal;
-#endif
-        } else return (LOGCERR, EXIT_FAILURE);
-if (!worldrank) cout << "TIME FOR SPARSE INVERSION " << get_time(sabtime) << endl;
+    if (method==transport_methods::PBC) {
+        if (KohnSham->findx!=1 || Overlap->findx!=1) return (LOGCERR, EXIT_FAILURE);
+ 
+        double *HS_nnz_inp = new double[2*Overlap->n_nonzeros]();
+        double *HS_nnz_out = new double[2*Overlap->n_nonzeros]();
+ 
+        c_dcopy(Overlap->n_nonzeros,Overlap->nnz,1,HS_nnz_inp,2);
+        c_zscal(Overlap->n_nonzeros,-energy,(CPX*)HS_nnz_inp,1);
+        c_daxpy(Overlap->n_nonzeros,1.0,KohnSham->nnz,1,HS_nnz_inp,2);
+ 
+        int n_nonzeros_global;
+        MPI_Allreduce(&Overlap->n_nonzeros,&n_nonzeros_global,1,MPI_INT,MPI_SUM,matrix_comm);
+        int info;
+ 
+        PPEXSIOptions  options;
+        PPEXSISetDefaultOptions(&options);
+        options.npSymbFact = matrix_procs;
+        options.ordering = 0;
+        options.verbosity = 0;
+  
+        PPEXSIPlan   plan;
+        plan = PPEXSIPlanInitialize(matrix_comm,1,matrix_procs,-1,&info);
+        if (info) return (LOGCERR, EXIT_FAILURE);
+        PPEXSILoadRealSymmetricHSMatrix(plan,options,Overlap->size_tot,n_nonzeros_global,Overlap->n_nonzeros,Overlap->size,Overlap->edge_i,Overlap->index_j,HS_nnz_inp,1,NULL,&info);
+        if (info) return (LOGCERR, EXIT_FAILURE);
+        PPEXSISymbolicFactorizeComplexSymmetricMatrix(plan,options,&info);
+        if (info) return (LOGCERR, EXIT_FAILURE);
+        PPEXSISelInvComplexSymmetricMatrix(plan,options,HS_nnz_inp,HS_nnz_out,&info);
+        if (info) return (LOGCERR, EXIT_FAILURE);
+        PPEXSIPlanFinalize(plan,&info);
+        if (info) return (LOGCERR, EXIT_FAILURE);
+ 
+        delete[] HS_nnz_inp;
+        c_zscal(Overlap->n_nonzeros,-weight/M_PI*CPX(0.0,1.0),(CPX*)HS_nnz_out,1);
+        dos=c_ddot(Overlap->n_nonzeros,Overlap->nnz,1,HS_nnz_out,2);
+        c_daxpy(Overlap->n_nonzeros,1.0,HS_nnz_out,2,Ps->nnz,1);
+        delete[] HS_nnz_out;
     } else if (method==transport_methods::WF) {
         int tra_block=0;
         TCSR<CPX> *H1cut = new TCSR<CPX>(HamSig,tra_block*ntriblock,ntriblock,(tra_block+1)*ntriblock,ntriblock);
@@ -325,18 +176,10 @@ if (!worldrank) cout << "TIME FOR SPARSE INVERSION " << get_time(sabtime) << end
         LinearSolver<CPX>* solver;
         int solver_method=0;
         if (solver_method==0) {
-            solver = new MUMPS<CPX>(HamSig,matrix_comm);
-#ifdef HAVE_SUPERLU 
-        } else if (solver_method==1) {
             solver = new SuperLU<CPX>(HamSig,matrix_comm);
-#endif
-#ifdef HAVE_PARDISO            
-        } else if (solver_method==2) {
-            solver = new SpikeSolver<CPX>(HamSig,matrix_comm);
-#endif
-#ifdef HAVE_UMFPACK 
-        } else if (solver_method==3 && matrix_procs==1) {
-            solver = new Umfpack<CPX>(HamSig,matrix_comm);
+#ifdef HAVE_MUMPS
+        } else if (solver_method==1) {
+            solver = new MUMPS<CPX>(HamSig,matrix_comm);
 #endif
         } else return (LOGCERR, EXIT_FAILURE);
         solver->prepare();
@@ -345,7 +188,7 @@ if (!worldrank) cout << "TIME FOR SPARSE INVERSION " << get_time(sabtime) << end
         delete[] inj;
         delete solver;
         delete HamSig;
-if (!worldrank) cout << "TIME FOR WAVEFUNCTION SPARSE SOLVER WITH "<< ncells <<" UNIT CELLS " << get_time(sabtime) << endl;
+if (!worldrank) cout << "TIME FOR WAVEFUNCTION SPARSE SOLVER " << get_time(sabtime) << endl;
         int solsize=displc_sol[matrix_procs];
         CPX* Sol = new CPX[solsize*(nprol+npror)];
         for (int icol=0;icol<nprol+npror;icol++) {
@@ -423,7 +266,8 @@ if (!parameter_sab->n_abscissae) { // I NEED TO CONSTRUCT Ps WITH THE HELP OF Va
                 transmr+=4*M_PI*imag(c_zdotc(ntriblock,&Sol[Ps->size_tot*ipro+tra_block*ntriblock],1,vecoutdof,1));
             }
             delete[] vecoutdof;
-if (abs(abs(transml)-abs(transmr))/max(1.0,abs(abs(transml)+abs(transmr)))>0.1) cout << "CAUTION: TRANSMISSION " << transml << " " << transmr << " AT ENERGY " << real(energy) << " AT POSITION " << evecpos << endl;
+if (abs(abs(transml)-abs(transmr))/max(1.0,min(abs(transml),abs(transmr)))>0.1) cout << "CAUTION: TRANSMISSION " << transml << " " << transmr << " AT ENERGY " << real(energy) << " AT POSITION " << evecpos << endl;
+if (abs(transml)<1.0E-2 && nprol>0 && npror>0) cout << "RED ALERT: ZERO TRANSMISSION IN SPITE OF " << nprol << " AND " << npror << " AT ENERGY " << real(energy) << " AT POSITION " << evecpos << endl;
             transm=transml;
             double diff_fermi=fermi(real(energy),muvec[0],Temp,0)-fermi(real(energy),muvec[1],Temp,0);
             current=2.0*E_ELECTRON*E_ELECTRON/(2.0*M_PI*H_BAR)*diff_fermi*transm;

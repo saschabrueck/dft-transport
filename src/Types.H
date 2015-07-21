@@ -459,9 +459,10 @@ struct contact_type
 
 namespace transport_methods {
 enum transport_method {
-  NEGF=0,
-  GF=1,
-  WF=2,
+  PBC=0,
+  NEGF=1,
+  GF=2,
+  WF=3,
 };
 } // namespace
 
