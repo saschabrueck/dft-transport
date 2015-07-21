@@ -79,7 +79,7 @@ InjectionBeyn<T>::InjectionBeyn(int pslab_per_bc,double pcontour_radius)
     imag_limit      = 5.0e-5; //eps_decay
     mult_factor     = 1.2;
     svd_fac         = 1.0;
-    NQDR            = 28;
+    NQDR            = 64;
     root_rank       = 0;
 
     slab_per_bc    = pslab_per_bc;
@@ -103,7 +103,7 @@ template <class T>
 void InjectionBeyn<T>::initialize(int ND,int NP,int NM)
 {
 
-    NM_input  = 2*NM;
+    NM_input = min(2*NM,ND);
  
 }
 

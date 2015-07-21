@@ -111,7 +111,7 @@ void MUMPS<CPX>::prepare()
     id.icntl[1]               = -1;
     id.icntl[2]               = -1;
     id.icntl[3]               = -1;
-    //id.icntl[6]               = 4; //PORD reordering algorithm
+    id.icntl[6]               = 5;
     id.icntl[17]              = 3;
     id.icntl[20]              = 0;
     

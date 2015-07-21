@@ -132,7 +132,7 @@ double sabtime=get_time(0.0);
         Singularities singularities(transport_params,contactvec);
         if ( singularities.Execute(KohnSham,Overlap) ) return (LOGCERR, EXIT_FAILURE);
 if (!iam) cout << "TIME FOR SINGULARITIES " << get_time(sabtime) << endl;
-//for (int i_mu=0;i_mu<n_mu;i_mu++) singularities.write_bandstructure(i_mu);
+for (int i_mu=0;i_mu<n_mu;i_mu++) singularities.write_bandstructure(i_mu);
  
         double delta_eps_fermi=-log((numeric_limits<double>::epsilon)())*K_BOLTZMANN*Temp;
         double muvec_min=*min_element(muvec,muvec+n_mu);
@@ -141,14 +141,13 @@ if (!iam) cout << "TIME FOR SINGULARITIES " << get_time(sabtime) << endl;
         double nonequi_end=muvec_max+delta_eps_fermi;
         double energy_vb=*max_element(singularities.energies_vb.begin(),singularities.energies_vb.end());
         double energy_cb=*min_element(singularities.energies_cb.begin(),singularities.energies_cb.end());
- 
-        if (!transport_params->n_abscissae) {
-            add_real_axis_energies(energy_cb,nonequi_end,energyvector,stepvector,methodvector,singularities.energies_extremum,transport_params);
-        } else if (transport_params->method==1) {
-            add_cmpx_cont_energies(singularities.energy_gs,singularities.energy_gs,muvec_min,energyvector,stepvector,methodvector,transport_params); //FOR PEX ONLY MU AND EM
-        } else {
+
 // all localized states with lowest fermi level corresponding to occupation of localized states in bandgap
-            add_cmpx_cont_energies(singularities.energy_gs,singularities.energy_gs,muvec_min,energyvector,stepvector,methodvector,transport_params);
+        if (transport_params->n_abscissae>0) add_cmpx_cont_energies(singularities.energy_gs,muvec_min,energyvector,stepvector,methodvector,transport_params);
+
+        if (!transport_params->n_abscissae && transport_params->method==2) {
+            add_real_axis_energies(energy_cb,nonequi_end,energyvector,stepvector,methodvector,singularities.energies_extremum,transport_params);
+        } else {
             add_real_axis_energies(nonequi_start,nonequi_end,energyvector,stepvector,methodvector,singularities.energies_extremum,transport_params);
         }
         if (!iam) {
@@ -216,7 +215,7 @@ void Energyvector::add_real_axis_energies(double nonequi_start,double nonequi_en
     }
 }
 
-void Energyvector::add_cmpx_cont_energies(double start,double end,double mu,std::vector<CPX> &energyvector,std::vector<CPX> &stepvector,std::vector<transport_methods::transport_method> &methodvector,transport_parameters *transport_params)
+void Energyvector::add_cmpx_cont_energies(double start,double mu,std::vector<CPX> &energyvector,std::vector<CPX> &stepvector,std::vector<transport_methods::transport_method> &methodvector,transport_parameters *transport_params)
 {
     double Temp=transport_params->temperature;
     enum choose_method {do_pexsi,do_pole_summation,do_contour,do_line};
@@ -257,13 +256,13 @@ void Energyvector::add_cmpx_cont_energies(double start,double end,double mu,std:
             stepvector.push_back(CPX(2.0*M_PI*K_BOLTZMANN*Temp_i,0.0)*(fermi(zval,CPX(1.0,0.0)*mu,Temp,0)-fermi(zval,CPX(1.0,0.0)*mu_r,Temp_r,0)));
         }
     } else if (method==do_contour) {
-        Quadrature quadrature(quadrature_types::CCGL,start,end,transport_params->n_abscissae);
+        Quadrature quadrature(quadrature_types::CCGL,start,mu,transport_params->n_abscissae);//mu is end here
         energyvector.insert(energyvector.end(),quadrature.abscissae.begin(),quadrature.abscissae.end());
         stepvector.insert(stepvector.end(),quadrature.weights.begin(),quadrature.weights.end());
     } else if (method==do_line) {
-        Quadrature quadrature(quadrature_types::MR,start,end,transport_params->n_abscissae);
+        Quadrature quadrature(quadrature_types::MR,start,mu,transport_params->n_abscissae);//mu is end here
         energyvector.insert(energyvector.end(),quadrature.abscissae.begin(),quadrature.abscissae.end());
         stepvector.insert(stepvector.end(),quadrature.weights.begin(),quadrature.weights.end());
     }
-    methodvector.resize(energyvector.size(),transport_methods::GF);
+    methodvector.resize(energyvector.size(),transport_methods::PBC);
 }

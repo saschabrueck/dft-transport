@@ -225,7 +225,8 @@ double Singularities::determine_fermi(double doping,int i_mu) //slightly differs
         double nocciter = 0.0;
         for (int j=0;j<n_k;j++) {
             for (int i=0;i<ndof;i++) {
-                nocciter+=2.0/n_k*fermi(energies_matrix[i_mu][i+j*ndof],mu,Temp,0);
+                nocciter+=2.0/(n_k-1)*fermi(energies_matrix[i_mu][i+j*ndof],mu,Temp,0);
+                if (j==0 || j==n_k-1) nocciter-=1.0/(n_k-1)*fermi(energies_matrix[i_mu][i+j*ndof],mu,Temp,0);
             }
         }
         cout << mu << " / " << nocciter << endl;
@@ -239,7 +240,8 @@ double Singularities::determine_fermi(double doping,int i_mu) //slightly differs
             nocciter=0.0;
             for (int j=0;j<n_k;j++) {
                 for (int i=0;i<ndof;i++) {
-                    nocciter+=2.0/n_k*fermi(energies_matrix[i_mu][i+j*ndof],mu,Temp,0);
+                    nocciter+=2.0/(n_k-1)*fermi(energies_matrix[i_mu][i+j*ndof],mu,Temp,0);
+                    if (j==0 || j==n_k-1) nocciter-=1.0/(n_k-1)*fermi(energies_matrix[i_mu][i+j*ndof],mu,Temp,0);
                 }
             }
 cout << "[" << mu_a << "," << mu << "]" << " / " << nocciter << " FIND" << endl;
@@ -255,7 +257,8 @@ cout << "[" << mu_a << "," << mu << "]" << " / " << nocciter << " FIND" << endl;
             nocciter=0.0;
             for (int j=0;j<n_k;j++) {
                 for (int i=0;i<ndof;i++) {
-                    nocciter+=2.0/n_k*fermi(energies_matrix[i_mu][i+j*ndof],mu,Temp,0);
+                    nocciter+=2.0/(n_k-1)*fermi(energies_matrix[i_mu][i+j*ndof],mu,Temp,0);
+                    if (j==0 || j==n_k-1) nocciter-=1.0/(n_k-1)*fermi(energies_matrix[i_mu][i+j*ndof],mu,Temp,0);
                 }
             }
             if ((2.0*noccunitcell+doping-nocc_a)*(2.0*noccunitcell+doping-nocciter)>0) {
@@ -272,14 +275,16 @@ cout << "[" << mu_a << "," << mu_b << "]" << " / " << nocciter << " BISECT" << e
             double dfermi=0.0;
             for (int j=0;j<n_k;j++) {
                 for (int i=0;i<ndof;i++) {
-                    dfermi+=2.0/n_k*fermi(energies_matrix[i_mu][i+j*ndof],mu,Temp,2);
+                    dfermi+=2.0/(n_k-1)*fermi(energies_matrix[i_mu][i+j*ndof],mu,Temp,2);
+                    if (j==0 || j==n_k-1) dfermi-=1.0/(n_k-1)*fermi(energies_matrix[i_mu][i+j*ndof],mu,Temp,2);
                 }
             }
             mu+=(2.0*noccunitcell+doping-nocciter)/dfermi;
             nocciter=0.0;
             for (int j=0;j<n_k;j++) {
                 for (int i=0;i<ndof;i++) {
-                    nocciter+=2.0/n_k*fermi(energies_matrix[i_mu][i+j*ndof],mu,Temp,0);
+                    nocciter+=2.0/(n_k-1)*fermi(energies_matrix[i_mu][i+j*ndof],mu,Temp,0);
+                    if (j==0 || j==n_k-1) nocciter-=1.0/(n_k-1)*fermi(energies_matrix[i_mu][i+j*ndof],mu,Temp,0);
                 }
             }
 cout << mu << " / " << nocciter << " NEWTON" << endl;
