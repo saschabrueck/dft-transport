@@ -19,7 +19,7 @@ using namespace std;
 #include "GetSigma.H"
 #include "Density.H"
 
-int density(TCSR<double> *KohnSham,TCSR<double> *Overlap,TCSR<double> *Ps,CPX energy,CPX weight,transport_methods::transport_method method,double *muvec,contact_type *contactvec,double &current,double &transm,double &dos,std::vector<int> propnum,int *atom_of_bf,double *Vatom,transport_parameters *parameter_sab,int evecpos,MPI_Comm matrix_comm)
+int density(TCSR<double> *KohnSham,TCSR<double> *Overlap,TCSR<double> *Ps,CPX energy,CPX weight,transport_methods::transport_method method,double *muvec,contact_type *contactvec,double &current,double &transm,double &dos,std::vector<int> propnum,transport_parameters *parameter_sab,int evecpos,MPI_Comm matrix_comm)
 {
     double d_one=1.0;
     double d_zer=0.0;
@@ -243,12 +243,6 @@ sabtime=get_time(d_zer);
 */
         dos=dosl+dosr;
 if (!worldrank) cout << "TIME FOR CONSTRUCTION OF S-PATTERN DENSITY MATRIX " << get_time(sabtime) << endl;
-/*
-if (!parameter_sab->n_abscissae) { // I NEED TO CONSTRUCT Ps WITH THE HELP OF Vatom HERE INSTEAD OF HOW I DO IT ABOVE
-            Overlap->psipsidagger(Sol,nprol,+2.0*weight*fermil,atom_of_bf,erhoperatom,Vatom,real(energy));
-            Overlap->psipsidagger(&Sol[Ps->size_tot*nprol],npror,+2.0*weight*fermir,atom_of_bf,erhoperatom,Vatom,real(energy));
-}
-*/
         delete[] Soll;
         delete[] Solr;
 // transmission

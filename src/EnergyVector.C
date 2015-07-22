@@ -17,7 +17,7 @@ Energyvector::~Energyvector()
 {
 }
 
-int Energyvector::Execute(TCSR<double> *Overlap,TCSR<double> *KohnSham,double *muvec, contact_type *contactvec,double *electronchargeperatom,double *derivativechargeperatom,double *Vatom,int n_atoms,int *atom_of_bf,transport_parameters *transport_params)
+int Energyvector::Execute(TCSR<double> *Overlap,TCSR<double> *KohnSham,double *muvec, contact_type *contactvec,transport_parameters *transport_params)
 {
     double sabtime;
 // allocate matrices to gather on every node
@@ -42,36 +42,15 @@ if (!iam) cout << "TIME FOR DISTRIBUTING MATRICES " << get_time(sabtime) << endl
     int matrix_id, n_mat_comm;
     MPI_Comm_size(eq_rank_matrix_comm,&n_mat_comm);
     MPI_Comm_rank(eq_rank_matrix_comm,&matrix_id);
-    sabtime=get_time(0.0);
+sabtime=get_time(0.0);
     unsigned int jpos;
     for (int iseq=0;iseq<int(ceil(double(energyvector.size())/n_mat_comm));iseq++)
         if ( (jpos=matrix_id+iseq*n_mat_comm)<energyvector.size())
             if (abs(stepvector[jpos])>0.0)
-                if (density(KohnShamCollect,OverlapCollect,Ps,energyvector[jpos],stepvector[jpos],methodvector[jpos],muvec,contactvec,currentvector[jpos],transmission[jpos],dos_profile[jpos],propagating_sizes[jpos],atom_of_bf,Vatom,transport_params,jpos,matrix_comm))
+                if (density(KohnShamCollect,OverlapCollect,Ps,energyvector[jpos],stepvector[jpos],methodvector[jpos],muvec,contactvec,currentvector[jpos],transmission[jpos],dos_profile[jpos],propagating_sizes[jpos],transport_params,jpos,matrix_comm))
                     return (LOGCERR, EXIT_FAILURE);
-    if (!iam) cout << "TIME FOR DENSITY " << get_time(sabtime) << endl;
+if (!iam) cout << "TIME FOR DENSITY " << get_time(sabtime) << endl;
     delete KohnShamCollect;
-    double *eperatom = new double[n_atoms]();
-    for (int i=0;i<OverlapCollect->n_nonzeros;i++) OverlapCollect->nnz[i]*=Ps->nnz[i];
-    OverlapCollect->atom_allocate(atom_of_bf,eperatom,2.0);
-    delete OverlapCollect;
-    MPI_Allreduce(eperatom,electronchargeperatom,n_atoms,MPI_DOUBLE,MPI_SUM,MPI_COMM_WORLD);
-    delete[] eperatom;
-    if (!iam) {
-        cout << "Number of electrons per unit cell";
-        int n_cells=transport_params->n_cells;
-        double e_total=0.0;
-        for (int icell=0;icell<n_cells;icell++) {
-            double e_per_unit_cell=0.0;
-            for (int iatom=icell*n_atoms/n_cells;iatom<(icell+1)*n_atoms/n_cells;iatom++) {
-                e_per_unit_cell+=electronchargeperatom[iatom];
-                e_total+=electronchargeperatom[iatom];
-            }
-            cout << " " << e_per_unit_cell;
-        }
-        cout << endl;
-        cout << "Total number of electrons " << e_total << endl;
-    }
 // trPS per energy point
     ofstream myfile;
     std::vector<double> currentvector2(energyvector.size(),0.0);
