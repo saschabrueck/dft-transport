@@ -1,0 +1,11 @@
+#!/bin/bash
+if [ $# -ne 4 ]; 
+    then echo "run with input_file output_file number_of_cells size_of_cell"
+elif [ -f $2 ]; then
+   echo "OUTPUT FILE EXISTS ALREADY"
+else
+for (( i=0; i<$3; i++ ))
+do
+   cat $1 | awk '{print $1 " " $2+"'"$4"'"*"'"$i"'" " " $3 " " $4}' >> $2
+done
+fi
