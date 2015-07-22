@@ -143,11 +143,16 @@ for (int i_mu=0;i_mu<n_mu;i_mu++) singularities.write_bandstructure(i_mu);
         double energy_cb=*min_element(singularities.energies_cb.begin(),singularities.energies_cb.end());
 
 // all localized states with lowest fermi level corresponding to occupation of localized states in bandgap
-        if (transport_params->n_abscissae>0) add_cmpx_cont_energies(singularities.energy_gs,muvec_min,energyvector,stepvector,methodvector,transport_params);
-
-        if (!transport_params->n_abscissae && transport_params->method==2) {
+        if (transport_params->method==2) {
+            transport_params->n_abscissae=0;
             add_real_axis_energies(energy_cb,nonequi_end,energyvector,stepvector,methodvector,singularities.energies_extremum,transport_params);
+        } else if (transport_params->n_abscissae<0) {
+            transport_params->n_abscissae=-transport_params->n_abscissae;
+            add_cmpx_cont_energies(singularities.energy_gs,muvec_min,energyvector,stepvector,methodvector,transport_params);
+        } else if (transport_params->n_abscissae==0) {
+            add_real_axis_energies(nonequi_start,nonequi_end,energyvector,stepvector,methodvector,singularities.energies_extremum,transport_params);
         } else {
+            add_cmpx_cont_energies(singularities.energy_gs,muvec_min,energyvector,stepvector,methodvector,transport_params);
             add_real_axis_energies(nonequi_start,nonequi_end,energyvector,stepvector,methodvector,singularities.energies_extremum,transport_params);
         }
         if (!iam) {
