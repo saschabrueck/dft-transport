@@ -58,23 +58,6 @@ int semiselfconsistent(TCSR<double> *Overlap,TCSR<double> *KohnSham,transport_pa
         exit(0);
     }
 
-    int do_semiself=0;
-    if (transport_params->method==2) do_semiself=1;
-    int NAtom_work=transport_params->n_atoms;
-    if (do_semiself) NAtom_work=FEM->NAtom;
-
-if (!iam) cout << "N_ATOMS " << NAtom_work << endl;
-
-    double *Vbf = new double[Overlap->size_tot];
-    double *rho_atom = new double[2*NAtom_work]();//ZERO IN THE SECOND COMPONENT
-    double *rho_atom_previous = new double[2*NAtom_work];
-    double *drho_atom_dV = new double[2*NAtom_work]();
-    double *drho_atom_dV_previous = new double[2*NAtom_work];
-    int *atom_of_bf = new int[Overlap->size_tot];
-    for (int ibf=0;ibf<Overlap->size_tot;ibf++) {
-        atom_of_bf[ibf]=ibf/(Overlap->size_tot/NAtom_work);
-    }
-
     if ( Overlap->size_tot%transport_params->n_cells || transport_params->bandwidth<1 ) return (LOGCERR, EXIT_FAILURE);
     int n_mu=transport_params->num_contacts;
     double *muvec = new double[n_mu];
@@ -82,30 +65,33 @@ if (!iam) cout << "N_ATOMS " << NAtom_work << endl;
     for (int i_mu=0;i_mu<n_mu;i_mu++) {
         contactvec[i_mu].bandwidth=transport_params->bandwidth;
         contactvec[i_mu].ndof=Overlap->size_tot/transport_params->n_cells; // ONLY IF ALL CELLS EQUAL
-        contactvec[i_mu].n_occ=transport_params->n_occ/transport_params->n_cells; // THIS IS AN INTEGER DIVISION
+        contactvec[i_mu].n_occ=transport_params->n_occ/transport_params->n_cells; // THIS IS AN INTEGER DIVISION, IN GENERAL THE RESULT IS NOT CORRECT
     }
     contactvec[0].start=0;
     contactvec[0].inj_sign=+1;
     contactvec[1].start=Overlap->size_tot-contactvec[1].ndof*contactvec[1].bandwidth;
     contactvec[1].inj_sign=-1;
 
-    if (!do_semiself) {
+    if (transport_params->method==3) {
         Singularities singularities(transport_params,contactvec);
         if ( singularities.Execute(KohnSham,Overlap) ) return (LOGCERR, EXIT_FAILURE);
-        for (int i_mu=0;i_mu<n_mu;i_mu++) muvec[i_mu]=singularities.determine_fermi(0.0,i_mu);
-        double mu_avg=std::accumulate(muvec,muvec+n_mu,0.0)/n_mu;
-        muvec[0]=mu_avg;
-        muvec[1]=mu_avg;
+        for (int i_mu=0;i_mu<n_mu;i_mu++) muvec[i_mu]=singularities.determine_fermi(transport_params->ndof,i_mu);//ACHTUNG: FUER TRANSPORT MUSS ICH DOCH NICHT DIE BANDSTRUKTUR 2x BERECHNEN
         Energyvector energyvector;
-        if (energyvector.Execute(Overlap,KohnSham,muvec,contactvec,rho_atom,drho_atom_dV,Vbf,NAtom_work,atom_of_bf,transport_params)) return (LOGCERR, EXIT_FAILURE);
-if(!iam){
-stringstream mysstream;
-mysstream << "rhofile";
-ofstream rhofile(mysstream.str().c_str());
-for (int ig=0;ig<NAtom_work;ig++) rhofile<<rho_atom[ig]<<endl;
-rhofile.close();
-}
+        if (energyvector.Execute(Overlap,KohnSham,muvec,contactvec,transport_params)) return (LOGCERR, EXIT_FAILURE);
         return 0;
+    }
+
+    if (FEM->NAtom != transport_params->n_atoms) return (LOGCERR, EXIT_FAILURE);
+
+    double *Vbf = new double[Overlap->size_tot];
+    double *rho_atom = new double[2*FEM->NAtom]();//ZERO IN THE SECOND COMPONENT
+    double *rho_atom_previous = new double[2*FEM->NAtom];
+    double *rho_dist = new double[FEM->NAtom];
+    double *drho_atom_dV = new double[2*FEM->NAtom]();
+    double *drho_atom_dV_previous = new double[2*FEM->NAtom];
+    int *atom_of_bf = new int[Overlap->size_tot];
+    for (int ibf=0;ibf<Overlap->size_tot;ibf++) {
+        atom_of_bf[ibf]=ibf/(Overlap->size_tot/FEM->NAtom);
     }
 
     double Temp=transport_params->temperature;
@@ -163,7 +149,7 @@ if (!iam) cout << "GATE POTENTIAL " << Vg << endl;
     double Lc=nanowire->Lc;
 
     enum choose_initial_guess {ramp,ferm,file};
-    choose_initial_guess initial_guess=ferm;
+    choose_initial_guess initial_guess=ramp;
     ifstream potgridinfile;
     if (initial_guess==file) potgridinfile.open("potgrid.input");
     for (int IX=0;IX<FEM->NGrid;IX++) {
@@ -237,9 +223,28 @@ rhofile.close();
             Vbf[ia]=Vm+Vnew[FEM->real_at_index[ia]];
         }
         Energyvector energyvector;
-        if (energyvector.Execute(Overlap,KohnSham,muvec,contactvec,rho_atom,drho_atom_dV,Vbf,FEM->NAtom,atom_of_bf,transport_params)) return (LOGCERR, EXIT_FAILURE);
+        if (energyvector.Execute(Overlap,KohnSham,muvec,contactvec,transport_params)) return (LOGCERR, EXIT_FAILURE);
 
         if (!iam) cout << "TIME FOR SCHROEDINGER " << get_time(sabtime) << endl;
+
+        for (int i=0;i<Overlap->n_nonzeros;i++) Overlap->nnz[i]*=Overlap_nnz[i];
+        c_dscal(FEM->NAtom,0.0,rho_dist,1);
+        Overlap->atom_allocate(atom_of_bf,rho_dist,2.0);
+        MPI_Allreduce(rho_dist,rho_atom,FEM->NAtom,MPI_DOUBLE,MPI_SUM,MPI_COMM_WORLD);
+        if (!iam) {
+            cout << "Number of electrons per unit cell";
+            double e_total=0.0;
+            for (int icell=0;icell<transport_params->n_cells;icell++) {
+                double e_per_unit_cell=0.0;
+                for (int iatom=icell*FEM->NAtom/transport_params->n_cells;iatom<(icell+1)*FEM->NAtom/transport_params->n_cells;iatom++) {
+                    e_per_unit_cell+=rho_atom[iatom];
+                    e_total+=rho_atom[iatom];
+                }
+                cout << " " << e_per_unit_cell;
+            }
+            cout << endl;
+            cout << "Total number of electrons " << e_total << endl;
+        }
 
 stringstream dosstream;
 dosstream << "DOS_Profile" << i_iter;
@@ -247,32 +252,6 @@ rename("DOS_Profile",dosstream.str().c_str());
 stringstream trastream;
 trastream << "Transmission" << i_iter;
 rename("Transmission",trastream.str().c_str());
-
-///*
-        sabtime=get_time(0.0);
-        TCSR<double> *DensityCollect = new TCSR<double>(Overlap,MPI_COMM_WORLD);
-        double *rho_grid_tmp = new double[FEM->NGrid]();
-        double* xyz_atoms = new double[3*FEM->NAtom];
-        double* xyz_grid = new double[3*FEM->NGrid];
-        c_dlacpy('A',3,FEM->NAtom,Wire->Layer_Matrix,7,xyz_atoms,3);
-        c_dcopy(3*FEM->NGrid,FEM->grid,1,xyz_grid,1);
-        int ngridproc=FEM->NGrid/procs+1;
-        for (int ix=iam*ngridproc;ix<min((iam+1)*ngridproc,FEM->NGrid);ix++) {
-            rho_grid_tmp[ix]=DensityCollect->collect_density(&xyz_grid[3*ix],xyz_atoms,atom_of_bf);
-        }
-        delete DensityCollect;
-        double *rho_grid = new double[FEM->NGrid];
-        MPI_Allreduce(rho_grid_tmp,rho_grid,FEM->NGrid,MPI_DOUBLE,MPI_SUM,MPI_COMM_WORLD);
-        if (!iam) cout << "TIME FOR COLLECT DENSITY " << get_time(sabtime) << endl;
-
-if(!iam){
-stringstream mysstream;
-mysstream << "rhogridfile" << i_iter;
-ofstream rgfile(mysstream.str().c_str());
-for (int ig=0;ig<FEM->NGrid;ig++) rgfile<<rho_grid[ig]<<endl;
-rgfile.close();
-}
-//*/
 
         if (transport_params->n_abscissae) c_daxpy(FEM->NAtom,1.0,&nuclearchargeperatom[0],1,rho_atom,1);
 
@@ -302,13 +281,13 @@ rhofile.close();
 //        double mixing_parameter = 0.8;
         double mixing_parameter = 1.0;
         if (i_iter==1) {
-            c_dcopy(2*NAtom_work,rho_atom,1,rho_atom_previous,1);
-            c_dcopy(2*NAtom_work,drho_atom_dV,1,drho_atom_dV_previous,1);
+            c_dcopy(2*FEM->NAtom,rho_atom,1,rho_atom_previous,1);
+            c_dcopy(2*FEM->NAtom,drho_atom_dV,1,drho_atom_dV_previous,1);
         }
-        c_dscal(2*NAtom_work,1.0-mixing_parameter,rho_atom_previous,1);
-        c_dscal(2*NAtom_work,1.0-mixing_parameter,drho_atom_dV_previous,1);
-        c_daxpy(2*NAtom_work,mixing_parameter,rho_atom,1,rho_atom_previous,1);
-        c_daxpy(2*NAtom_work,mixing_parameter,drho_atom_dV,1,drho_atom_dV_previous,1);
+        c_dscal(2*FEM->NAtom,1.0-mixing_parameter,rho_atom_previous,1);
+        c_dscal(2*FEM->NAtom,1.0-mixing_parameter,drho_atom_dV_previous,1);
+        c_daxpy(2*FEM->NAtom,mixing_parameter,rho_atom,1,rho_atom_previous,1);
+        c_daxpy(2*FEM->NAtom,mixing_parameter,drho_atom_dV,1,drho_atom_dV_previous,1);
 
         c_dcopy(FEM->NGrid,Vnew,1,Vold,1);
         OMEN_Poisson_Solver->solve(Vnew,Vold,rho_atom_previous,drho_atom_dV_previous,1,NULL,FEM,Wire,Temp,&Vg,Vs,Vs,Vd,&residual,parameter->poisson_inner_criterion,parameter->poisson_inner_iteration,1,1,newcomm,MPI_COMM_WORLD,1,MPI_COMM_WORLD,0);
@@ -332,5 +311,6 @@ rhofile.close();
 
     }
 
-    return 0;
+    MPI_Barrier(MPI_COMM_WORLD);
+    exit(0);
 }
