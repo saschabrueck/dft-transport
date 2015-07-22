@@ -43,6 +43,8 @@ TCSR<CPX> *H0;
 TCSR<CPX> *H1;
 TCSR<CPX> *H1t;
 
+TCSR<CPX> **H;
+
 TCSR<CPX> *spA;
 TCSR<CPX> *spB;
 
