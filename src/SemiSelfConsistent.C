@@ -10,53 +10,8 @@ int semiselfconsistent(TCSR<double> *Overlap,TCSR<double> *KohnSham,transport_pa
     int iam;MPI_Comm_rank(MPI_COMM_WORLD,&iam);
     int procs;MPI_Comm_size(MPI_COMM_WORLD,&procs);
 
-    c_dscal(KohnSham->n_nonzeros,transport_params->evoltfactor,KohnSham->nnz,1);
-
 //if (Overlap->additionalentries(KohnSham)) return (LOGCERR, EXIT_FAILURE);
 //if (KohnSham->additionalentries(Overlap)) return (LOGCERR, EXIT_FAILURE);
-
-    if (transport_params->method==0) {
-        TCSR<double> *KohnShamCollect = new TCSR<double>(KohnSham,0,MPI_COMM_WORLD);
-        TCSR<double> *OverlapCollect = new TCSR<double>(Overlap,0,MPI_COMM_WORLD);
-        if (!iam) {
-//KohnShamCollect->remove_thr(1.0E-6);
-//OverlapCollect->remove_thr(1.0E-6);
-            KohnShamCollect->change_findx(1);
-            OverlapCollect->change_findx(1);
-            KohnShamCollect->write_CSR("KohnSham");
-            OverlapCollect->write_CSR("Overlap");
-            KohnShamCollect->removepbc(transport_params->bandwidth,OverlapCollect->size_tot/transport_params->n_cells);
-            OverlapCollect->removepbc(transport_params->bandwidth,OverlapCollect->size_tot/transport_params->n_cells);
-            KohnShamCollect->write_CSR_bin("H_4.bin");
-            OverlapCollect->write_CSR_bin("S_4.bin");
-            ofstream paramoutfile("TransportParams");
-            paramoutfile << transport_params->method << endl;
-            paramoutfile << transport_params->bandwidth << endl;
-            paramoutfile << transport_params->n_cells << endl;
-            paramoutfile << transport_params->n_occ << endl;
-            paramoutfile << transport_params->n_atoms << endl;
-            paramoutfile << transport_params->n_abscissae << endl;
-            paramoutfile << transport_params->n_kpoint << endl;
-            paramoutfile << transport_params->num_interval << endl;
-            paramoutfile << transport_params->num_contacts << endl;
-            paramoutfile << transport_params->ndof << endl;
-            paramoutfile << transport_params->tasks_per_point << endl;
-            paramoutfile << transport_params->cores_per_node << endl;
-            paramoutfile << transport_params->evoltfactor << endl;
-            paramoutfile << transport_params->colzero_threshold << endl;
-            paramoutfile << transport_params->eps_limit << endl;
-            paramoutfile << transport_params->eps_decay << endl;
-            paramoutfile << transport_params->eps_singularity_curvatures << endl;
-            paramoutfile << transport_params->eps_mu << endl;
-            paramoutfile << transport_params->eps_eigval_degen << endl;
-            paramoutfile << transport_params->energy_interval << endl;
-            paramoutfile << transport_params->min_interval << endl;
-            paramoutfile << transport_params->temperature << endl;
-            paramoutfile.close();
-        }
-        MPI_Barrier(MPI_COMM_WORLD);
-        exit(0);
-    }
 
     if ( Overlap->size_tot%transport_params->n_cells || transport_params->bandwidth<1 ) return (LOGCERR, EXIT_FAILURE);
     int n_mu=transport_params->num_contacts;
@@ -71,15 +26,6 @@ int semiselfconsistent(TCSR<double> *Overlap,TCSR<double> *KohnSham,transport_pa
     contactvec[0].inj_sign=+1;
     contactvec[1].start=Overlap->size_tot-contactvec[1].ndof*contactvec[1].bandwidth;
     contactvec[1].inj_sign=-1;
-
-    if (transport_params->method==3) {
-        Singularities singularities(transport_params,contactvec);
-        if ( singularities.Execute(KohnSham,Overlap) ) return (LOGCERR, EXIT_FAILURE);
-        for (int i_mu=0;i_mu<n_mu;i_mu++) muvec[i_mu]=singularities.determine_fermi(transport_params->ndof,i_mu);//ACHTUNG: FUER TRANSPORT MUSS ICH DOCH NICHT DIE BANDSTRUKTUR 2x BERECHNEN
-        Energyvector energyvector;
-        if (energyvector.Execute(Overlap,KohnSham,muvec,contactvec,transport_params)) return (LOGCERR, EXIT_FAILURE);
-        return 0;
-    }
 
     if (FEM->NAtom != transport_params->n_atoms) return (LOGCERR, EXIT_FAILURE);
 

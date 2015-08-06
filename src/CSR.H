@@ -111,7 +111,6 @@ public:
     double psipsidagger(TCSR<double>*,CPX*,CPX*,CPX*,int,int,int,CPX);
     double psipsidagger_transpose(TCSR<double>*,CPX*,CPX*,CPX*,int,int,int,CPX);
     void atom_allocate(int*,T*,T);
-    double collect_density(double*,double*,int*);
     void settozeropbc(int,int);
     void removepbc(int,int);
     void tr_full_to_sparse(T*,int,int);
