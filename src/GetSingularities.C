@@ -212,11 +212,10 @@ std::vector< std::vector< std::vector<double> > > Singularities::get_propagating
     }
 }
 
-double Singularities::determine_fermi(double doping,int i_mu) //slightly differs from OMEN
+double Singularities::determine_fermi(double doping,int i_mu)
 {
     double mu;
     if (!iam) {
-//doping=2.0;
         double nocctol=max(1.0E-2/n_k*abs(doping),1.0E-4/n_k);//WHAT IS THE MAX PRECISION I CAN GET DEPENDING ON n_k?
         cout << "Fermi Level / Number of Electrons with precision " << nocctol << endl;
         int noccunitcell=contactvec[i_mu].n_occ;

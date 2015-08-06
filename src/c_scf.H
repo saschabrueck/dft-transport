@@ -16,6 +16,8 @@
  * the density matrix will be passed to CP2K ...                                    */
 #include "DiagScaLapack.H"
 #include "SemiSelfConsistent.H"
+#include "EnergyVector.H"
+#include "WriteMatrix.H"
 
 
 /* types -------------------------------------------------------------------------- */

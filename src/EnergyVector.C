@@ -110,6 +110,7 @@ double sabtime=get_time(0.0);
         double Temp=transport_params->temperature;
         Singularities singularities(transport_params,contactvec);
         if ( singularities.Execute(KohnSham,Overlap) ) return (LOGCERR, EXIT_FAILURE);
+        if (transport_params->method==3) for (int i_mu=0;i_mu<n_mu;i_mu++) muvec[i_mu]=singularities.determine_fermi(transport_params->ndof,i_mu);
 if (!iam) cout << "TIME FOR SINGULARITIES " << get_time(sabtime) << endl;
 for (int i_mu=0;i_mu<n_mu;i_mu++) singularities.write_bandstructure(i_mu);
  

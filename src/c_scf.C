@@ -21,11 +21,12 @@ void c_scf_method(cp2k_transport_parameters cp2k_transport_params, cp2k_csr_inte
    transport_parameters* transport_params = new transport_parameters();
    intit_transport_parameters_from_cp2k(cp2k_transport_params, transport_params);
 
+   c_dscal(KohnSham->n_nonzeros,transport_params->evoltfactor,KohnSham->nnz,1);
+
    switch (transport_params->method) {
       case 0:
          if (!rank) cout << "Writing Matrices" << endl;
-         if (semiselfconsistent(Overlap,KohnSham,transport_params)) throw SCF_Exception(__LINE__,__FILE__);
-         break;
+         write_matrix(Overlap,KohnSham,transport_params);
       case 1:
          if (!rank) cout << "Starting ScaLaPackDiag" << endl;
          if (diagscalapack(Overlap,KohnSham,transport_params)) throw SCF_Exception(__LINE__,__FILE__);
@@ -35,12 +36,28 @@ void c_scf_method(cp2k_transport_parameters cp2k_transport_params, cp2k_csr_inte
          if (semiselfconsistent(Overlap,KohnSham,transport_params)) throw SCF_Exception(__LINE__,__FILE__);
          break;
      case 3:
-         if (!rank) cout << "Starting Transport" << endl;
-         if (semiselfconsistent(Overlap,KohnSham,transport_params)) throw SCF_Exception(__LINE__,__FILE__);
-         break;
      default:
          if (!rank) cout << "Starting Transport" << endl;
-         if (semiselfconsistent(Overlap,KohnSham,transport_params)) throw SCF_Exception(__LINE__,__FILE__);
+
+         if ( Overlap->size_tot%transport_params->n_cells || transport_params->bandwidth<1 ) throw SCF_Exception(__LINE__,__FILE__);
+         int n_mu=transport_params->num_contacts;
+         double *muvec = new double[n_mu];
+         contact_type *contactvec = new contact_type[n_mu];
+         for (int i_mu=0;i_mu<n_mu;i_mu++) {
+             contactvec[i_mu].bandwidth=transport_params->bandwidth;
+             contactvec[i_mu].ndof=Overlap->size_tot/transport_params->n_cells; // ONLY IF ALL CELLS EQUAL
+             contactvec[i_mu].n_occ=transport_params->n_occ/transport_params->n_cells; // THIS IS AN INTEGER DIVISION, IN GENERAL THE RESULT IS NOT CORRECT
+         }
+         contactvec[0].start=0;
+         contactvec[0].inj_sign=+1;
+         contactvec[1].start=Overlap->size_tot-contactvec[1].ndof*contactvec[1].bandwidth;
+         contactvec[1].inj_sign=-1;
+
+         Energyvector energyvector;
+         if (energyvector.Execute(Overlap,KohnSham,muvec,contactvec,transport_params)) throw SCF_Exception(__LINE__,__FILE__);
+
+         delete[] muvec;
+         delete[] contactvec;
    }
 
    CSR_to_cp2kCSR(Overlap, *P);
