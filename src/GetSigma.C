@@ -27,9 +27,6 @@ BoundarySelfEnergy::BoundarySelfEnergy()
     H1 = NULL;
     H1t = NULL;
 
-    spA = NULL;
-    spB = NULL;
-
     compute_inj=0;
 }
 
@@ -133,41 +130,6 @@ int BoundarySelfEnergy::Cutout(TCSR<CPX> *SumHamC,contact_type pcontact,CPX pene
                 H[bandwidth+ibw]->sparse_transpose(H[bandwidth-ibw]);
             }
         }
-        H[0]->shift_resize(0,ndof,0,2*ntriblock);
-        TCSR<CPX> *spBu = new TCSR<CPX>(H[0]);
-        for (int ibw=1;ibw<2*bandwidth+1;ibw++) {
-            H[ibw]->shift_resize(0,ndof,-(ibw-1)*ndof,2*ntriblock);
-        }
-        TCSR<CPX> *spAu = new TCSR<CPX>(2*bandwidth,NULL,&H[1],2*ntriblock);
-        spA = new TCSR<CPX>(2*ntriblock,spAu->n_nonzeros+2*ntriblock-ndof,spAu->findx);
-        c_zcopy(spAu->n_nonzeros,spAu->nnz,1,spA->nnz,1);
-        c_icopy(spAu->n_nonzeros,spAu->index_j,1,spA->index_j,1);
-        c_icopy(ndof,spAu->index_i,1,spA->index_i,1);
-        for (int i_ele=0;i_ele<2*ntriblock-ndof;i_ele++) {
-            spA->nnz[spAu->n_nonzeros+i_ele]=CPX(1.0,0.0);
-            spA->index_j[spAu->n_nonzeros+i_ele]=i_ele+spA->findx;
-            spA->index_i[ndof+i_ele]=1;
-        }
-        delete spAu;
-        spA->get_row_edge();
-        spA->get_diag_pos();
-        c_zscal(spBu->n_nonzeros,-CPX(1.0,0.0),spBu->nnz,1);
-        spB = new TCSR<CPX>(2*ntriblock,spBu->n_nonzeros+2*ntriblock-ndof,spBu->findx);
-        c_zcopy(spBu->n_nonzeros,spBu->nnz,1,spB->nnz,1);
-        c_icopy(spBu->n_nonzeros,spBu->index_j,1,spB->index_j,1);
-        c_icopy(ndof,spBu->index_i,1,spB->index_i,1);
-        for (int i_ele=0;i_ele<2*ntriblock-ndof;i_ele++) {
-            spB->nnz[spBu->n_nonzeros+i_ele]=CPX(1.0,0.0);
-            spB->index_j[spBu->n_nonzeros+i_ele]=i_ele+ndof+spB->findx;
-            spB->index_i[ndof+i_ele]=1;
-        }
-        delete spBu;
-        spB->get_row_edge();
-        spB->get_diag_pos();
-        H[0]->shift_resize(0,ndof,0,ndof);
-        for (int ibw=1;ibw<2*bandwidth+1;ibw++) {
-            H[ibw]->shift_resize(0,ndof,+(ibw-1)*ndof,ndof);
-        }
     } else {
         delete H0;
         delete H1;
@@ -267,36 +229,42 @@ int worldrank; MPI_Comm_rank(MPI_COMM_WORLD,&worldrank);
     if (eps_limit==1.0E-1) {
         InjectionBeyn<double> *k_inj = new InjectionBeyn<double>(2*bandwidth,1.0/eps_limit);
         int neigbeyn=ndof/5;//THIS IS 2*NM
-        int nonzA, findxA, nonzB, findxB;
+
+        int *nonzH = new int[nblocksband];
+        int findxH;
         if (!boundary_rank) {
-            nonzA  = spA->n_nonzeros;
-            nonzB  = spB->n_nonzeros;
-            findxA = spA->findx;
-            findxB = spB->findx;
+            for (int ibw=0;ibw<nblocksband;ibw++) {
+                nonzH[ibw] = H[ibw]->n_nonzeros;
+            }
+            findxH = H[0]->findx;
         }
-        MPI_Bcast(&nonzA,1,MPI_INT,0,boundary_comm);
-        MPI_Bcast(&nonzB,1,MPI_INT,0,boundary_comm);
-        MPI_Bcast(&findxA,1,MPI_INT,0,boundary_comm);
-        MPI_Bcast(&findxB,1,MPI_INT,0,boundary_comm);
+        MPI_Bcast(nonzH,nblocksband,MPI_INT,0,boundary_comm);
+        MPI_Bcast(&findxH,1,MPI_INT,0,boundary_comm);
         if (boundary_rank) {
-            spA = new TCSR<CPX>(2*bandwidth*ndof,nonzA,findxA);
-            spB = new TCSR<CPX>(2*bandwidth*ndof,nonzB,findxB);
+            H = new TCSR<CPX>*[nblocksband];
+            for (int ibw=0;ibw<nblocksband;ibw++) {
+                H[ibw] = new TCSR<CPX>(ndof,nonzH[ibw],findxH);
+            }
         }
-        spA->Bcast(0,boundary_comm);
-        spB->Bcast(0,boundary_comm);
-        neigval = k_inj->execute(spA,spB,ndof,neigbeyn,lambdavec,eigvecc,inj_sign,boundary_comm);
-        delete spA;
-        delete spB;
+        delete[] nonzH;
+        for (int ibw=0;ibw<nblocksband;ibw++) {
+            H[ibw]->Bcast(0,boundary_comm);
+        }
+        neigval = k_inj->execute(H,ndof,neigbeyn,lambdavec,eigvecc,inj_sign,boundary_comm);
+        if (boundary_rank) {
+            for (int ibw=0;ibw<nblocksband;ibw++) {
+                delete H[ibw];
+            }
+            delete[] H;
+        }
         delete k_inj;
     } else {
         CPX* KScpx;
         if (!boundary_rank) {
             KScpx = new CPX[ndofsq*nblocksband];
-            spA->sparse_to_full(&KScpx[ndofsq],ndof,2*bandwidth*ndof);
-            spB->sparse_to_full(KScpx,ndof,ndof);
-            c_zscal(ndofsq,-z_one,KScpx,1);
-            delete spA;
-            delete spB;
+            for (int ibw=0;ibw<nblocksband;ibw++) {
+                H[ibw]->sparse_to_full(&KScpx[ndofsq*ibw],ndof,ndof);
+            }
         }
         InjectionIEV inj_iev;
         inj_iev.Compute(neigval,lambdavec,eigvecc,KScpx,ndof,bandwidth,inj_sign,complexenergypoint,colzerothr,boundary_comm);
@@ -405,7 +373,7 @@ myfile.close();
 }
  */
 if (!boundary_rank) {
-    for (int ibw=0;ibw<2*bandwidth+1;ibw++) {
+    for (int ibw=0;ibw<nblocksband;ibw++) {
         delete H[ibw];
     }
     delete[] H;
