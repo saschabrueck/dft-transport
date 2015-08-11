@@ -45,9 +45,6 @@ TCSR<CPX> *H1t;
 
 TCSR<CPX> **H;
 
-TCSR<CPX> *spA;
-TCSR<CPX> *spB;
-
 };
 
 #endif

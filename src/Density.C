@@ -174,7 +174,7 @@ if (npror!=propnum[1] && propnum[1]>=0) if (!matrix_rank) cout << "WARNING: FOUN
         delete H1cut;
         sabtime=get_time(d_zer);
         LinearSolver<CPX>* solver;
-        int solver_method=1;
+        int solver_method=0;
         if (solver_method==0) {
             solver = new SuperLU<CPX>(HamSig,matrix_comm);
 #ifdef HAVE_MUMPS

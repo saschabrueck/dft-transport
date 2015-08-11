@@ -61,6 +61,7 @@ extern "C" {
                                        int*,int*,int*);
     void fortran_name(pdgeadd,PDGEADD)(char*,int*,int*,double*,double*,int*,int*,int*,double*,double*,int*,int*,int*);
     void fortran_name(pzgeadd,PZGEADD)(char*,int*,int*,CPX*,CPX*,int*,int*,int*,CPX*,CPX*,int*,int*,int*);
+    void fortran_name(pzgesvd,PZGESVD)(char*,char*,int*,int*,CPX*,int*,int*,int*,double*,CPX*,int*,int*,int*,CPX*,int*,int*,int*,CPX*,int*,double*,int*);
     void fortran_name(pdsygvx,PDSYGVX)(int *,char *,char *,char *,int *,double *,\
                                        int *, int *, int *, double *, int *, int *, int *,\
                                        double *, double *, int *, int *, double *, int *,\
@@ -332,6 +333,17 @@ inline void c_pdgeadd(char TRANS,int M,int N,double ALPHA,double *A,int IA,int J
                       double BETA,double *C,int IC,int JC,int *DESCC)
 {
     fortran_name(pdgeadd,PDGEADD)(&TRANS,&M,&N,&ALPHA,A,&IA,&JA,DESCA,&BETA,C,&IC,&JC,DESCC);
+}
+
+/************************************************************************************************/
+
+inline void c_pzgesvd(char JOBU,char JOBVT,int M,int N,CPX *A,int IA,int JA,int *DESCA,double *S,\
+                      CPX *U,int IU,int JU,int *DESCU,CPX *VT,int IVT,int JVT,int *DESCVT,\
+                      CPX *WORK,int LWORK,double *RWORK,int *INFO)
+
+{
+    fortran_name(pzgesvd,PZGESVD)(&JOBU,&JOBVT,&M,&N,A,&IA,&JA,DESCA,S,U,&IU,&JU,DESCU,\
+                 VT,&IVT,&JVT,DESCVT,WORK,&LWORK,RWORK,INFO);
 }
 
 /************************************************************************************************/
