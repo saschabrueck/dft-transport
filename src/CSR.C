@@ -82,192 +82,20 @@ void CSR::get_row_edge()
 
 /************************************************************************************************/
 
-template <>
-void TCSR<CPX>::copy_contain(TCSR<double> *mat,double factor)
+void CSR::write(const char* filename)
 {
-
-    size       = mat->size;
-    size_tot   = mat->size_tot;
-    type       = mat->type;
-    n_nonzeros = mat->n_nonzeros;
-    findx      = mat->findx;
-    first_row  = mat->first_row;
-
-    c_dcopy(n_nonzeros,mat->nnz,1,(double*)nnz,2);
-    c_zscal(n_nonzeros,CPX(factor,0.0),nnz,1);
-    c_icopy(size,mat->index_i,1,index_i,1);
-    c_icopy(n_nonzeros,mat->index_j,1,index_j,1);
-    c_icopy(size+1,mat->edge_i,1,edge_i,1);
-    c_icopy(size,mat->diag_pos,1,diag_pos,1);
-}
-
-/************************************************************************************************/
-
-template <>
-void TCSR<double>::copy_contain(TCSR<double> *mat,double factor)
-{
-
-    size       = mat->size;
-    size_tot   = mat->size_tot;
-    type       = mat->type;
-    n_nonzeros = mat->n_nonzeros;
-    findx      = mat->findx;
-    first_row  = mat->first_row;
-
-    c_dcopy(n_nonzeros,mat->nnz,1,nnz,1);
-    c_dscal(n_nonzeros,factor,nnz,1);
-    c_icopy(size,mat->index_i,1,index_i,1);
-    c_icopy(n_nonzeros,mat->index_j,1,index_j,1);
-    c_icopy(size+1,mat->edge_i,1,edge_i,1);
-    c_icopy(size,mat->diag_pos,1,diag_pos,1);
-}
-
-/************************************************************************************************/
-
-template <>
-void TCSR<CPX>::copy_contain(TCSR<CPX> *mat,double factor)
-{
-
-    size       = mat->size;
-    size_tot   = mat->size_tot;
-    type       = mat->type;
-    n_nonzeros = mat->n_nonzeros;
-    findx      = mat->findx;
-    first_row  = mat->first_row;
-
-    c_zcopy(n_nonzeros,mat->nnz,1,nnz,1);
-    c_zscal(n_nonzeros,CPX(factor,0.0),nnz,1);
-    c_icopy(size,mat->index_i,1,index_i,1);
-    c_icopy(n_nonzeros,mat->index_j,1,index_j,1);
-    c_icopy(size+1,mat->edge_i,1,edge_i,1);
-    c_icopy(size,mat->diag_pos,1,diag_pos,1);
-}
-
-/************************************************************************************************/
-
-template <>
-void TCSR<double>::copy_contain(TCSR<CPX> *mat,double factor)
-{
-
-    size       = mat->size;
-    size_tot   = mat->size_tot;
-    type       = mat->type;
-    n_nonzeros = mat->n_nonzeros;
-    findx      = mat->findx;
-    first_row  = mat->first_row;
-
-    c_dcopy(n_nonzeros,(double*)mat->nnz,2,nnz,1);
-    c_dscal(n_nonzeros,factor,nnz,1);
-    c_icopy(size,mat->index_i,1,index_i,1);
-    c_icopy(n_nonzeros,mat->index_j,1,index_j,1);
-    c_icopy(size+1,mat->edge_i,1,edge_i,1);
-    c_icopy(size,mat->diag_pos,1,diag_pos,1);
-}
-
-/************************************************************************************************/
-
-template <>
-void TCSR<double>::sparse_to_cmp_full(CPX *B,int nrow,int ncol)
-{
-    int i,j,index;
-
-    init_variable(B,nrow*ncol);
-
+    int u=0,i,j;
+    
+    ofstream myfile;
+    myfile.open (filename);
+    myfile.precision(8);
     for(i=0;i<size;i++){
-        for(j=edge_i[i]-findx;j<edge_i[i+1]-findx;j++){
-            index             = index_j[j]-findx;
-            B[i+index*nrow]   = CPX(nnz[j],0.0);
+        for(j=0;j<index_i[i];j++){
+	    myfile<<i+1<<" "<<index_j[u]+1<<" "<<r_nnz[u]<<" "<<i_nnz[u]<<"\n";
+            u++;
         }
     }
+    myfile.close();                                                   
 }
 
 /************************************************************************************************/
-
-template <>
-void TCSR<CPX>::sparse_to_cmp_full(CPX *B,int nrow,int ncol)
-{
-}
-
-/************************************************************************************************/
-
-template <>
-void TCSR<double>::cmp_full_to_sparse(CPX *B,int nrow,int ncol,CPX factor)
-{
-    int i,j;
-
-    size       = nrow;
-    n_nonzeros = 0;
-
-    for(i=0;i<nrow;i++){
-
-        index_i[i] = 0;
-
-        for(j=0;j<ncol;j++){
-
-        if(abs(B[i+j*nrow])>tollim){
-
-                index_j[n_nonzeros] = j+findx;
-                nnz[n_nonzeros]     = real(factor*B[i+j*nrow]);
-
-                index_i[i]++;
-                n_nonzeros++;
-            }
-        }
-    }
-
-    get_row_edge();
-    get_diag_pos();
-}
-
-/************************************************************************************************/
-
-template <>
-void TCSR<CPX>::cmp_full_to_sparse(CPX *B,int nrow,int ncol,CPX factor)
-{
-    int i,j;
-
-    size       = nrow;
-    n_nonzeros = 0;
-
-    for(i=0;i<nrow;i++){
-
-        index_i[i] = 0;
-
-        for(j=0;j<ncol;j++){
-
-        if(abs(B[i+j*nrow])>tollim){
-
-                index_j[n_nonzeros] = j+findx;
-                nnz[n_nonzeros]     = factor*B[i+j*nrow];
-
-                index_i[i]++;
-                n_nonzeros++;
-            }
-        }
-    }
-
-    get_row_edge();
-    get_diag_pos();
-}
-
-template<>
-void TCSR<CPX>::get_dense_by_range(CPX* matrix_out, int start_row, int start_col, int end_row, int end_col)
-{
-    int r_length = end_row - start_row +1;
-    int c_length = end_col - start_col +1;
-    
-    int b,a,i,j;
-    //int index;
-
-    init_variable(matrix_out,r_length*c_length);
-    
-    for(i=start_row,a=0;i<=end_row;i++,a++){
-        for(j=edge_i[i]-findx,b=0;j<edge_i[i+1]-findx;j++,b++){
-            int indx = index_j[j];
-            if( indx < start_col)  continue;
-            if( indx > end_col)    break;
-           // printf("i = %d ;  edge[i=%d]=%d ; j=%d  ; index=%d  a = %d   length_r = %d\n  ",i,i,edge_i[i],j,indx,a,r_length);
-            matrix_out[(indx-findx-start_col)+((i-start_row)*c_length)]   = nnz[j];
-        }
-    }
-}

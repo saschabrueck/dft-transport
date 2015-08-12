@@ -70,75 +70,50 @@ int Singularities::Execute(TCSR<double> *KohnSham,TCSR<double> *Overlap)
     for (int i=1;i<n_k;i++) k[i]=i*M_PI/(n_k-1);
     int seq_per_cpu=int(ceil(double(n_k)/master_ranks.size()));
     int kpos;
-    CPX *H = NULL;
-    CPX *S = NULL;
     for (int i_mu=0;i_mu<n_mu;i_mu++) {
         int inj_sign=contactvec[i_mu].inj_sign;
-//        int contact_start=contactvec[i_mu].start;
+        int start=contactvec[i_mu].start;
         int bandwidth=contactvec[i_mu].bandwidth;
         int ndof=contactvec[i_mu].ndof;
         int noccunitcell=contactvec[i_mu].n_occ;
-        int ndofsq=ndof*ndof;
-        int ndofsqbw=ndofsq*(2*bandwidth+1);
-        if (contactvec[i_mu].inj_sign==+1) {
-            TCSR<double> *Hcut = new TCSR<double>(KohnSham,0,ndof,0,(bandwidth+1)*ndof);
-            TCSR<double> *Hsp = new TCSR<double>(Hcut,&master_ranks[0],master_ranks.size(),MPI_COMM_WORLD);
+        TCSR<double> **H = new TCSR<double>*[2*bandwidth+1];
+        TCSR<double> **S = new TCSR<double>*[2*bandwidth+1];
+        if (contactvec[i_mu].inj_sign==-1) {
+            start+=(bandwidth-1)*ndof;
+        }
+        for (int ibw=0;ibw<=bandwidth;ibw++) {
+            TCSR<double> *Hcut = new TCSR<double>(KohnSham,start,ndof,start+inj_sign*ibw*ndof,ndof);
+            TCSR<double> *Scut = new TCSR<double>(Overlap ,start,ndof,start+inj_sign*ibw*ndof,ndof);
+            H[bandwidth+inj_sign*ibw] = new TCSR<double>(Hcut,&master_ranks[0],master_ranks.size(),MPI_COMM_WORLD);
+            S[bandwidth+inj_sign*ibw] = new TCSR<double>(Scut,&master_ranks[0],master_ranks.size(),MPI_COMM_WORLD);
             delete Hcut;
-            if (!rank_bs_comm) {
-                Hsp->shift_resize(0,ndof,0,(bandwidth+1)*ndof);
-                H = new CPX[ndofsqbw];
-                Hsp->sparse_to_cmp_full(&H[bandwidth*ndofsq],ndof,(bandwidth+1)*ndof);
-                for (int ibw=1;ibw<=bandwidth;ibw++)
-                    full_transpose(ndof,ndof,&H[(bandwidth+inj_sign*ibw)*ndofsq],&H[(bandwidth-inj_sign*ibw)*ndofsq]);
-            }
-            delete Hsp;
-            TCSR<double> *Scut = new TCSR<double>(Overlap,0,ndof,0,(bandwidth+1)*ndof);
-            TCSR<double> *Ssp = new TCSR<double>(Scut,&master_ranks[0],master_ranks.size(),MPI_COMM_WORLD);
             delete Scut;
-            if (!rank_bs_comm) {
-                Ssp->shift_resize(0,ndof,0,(bandwidth+1)*ndof);
-                S = new CPX[ndofsqbw];
-                Ssp->sparse_to_cmp_full(&S[bandwidth*ndofsq],ndof,(bandwidth+1)*ndof);
-                for (int ibw=1;ibw<=bandwidth;ibw++)
-                    full_transpose(ndof,ndof,&S[(bandwidth+inj_sign*ibw)*ndofsq],&S[(bandwidth-inj_sign*ibw)*ndofsq]);
+        }
+        if (!rank_bs_comm) {
+            for (int ibw=0;ibw<=bandwidth;ibw++) {
+                H[bandwidth+inj_sign*ibw]->shift_resize(start,ndof,start+inj_sign*ibw*ndof,ndof);
+                S[bandwidth+inj_sign*ibw]->shift_resize(start,ndof,start+inj_sign*ibw*ndof,ndof);
             }
-            delete Ssp;
-        } else if (contactvec[i_mu].inj_sign==-1) {
-            TCSR<double> *Hcut = new TCSR<double>(KohnSham,KohnSham->size_tot-ndof,ndof,KohnSham->size_tot-(bandwidth+1)*ndof,(bandwidth+1)*ndof);
-            TCSR<double> *Hsp = new TCSR<double>(Hcut,&master_ranks[0],master_ranks.size(),MPI_COMM_WORLD);
-            delete Hcut;
-            if (!rank_bs_comm) {
-                Hsp->shift_resize(KohnSham->size_tot-ndof,ndof,KohnSham->size_tot-(bandwidth+1)*ndof,(bandwidth+1)*ndof);
-                H = new CPX[ndofsqbw];
-                Hsp->sparse_to_cmp_full(H,ndof,(bandwidth+1)*ndof);
-                for (int ibw=1;ibw<=bandwidth;ibw++)
-                    full_transpose(ndof,ndof,&H[(bandwidth+inj_sign*ibw)*ndofsq],&H[(bandwidth-inj_sign*ibw)*ndofsq]);
-            }
-            delete Hsp;
-            TCSR<double> *Scut = new TCSR<double>(Overlap,Overlap->size_tot-ndof,ndof,Overlap->size_tot-(bandwidth+1)*ndof,(bandwidth+1)*ndof);
-            TCSR<double> *Ssp = new TCSR<double>(Scut,&master_ranks[0],master_ranks.size(),MPI_COMM_WORLD);
-            delete Scut;
-            if (!rank_bs_comm) {
-                Ssp->shift_resize(Overlap->size_tot-ndof,ndof,Overlap->size_tot-(bandwidth+1)*ndof,(bandwidth+1)*ndof);
-                S = new CPX[ndofsqbw];
-                Ssp->sparse_to_cmp_full(S,ndof,(bandwidth+1)*ndof);
-                for (int ibw=1;ibw<=bandwidth;ibw++)
-                    full_transpose(ndof,ndof,&S[(bandwidth+inj_sign*ibw)*ndofsq],&S[(bandwidth-inj_sign*ibw)*ndofsq]);
-            }
-            delete Ssp;
+        }
+        for (int ibw=1;ibw<=bandwidth;ibw++) {
+            H[bandwidth-inj_sign*ibw] = new TCSR<double>(H[bandwidth+inj_sign*ibw]);
+            H[bandwidth-inj_sign*ibw]->sparse_transpose(H[bandwidth+inj_sign*ibw]);
+            S[bandwidth-inj_sign*ibw] = new TCSR<double>(S[bandwidth+inj_sign*ibw]);
+            S[bandwidth-inj_sign*ibw]->sparse_transpose(S[bandwidth+inj_sign*ibw]);
         }
         double *energies_local = new double[ndof*seq_per_cpu]();
         double *derivatives_local = new double[ndof*seq_per_cpu]();
         double *curvatures_local = new double[ndof*seq_per_cpu]();
         for (int iseq=0;iseq<seq_per_cpu;iseq++)
-            if ( (kpos=iseq+k_rank*seq_per_cpu)<n_k && rank_bs_comm>=0 ) {
+            if ( (kpos=iseq+k_rank*seq_per_cpu)<n_k && rank_bs_comm>=0 )
                 if (determine_velocities(H,S,k[kpos],&energies_local[iseq*ndof],&derivatives_local[iseq*ndof],&curvatures_local[iseq*ndof],ndof,bandwidth))
                     return (LOGCERR, EXIT_FAILURE);
-}
-        if (!rank_bs_comm) {
-            delete[] H;
-            delete[] S;
+        for (int ibw=bandwidth;ibw<2*bandwidth+1;ibw++) {
+            delete H[ibw];
+            delete S[ibw];
         }
+        delete[] H;
+        delete[] S;
         if (!iam) {
             energies_matrix[i_mu].resize(ndof*int(master_ranks.size())*seq_per_cpu);
             derivatives_matrix[i_mu].resize(ndof*int(master_ranks.size())*seq_per_cpu);
@@ -366,7 +341,7 @@ void Singularities::write_bandstructure(int i_mu)
     }
 }
 
-int Singularities::determine_imaginary_bandstructure(CPX *H,CPX *S,double kimag_in,CPX *lambda,int i_mu)
+int Singularities::determine_imaginary_bandstructure(TCSR<double> **H,TCSR<double> **S,double kimag_in,CPX *lambda,int i_mu)
 {
     double kval=exp(-kimag_in);
     int N=contactvec[i_mu].ndof;
@@ -375,8 +350,8 @@ int Singularities::determine_imaginary_bandstructure(CPX *H,CPX *S,double kimag_
     double* breal = new double[N*N]();
 
     for (int ibandw=-bandwidth;ibandw<=bandwidth;ibandw++) {
-        c_daxpy(N*N,pow(kval,ibandw),(double*)&H[(bandwidth+ibandw)*N*N],2,areal,1);
-        c_daxpy(N*N,pow(kval,ibandw),(double*)&S[(bandwidth+ibandw)*N*N],2,breal,1);
+        H[bandwidth+ibandw]->add_sparse_to_full(areal,N,N,pow(kval,ibandw));
+        S[bandwidth+ibandw]->add_sparse_to_full(breal,N,N,pow(kval,ibandw));
     }
 
     double* lambda_up_real = new double[N];
@@ -412,7 +387,7 @@ int Singularities::determine_imaginary_bandstructure(CPX *H,CPX *S,double kimag_
     return 0;
 }
 
-int Singularities::determine_velocities(CPX *H,CPX *S,double k_in,double *energies_k,double *derivatives_k,double *curvatures_k,int ndof,int bandwidth)
+int Singularities::determine_velocities(TCSR<double> **H,TCSR<double> **S,double k_in,double *energies_k,double *derivatives_k,double *curvatures_k,int ndof,int bandwidth)
 /**  \brief Determine energies where velocity vanishes and their number for a given k
  *
  *   \param H             H matrix
@@ -436,8 +411,8 @@ int Singularities::determine_velocities(CPX *H,CPX *S,double k_in,double *energi
     if (!rank_bs_comm) {
         ovlmat = new CPX[ndofsq]();
         for (int ibandw=-bandwidth;ibandw<=bandwidth;ibandw++) {
-            c_zaxpy(ndofsq,pow(kval,ibandw),&H[(bandwidth+ibandw)*ndofsq],1,eigvec,1);
-            c_zaxpy(ndofsq,pow(kval,ibandw),&S[(bandwidth+ibandw)*ndofsq],1,ovlmat,1);
+            H[bandwidth+ibandw]->add_sparse_to_cmp_full(eigvec,ndof,ndof,pow(kval,ibandw));
+            S[bandwidth+ibandw]->add_sparse_to_cmp_full(ovlmat,ndof,ndof,pow(kval,ibandw));
         }
     }
 
@@ -448,8 +423,8 @@ int Singularities::determine_velocities(CPX *H,CPX *S,double k_in,double *energi
     CPX *S_Sum_dk = new CPX[ndofsq]();
     if (!rank_bs_comm) {
         for (int ibandw=-bandwidth;ibandw<=bandwidth;ibandw++) {
-            c_zaxpy(ndofsq,z_img*CPX(ibandw,d_zer)*pow(kval,ibandw),&H[(bandwidth+ibandw)*ndofsq],1,H_Sum_dk,1);
-            c_zaxpy(ndofsq,z_img*CPX(ibandw,d_zer)*pow(kval,ibandw),&S[(bandwidth+ibandw)*ndofsq],1,S_Sum_dk,1);
+            H[bandwidth+ibandw]->add_sparse_to_cmp_full(H_Sum_dk,ndof,ndof,z_img*CPX(ibandw,d_zer)*pow(kval,ibandw));
+            S[bandwidth+ibandw]->add_sparse_to_cmp_full(S_Sum_dk,ndof,ndof,z_img*CPX(ibandw,d_zer)*pow(kval,ibandw));
         }
     }
     MPI_Bcast(H_Sum_dk,ndofsq,MPI_DOUBLE_COMPLEX,0,bs_comm);
@@ -554,8 +529,8 @@ int Singularities::determine_velocities(CPX *H,CPX *S,double k_in,double *energi
     c_zscal(ndofsq,z_zer,S_Sum_dk,1);
     if (!rank_bs_comm) {
         for (int ibandw=-bandwidth;ibandw<=bandwidth;ibandw++) {
-            c_zaxpy(ndofsq,-CPX(ibandw,d_zer)*CPX(ibandw,d_zer)*pow(kval,ibandw),&H[(bandwidth+ibandw)*ndofsq],1,H_Sum_dk,1);
-            c_zaxpy(ndofsq,-CPX(ibandw,d_zer)*CPX(ibandw,d_zer)*pow(kval,ibandw),&S[(bandwidth+ibandw)*ndofsq],1,S_Sum_dk,1);
+            H[bandwidth+ibandw]->add_sparse_to_cmp_full(H_Sum_dk,ndof,ndof,-CPX(ibandw,d_zer)*CPX(ibandw,d_zer)*pow(kval,ibandw));
+            S[bandwidth+ibandw]->add_sparse_to_cmp_full(S_Sum_dk,ndof,ndof,-CPX(ibandw,d_zer)*CPX(ibandw,d_zer)*pow(kval,ibandw));
         }
     }
     MPI_Bcast(H_Sum_dk,ndofsq,MPI_DOUBLE_COMPLEX,0,bs_comm);

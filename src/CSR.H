@@ -23,6 +23,7 @@ public:
     void r_update_diag(double*);
     void i_update_diag(double*);
     void get_row_edge();
+    void write(const char*);
 
     int pos,size,n_nonzeros,type;
     double *r_nnz,*i_nnz;
@@ -79,6 +80,7 @@ public:
     void sparse_to_full(T*,int,int);
     void add_sparse_to_full(T*,int,int,T);
     void sparse_to_cmp_full(CPX*,int,int);
+    void add_sparse_to_cmp_full(CPX*,int,int,CPX);
     void full_to_sparse(T*,int,int);
     void sparse_to_full_trans(T *,int ,int );
     void cmp_full_to_sparse(CPX*,int,int,CPX);
@@ -976,10 +978,11 @@ void TCSR<T>::copy_index(TCSR<CPX> *mat)
     c_icopy(size+1,mat->edge_i,1,edge_i,1);
     c_icopy(size,mat->diag_pos,1,diag_pos,1);
 }
+
 /************************************************************************************************/
-/*
+
 template <>
-void TCSR<CPX>::copy_contain(TCSR<double> *mat,double factor)
+inline void TCSR<CPX>::copy_contain(TCSR<double> *mat,double factor)
 {
 
     size       = mat->size;
@@ -996,11 +999,11 @@ void TCSR<CPX>::copy_contain(TCSR<double> *mat,double factor)
     c_icopy(size+1,mat->edge_i,1,edge_i,1);
     c_icopy(size,mat->diag_pos,1,diag_pos,1);
 }
-*/
+
 /************************************************************************************************/
-/*
+
 template <>
-void TCSR<double>::copy_contain(TCSR<double> *mat,double factor)
+inline void TCSR<double>::copy_contain(TCSR<double> *mat,double factor)
 {
 
     size       = mat->size;
@@ -1017,11 +1020,11 @@ void TCSR<double>::copy_contain(TCSR<double> *mat,double factor)
     c_icopy(size+1,mat->edge_i,1,edge_i,1);
     c_icopy(size,mat->diag_pos,1,diag_pos,1);
 }
-*/
+
 /************************************************************************************************/
-/*
+
 template <>
-void TCSR<CPX>::copy_contain(TCSR<CPX> *mat,double factor)
+inline void TCSR<CPX>::copy_contain(TCSR<CPX> *mat,double factor)
 {
 
     size       = mat->size;
@@ -1038,11 +1041,11 @@ void TCSR<CPX>::copy_contain(TCSR<CPX> *mat,double factor)
     c_icopy(size+1,mat->edge_i,1,edge_i,1);
     c_icopy(size,mat->diag_pos,1,diag_pos,1);
 }
-*/
+
 /************************************************************************************************/
-/*
+
 template <>
-void TCSR<double>::copy_contain(TCSR<CPX> *mat,double factor)
+inline void TCSR<double>::copy_contain(TCSR<CPX> *mat,double factor)
 {
 
     size       = mat->size;
@@ -1059,7 +1062,7 @@ void TCSR<double>::copy_contain(TCSR<CPX> *mat,double factor)
     c_icopy(size+1,mat->edge_i,1,edge_i,1);
     c_icopy(size,mat->diag_pos,1,diag_pos,1);
 }
-*/
+
 /************************************************************************************************/
 
 template <class T>
@@ -1534,47 +1537,53 @@ inline void TCSR<T>::spec_mat_vec_mult(T *in, T *out, int in_fst_row, int *low, 
     }
 }
 
-/************************************************************************************************/
-/*
+/*SAB********************************************************************************************/
+
 template <>
-void TCSR<double>::sparse_to_cmp_full(CPX *B,int nrow,int ncol)
+inline void TCSR<double>::sparse_to_cmp_full(CPX *B,int nrow,int ncol)
 {
-    int i,j,index;
+    int i,j,e;
 
     init_variable(B,nrow*ncol);
-    
-    for(i=0;i<size;i++){
-        for(j=edge_i[i]-findx;j<edge_i[i+1]-findx;j++){
-            index             = index_j[j]-findx;
-            B[i+index*nrow]   = CPX(nnz[j],0.0);
+    for(i=0;i<min(nrow,size);i++){
+        for(e=edge_i[i]-findx;e<edge_i[i+1]-findx;e++){
+            if ((j=index_j[e]-findx)<ncol){
+                B[i+j*nrow] = CPX(nnz[e],0.0);
+            }
         }
     }
 }
-*/
+
 /************************************************************************************************/
-/*
+
 template <>
-void TCSR<CPX>::sparse_to_cmp_full(CPX *B,int nrow,int ncol)
+inline void TCSR<CPX>::sparse_to_cmp_full(CPX *B,int nrow,int ncol)
 {
 }
-*/
-/************************************************************************************************/
-/*
-template <class T>
-void TCSR<T>::sparse_to_full(T *B,int nrow,int ncol)
-{
-    int i,j,index;
 
-    init_variable(B,nrow*ncol);
-    
-    for(i=0;i<size;i++){
-        for(j=edge_i[i]-findx;j<edge_i[i+1]-findx;j++){
-            index             = index_j[j]-findx;
-            B[i+index*nrow]   = nnz[j];
+/*SAB********************************************************************************************/
+
+template <>
+inline void TCSR<double>::add_sparse_to_cmp_full(CPX *B,int nrow,int ncol,CPX fac)
+{
+    int i,j,e;
+
+    for(i=0;i<min(nrow,size);i++){
+        for(e=edge_i[i]-findx;e<edge_i[i+1]-findx;e++){
+            if ((j=index_j[e]-findx)<ncol){
+                B[i+j*nrow] += fac*CPX(nnz[e],0.0);
+            }
         }
     }
 }
-*/
+
+/************************************************************************************************/
+
+template <>
+inline void TCSR<CPX>::add_sparse_to_cmp_full(CPX *B,int nrow,int ncol,CPX fac)
+{
+}
+
 /*SAB********************************************************************************************/
 
 template <class T>
