@@ -108,7 +108,7 @@ int Singularities::Execute(TCSR<double> *KohnSham,TCSR<double> *Overlap)
             if ( (kpos=iseq+k_rank*seq_per_cpu)<n_k && rank_bs_comm>=0 )
                 if (determine_velocities(H,S,k[kpos],&energies_local[iseq*ndof],&derivatives_local[iseq*ndof],&curvatures_local[iseq*ndof],ndof,bandwidth))
                     return (LOGCERR, EXIT_FAILURE);
-        for (int ibw=bandwidth;ibw<2*bandwidth+1;ibw++) {
+        for (int ibw=0;ibw<2*bandwidth+1;ibw++) {
             delete H[ibw];
             delete S[ibw];
         }
