@@ -51,6 +51,7 @@ sabtime=get_time(0.0);
                     return (LOGCERR, EXIT_FAILURE);
 if (!iam) cout << "TIME FOR DENSITY " << get_time(sabtime) << endl;
     delete KohnShamCollect;
+    delete OverlapCollect;
 // trPS per energy point
     ofstream myfile;
     std::vector<double> currentvector2(energyvector.size(),0.0);
