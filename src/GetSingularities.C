@@ -6,14 +6,14 @@
 #include "Utilities.H"
 #include "p_eig.H"
 
-Singularities::Singularities(transport_parameters *parameter_sab,contact_type *pcontactvec)
+Singularities::Singularities(transport_parameters *parameter_sab,std::vector<contact_type> pcontactvec)
 {
     contactvec=pcontactvec;
 
     eps_singularities=parameter_sab->eps_singularity_curvatures;
     n_k=parameter_sab->n_kpoint;
     Temp=parameter_sab->temperature;
-    n_mu=parameter_sab->num_contacts;
+    n_mu=contactvec.size();
 
     int nprocs;
     MPI_Comm_size(MPI_COMM_WORLD,&nprocs);
@@ -263,7 +263,7 @@ cout << "[" << mu_a << "," << mu_b << "]" << " / " << nocciter << " BISECT" << e
             }
 cout << mu << " / " << nocciter << " NEWTON" << endl;
         }
-        cout << mu << " / " << nocciter << endl;
+        cout << mu << " / " << nocciter << " FERMI" << endl;
     }
     MPI_Bcast(&mu,1,MPI_DOUBLE,0,MPI_COMM_WORLD);
     return mu;

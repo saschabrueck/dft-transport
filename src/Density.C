@@ -19,14 +19,13 @@ using namespace std;
 #include "GetSigma.H"
 #include "Density.H"
 
-int density(TCSR<double> *KohnSham,TCSR<double> *Overlap,TCSR<double> *Ps,CPX energy,CPX weight,transport_methods::transport_method method,double *muvec,contact_type *contactvec,double &current,double &transm,double &dos,std::vector<int> propnum,transport_parameters *parameter_sab,int evecpos,MPI_Comm matrix_comm)
+int density(TCSR<double> *KohnSham,TCSR<double> *Overlap,TCSR<double> *Ps,CPX energy,CPX weight,transport_methods::transport_method method,std::vector<double> muvec,std::vector<contact_type> contactvec,double &current,double &transm,double &dos,std::vector<int> propnum,transport_parameters *parameter_sab,int evecpos,MPI_Comm matrix_comm)
 {
     double d_one=1.0;
     double d_zer=0.0;
     CPX z_one=CPX(d_one,d_zer);
     CPX z_img=CPX(d_zer,d_one);
     double sabtime;
-    int iinfo;
     TCSR<CPX> *HamSig;
     CPX* inj = NULL;
     int nprol, npror;
@@ -38,12 +37,12 @@ int density(TCSR<double> *KohnSham,TCSR<double> *Overlap,TCSR<double> *Ps,CPX en
     MPI_Comm_rank(matrix_comm,&matrix_rank);
 int worldrank; MPI_Comm_rank(MPI_COMM_WORLD,&worldrank);
 // get parameters always at the beginning of a subroutine (or maybe even better in the constructor) to make it independent of the structure containing the parameters
-    int n_mu=parameter_sab->num_contacts;
+    int n_mu=muvec.size();
     int ncells=parameter_sab->n_cells;
     int bandwidth=parameter_sab->bandwidth;
     int ndof=Overlap->size_tot/parameter_sab->n_cells;
     int ntriblock=bandwidth*ndof;
-    vector<TCSR<CPX>*> Gamma(n_mu);
+    std::vector<TCSR<CPX>*> Gamma(n_mu);
     if (method!=transport_methods::PBC) {
 sabtime=get_time(d_zer);
         TCSR<CPX> *SumHamC = new TCSR<CPX>(Overlap->size,Overlap->n_nonzeros,Overlap->findx);
@@ -55,7 +54,7 @@ if (!worldrank) cout << "TIME FOR SumHamC " << get_time(sabtime) << endl;
         SumHamC->settozeropbc(bandwidth,ndof);
 //SumHamC->remove_thr(1.0E-6);
 // compute self energies
-        vector<BoundarySelfEnergy> selfenergies(n_mu);
+        std::vector<BoundarySelfEnergy> selfenergies(n_mu);
         if (matrix_procs>1 && matrix_procs%n_mu) {
             if (!matrix_rank) cout << "Choose number of tasks per energy point as one or a multiple of number of contacts" << endl;
             return (LOGCERR, EXIT_FAILURE);

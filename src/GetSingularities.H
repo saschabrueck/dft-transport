@@ -10,7 +10,7 @@
 
 class Singularities {
 public:
-Singularities(transport_parameters*,contact_type*);
+Singularities(transport_parameters*,vector<contact_type>);
 int Execute(TCSR<double>*,TCSR<double>*);
 double determine_fermi(double,int);
 void write_bandstructure(int);
@@ -40,7 +40,7 @@ int rank_bs_comm;
 MPI_Comm equal_bs_rank_comm;
 std::vector<int> master_ranks;
 
-contact_type *contactvec;
+std::vector<contact_type> contactvec;
 
 std::vector< std::vector<double> > curvatures_extremum;
 std::vector< std::vector<double> > kval_extremum;

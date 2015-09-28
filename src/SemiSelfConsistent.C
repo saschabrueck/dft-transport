@@ -15,8 +15,8 @@ int semiselfconsistent(TCSR<double> *Overlap,TCSR<double> *KohnSham,transport_pa
 
     if ( Overlap->size_tot%transport_params->n_cells || transport_params->bandwidth<1 ) return (LOGCERR, EXIT_FAILURE);
     int n_mu=transport_params->num_contacts;
-    double *muvec = new double[n_mu];
-    contact_type *contactvec = new contact_type[n_mu];
+    std::vector<double> muvec(n_mu);
+    std::vector<contact_type> contactvec(n_mu);
     for (int i_mu=0;i_mu<n_mu;i_mu++) {
         contactvec[i_mu].bandwidth=transport_params->bandwidth;
         contactvec[i_mu].ndof=Overlap->size_tot/transport_params->n_cells; // ONLY IF ALL CELLS EQUAL
@@ -62,9 +62,9 @@ if (!iam) cout << "DOPING " << doping_cell[0] << " " << doping_cell[transport_pa
     ifstream fermilevelfile("OMEN_F");
     if (fermilevelfile) {
         for (int i_mu=0;i_mu<n_mu;i_mu++) fermilevelfile >> muvec[i_mu];
-        Vm=std::accumulate(muvec,muvec+n_mu,0.0)/n_mu;
+        Vm=std::accumulate(muvec.begin(),muvec.end(),0.0)/n_mu;
         for (int i_mu=0;i_mu<n_mu;i_mu++) fermilevelfile >> muvec[i_mu];
-        double mu_avg=std::accumulate(muvec,muvec+n_mu,0.0)/n_mu;
+        double mu_avg=std::accumulate(muvec.begin(),muvec.end(),0.0)/n_mu;
         dV=(muvec[0]-muvec[1])/2.0;
         double min_cond_band_edge;
         fermilevelfile >> min_cond_band_edge;
@@ -75,10 +75,10 @@ if (!iam) cout << "DOPING " << doping_cell[0] << " " << doping_cell[transport_pa
         Singularities singularities(transport_params,contactvec);
         if ( singularities.Execute(KohnSham,Overlap) ) return (LOGCERR, EXIT_FAILURE);
         for (int i_mu=0;i_mu<n_mu;i_mu++) muvec[i_mu]=singularities.determine_fermi(0.0,i_mu);
-        Vm=std::accumulate(muvec,muvec+n_mu,0.0)/n_mu;
+        Vm=std::accumulate(muvec.begin(),muvec.end(),0.0)/n_mu;
         muvec[0]=singularities.determine_fermi(doping_cell[0],0);
         muvec[1]=singularities.determine_fermi(doping_cell[transport_params->n_cells-1],1);
-        double mu_avg=std::accumulate(muvec,muvec+n_mu,0.0)/n_mu;
+        double mu_avg=std::accumulate(muvec.begin(),muvec.end(),0.0)/n_mu;
         dV=(muvec[0]-muvec[1])/2.0;
         Vg+=mu_avg-*min_element(singularities.energies_cb.begin(),singularities.energies_cb.end());
         muvec[0]=mu_avg-Vs;
