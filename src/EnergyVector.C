@@ -17,7 +17,7 @@ Energyvector::~Energyvector()
 {
 }
 
-int Energyvector::Execute(TCSR<double> *Overlap,TCSR<double> *KohnSham,double *muvec, contact_type *contactvec,transport_parameters *transport_params)
+int Energyvector::Execute(TCSR<double> *Overlap,TCSR<double> *KohnSham,std::vector<double> muvec,std::vector<contact_type> contactvec,transport_parameters *transport_params)
 {
     double sabtime;
 // allocate matrices to gather on every node
@@ -74,6 +74,21 @@ if (!iam) cout << "TIME FOR DENSITY " << get_time(sabtime) << endl;
             myfile << real(energyvector[iele]) << " " << imag(energyvector[iele]) << " " << real(stepvector[iele]) << " " << imag(stepvector[iele]) << " " << transmission2[iele] << endl;
         myfile.close();
     }
+    if (!iam) {
+        myfile.open("CurrentFromTransmission");
+        myfile.precision(15);
+        for (int ibias=1;ibias<=12;ibias++) {
+            double current = 0.0;
+            for (uint iele=0;iele<energyvector.size();iele++) {
+                if (!imag(energyvector[iele])) {
+                    double diff_fermi = fermi(real(energyvector[iele]),muvec[0],transport_params->temperature,0)-fermi(real(energyvector[iele]),muvec[0]+ibias*0.05,transport_params->temperature,0);
+                    current += 2.0*E_ELECTRON*E_ELECTRON/(2.0*M_PI*H_BAR)*diff_fermi*real(stepvector[iele])*(-transmission2[iele]);
+                }
+            }
+            myfile << ibias*0.05 << " " << current << endl;
+        }
+        myfile.close();
+    }
     if (!iam) cout << "CURRENT IS " << c_ddot(energyvector.size(),&currentvector2[0],1,(double*)&stepvector[0],2) << endl;
 
     MPI_Reduce(Ps->nnz,Overlap->nnz,Ps->n_nonzeros,MPI_DOUBLE,MPI_SUM,0,eq_rank_matrix_comm);
@@ -84,9 +99,8 @@ if (!iam) cout << "TIME FOR DENSITY " << get_time(sabtime) << endl;
     return 0;
 }
 
-int Energyvector::determine_energyvector(std::vector<CPX> &energyvector,std::vector<CPX> &stepvector,std::vector<transport_methods::transport_method> &methodvector,std::vector< std::vector<int> > &propagating_sizes,TCSR<double> *KohnSham,TCSR<double> *Overlap,double *muvec,contact_type *contactvec,transport_parameters *transport_params)
+int Energyvector::determine_energyvector(std::vector<CPX> &energyvector,std::vector<CPX> &stepvector,std::vector<transport_methods::transport_method> &methodvector,std::vector< std::vector<int> > &propagating_sizes,TCSR<double> *KohnSham,TCSR<double> *Overlap,std::vector<double> &muvec,std::vector<contact_type> contactvec,transport_parameters *transport_params)
 {
-    int n_mu=transport_params->num_contacts;
     ifstream evecfile("OMEN_E");
     if (evecfile) {
         energyvector.clear();
@@ -105,19 +119,19 @@ int Energyvector::determine_energyvector(std::vector<CPX> &energyvector,std::vec
             stepvector.push_back((energyvector[energyvector.size()-1]-energyvector[energyvector.size()-2])/2.0);
         }
         propagating_sizes.resize(energyvector.size());
-        for (uint ie=0;ie<energyvector.size();ie++) propagating_sizes[ie].resize(n_mu,-1);
+        for (uint ie=0;ie<energyvector.size();ie++) propagating_sizes[ie].resize(contactvec.size(),-1);
     } else {
 double sabtime=get_time(0.0);
         double Temp=transport_params->temperature;
         Singularities singularities(transport_params,contactvec);
         if ( singularities.Execute(KohnSham,Overlap) ) return (LOGCERR, EXIT_FAILURE);
-        if (transport_params->method==3) for (int i_mu=0;i_mu<n_mu;i_mu++) muvec[i_mu]=singularities.determine_fermi(transport_params->ndof,i_mu);
+        if (transport_params->method==3) for (uint i_mu=0;i_mu<muvec.size();i_mu++) muvec[i_mu]=singularities.determine_fermi(transport_params->ndof,i_mu);
 if (!iam) cout << "TIME FOR SINGULARITIES " << get_time(sabtime) << endl;
-for (int i_mu=0;i_mu<n_mu;i_mu++) singularities.write_bandstructure(i_mu);
+for (uint i_mu=0;i_mu<contactvec.size();i_mu++) singularities.write_bandstructure(i_mu);
  
         double delta_eps_fermi=-log((numeric_limits<double>::epsilon)())*K_BOLTZMANN*Temp;
-        double muvec_min=*min_element(muvec,muvec+n_mu);
-        double muvec_max=*max_element(muvec,muvec+n_mu);
+        double muvec_min=*min_element(muvec.begin(),muvec.end());
+        double muvec_max=*max_element(muvec.begin(),muvec.end());
         double nonequi_start=muvec_min-delta_eps_fermi;
         double nonequi_end=muvec_max+delta_eps_fermi;
         double energy_vb=*max_element(singularities.energies_vb.begin(),singularities.energies_vb.end());
@@ -147,17 +161,34 @@ for (int i_mu=0;i_mu<n_mu;i_mu++) singularities.write_bandstructure(i_mu);
         }
 // get propagating modes from bandstructure
         propagating_sizes.resize(energyvector.size());
-        for (uint ie=0;ie<energyvector.size();ie++) propagating_sizes[ie].resize(n_mu);
+        for (uint ie=0;ie<energyvector.size();ie++) propagating_sizes[ie].resize(contactvec.size());
         if (!iam) {
             std::vector< std::vector< std::vector<double> > > propagating = singularities.get_propagating(energyvector);
             for (uint ie=0;ie<energyvector.size();ie++) {
-                for (int i_mu=0;i_mu<n_mu;i_mu++) {
+                for (uint i_mu=0;i_mu<contactvec.size();i_mu++) {
                     propagating_sizes[ie][i_mu]=propagating[i_mu][ie].size();
                 }
             }
         }
         for (uint ie=0;ie<energyvector.size();ie++) {
-            MPI_Bcast(&propagating_sizes[ie][0],n_mu,MPI_INT,0,MPI_COMM_WORLD);
+            MPI_Bcast(&propagating_sizes[ie][0],contactvec.size(),MPI_INT,0,MPI_COMM_WORLD);
+        }
+        if (!iam && contactvec.size()>muvec.size()) {
+            ofstream myfile;
+            myfile.open("CurrentFromBandstructure");
+            myfile.precision(15);
+            for (int ibias=1;ibias<=12;ibias++) {
+                double current = 0.0;
+                for (uint iele=0;iele<energyvector.size();iele++) {
+                    double cb_max = *max_element(singularities.energies_cb.begin(),singularities.energies_cb.end());
+                    if (!imag(energyvector[iele]) && real(energyvector[iele])>cb_max) {
+                        double diff_fermi = fermi(real(energyvector[iele]),muvec[0],transport_params->temperature,0)-fermi(real(energyvector[iele]),muvec[0]+ibias*0.05,transport_params->temperature,0);
+                        current += 2.0*E_ELECTRON*E_ELECTRON/(2.0*M_PI*H_BAR)*diff_fermi*real(stepvector[iele])*propagating_sizes[iele][contactvec.size()-1];
+                    }
+                }
+                myfile << ibias*0.05 << " " << current << endl;
+            }
+            myfile.close();
         }
     }
     evecfile.close();
