@@ -10,7 +10,7 @@
 
 class Singularities {
 public:
-Singularities(transport_parameters*,vector<contact_type>);
+Singularities(transport_parameters*,std::vector<contact_type>);
 int Execute(TCSR<double>*,TCSR<double>*);
 double determine_fermi(double,int);
 void write_bandstructure(int);
