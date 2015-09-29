@@ -53,7 +53,6 @@ if (!iam) cout << "TIME FOR DENSITY " << get_time(sabtime) << endl;
     delete KohnShamCollect;
     delete OverlapCollect;
 // trPS per energy point
-    ofstream myfile;
     std::vector<double> currentvector2(energyvector.size(),0.0);
     std::vector<double> transmission2(energyvector.size(),0.0);
     std::vector<double> dos_profile2(energyvector.size(),0.0);
@@ -61,27 +60,28 @@ if (!iam) cout << "TIME FOR DENSITY " << get_time(sabtime) << endl;
     MPI_Allreduce(&transmission[0],&transmission2[0],energyvector.size(),MPI_DOUBLE,MPI_SUM,MPI_COMM_WORLD);
     MPI_Allreduce(&dos_profile[0],&dos_profile2[0],energyvector.size(),MPI_DOUBLE,MPI_SUM,MPI_COMM_WORLD);
     if (!iam) {
-        myfile.open("DOS_Profile");
+        ofstream myfile("DOS_Profile");
         myfile.precision(15);
         for (uint iele=0;iele<energyvector.size();iele++)
             myfile << real(energyvector[iele]) << " " << imag(energyvector[iele]) << " " << real(stepvector[iele]) << " " << imag(stepvector[iele]) << " " << dos_profile2[iele] << endl;
         myfile.close();
     }
     if (!iam) {
-        myfile.open("Transmission");
+        ofstream myfile("Transmission");
         myfile.precision(15);
         for (uint iele=0;iele<energyvector.size();iele++)
-            myfile << real(energyvector[iele]) << " " << imag(energyvector[iele]) << " " << real(stepvector[iele]) << " " << imag(stepvector[iele]) << " " << transmission2[iele] << endl;
+            if (!imag(energyvector[iele]))
+                myfile << real(energyvector[iele]) << " " << real(stepvector[iele]) << " " << transmission2[iele] << endl;
         myfile.close();
     }
     if (!iam) {
-        myfile.open("CurrentFromTransmission");
+        ofstream myfile("CurrentFromTransmission");
         myfile.precision(15);
         for (int ibias=1;ibias<=12;ibias++) {
             double current = 0.0;
             for (uint iele=0;iele<energyvector.size();iele++) {
                 if (!imag(energyvector[iele])) {
-                    double diff_fermi = fermi(real(energyvector[iele]),muvec[0],transport_params->temperature,0)-fermi(real(energyvector[iele]),muvec[0]+ibias*0.05,transport_params->temperature,0);
+                    double diff_fermi = fermi(real(energyvector[iele]),muvec[0]+ibias*0.05,transport_params->temperature,0)-fermi(real(energyvector[iele]),muvec[0],transport_params->temperature,0);
                     current += 2.0*E_ELECTRON*E_ELECTRON/(2.0*M_PI*H_BAR)*diff_fermi*real(stepvector[iele])*(-transmission2[iele]);
                 }
             }
@@ -151,8 +151,7 @@ for (uint i_mu=0;i_mu<contactvec.size();i_mu++) singularities.write_bandstructur
             add_real_axis_energies(nonequi_start,nonequi_end,energyvector,stepvector,methodvector,singularities.energies_extremum,transport_params);
         }
         if (!iam) {
-            ofstream myfile;
-            myfile.open("E_dat");
+            ofstream myfile("E_dat");
             myfile.precision(15);
             myfile << energyvector.size() << endl;
             for (uint iele=0;iele<energyvector.size();iele++)
@@ -174,20 +173,28 @@ for (uint i_mu=0;i_mu<contactvec.size();i_mu++) singularities.write_bandstructur
             MPI_Bcast(&propagating_sizes[ie][0],contactvec.size(),MPI_INT,0,MPI_COMM_WORLD);
         }
         if (!iam && contactvec.size()>muvec.size()) {
-            ofstream myfile;
-            myfile.open("CurrentFromBandstructure");
+            ofstream myfile("CurrentFromBandstructure");
             myfile.precision(15);
+            double cb_max = *max_element(singularities.energies_cb.begin(),singularities.energies_cb.end());
             for (int ibias=1;ibias<=12;ibias++) {
                 double current = 0.0;
                 for (uint iele=0;iele<energyvector.size();iele++) {
-                    double cb_max = *max_element(singularities.energies_cb.begin(),singularities.energies_cb.end());
                     if (!imag(energyvector[iele]) && real(energyvector[iele])>cb_max) {
-                        double diff_fermi = fermi(real(energyvector[iele]),muvec[0],transport_params->temperature,0)-fermi(real(energyvector[iele]),muvec[0]+ibias*0.05,transport_params->temperature,0);
+                        double diff_fermi = fermi(real(energyvector[iele]),muvec[0]+ibias*0.05,transport_params->temperature,0)-fermi(real(energyvector[iele]),muvec[0],transport_params->temperature,0);
                         current += 2.0*E_ELECTRON*E_ELECTRON/(2.0*M_PI*H_BAR)*diff_fermi*real(stepvector[iele])*propagating_sizes[iele][contactvec.size()-1];
                     }
                 }
                 myfile << ibias*0.05 << " " << current << endl;
             }
+            myfile.close();
+        }
+        if (!iam && contactvec.size()>muvec.size()) {
+            ofstream myfile("TransmissionFromBandstructure");
+            myfile.precision(15);
+            double cb_max = *max_element(singularities.energies_cb.begin(),singularities.energies_cb.end());
+            for (uint iele=0;iele<energyvector.size();iele++)
+                if (!imag(energyvector[iele]))
+                    myfile << real(energyvector[iele]) << " " << real(stepvector[iele]) << " " << (real(energyvector[iele])>cb_max)*propagating_sizes[iele][contactvec.size()-1] << endl;
             myfile.close();
         }
     }
