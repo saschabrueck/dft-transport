@@ -102,28 +102,22 @@ int BoundarySelfEnergy::Cutout(TCSR<CPX> *SumHamC,contact_type pcontact,CPX pene
     delete H0cut;
     delete H1cut;
     if (iam==master_rank) {
-        H0->shift_resize(start,ntriblock,start,ntriblock);
-        H1->shift_resize(start,ntriblock,start+inj_sign*ntriblock,ntriblock);
         H1t = new TCSR<CPX>(H1->size,H1->n_nonzeros,H1->findx);
         H1t->sparse_transpose(H1);
         H = new TCSR<CPX>*[2*bandwidth+1];
         if (contact.inj_sign==+1) {
             for (int ibw=bandwidth;ibw<2*bandwidth;ibw++) {
                 H[ibw] = new TCSR<CPX>(H0,0,ndof,(ibw-bandwidth)*ndof,ndof);
-                H[ibw]->shift_resize(0,ndof,(ibw-bandwidth)*ndof,ndof);
             }
             H[2*bandwidth] = new TCSR<CPX>(H1,0,ndof,0,ndof);
-            H[2*bandwidth]->shift_resize(0,ndof,0,ndof);
             for (int ibw=1;ibw<=bandwidth;ibw++) {
                 H[bandwidth-ibw] = new TCSR<CPX>(H[bandwidth+ibw]);
                 H[bandwidth-ibw]->sparse_transpose(H[bandwidth+ibw]);
             }
         } else if (contact.inj_sign==-1) {
             H[0] =  new TCSR<CPX>(H1,ntriblock-ndof,ndof,ntriblock-ndof,ndof);
-            H[0]->shift_resize(ntriblock-ndof,ndof,ntriblock-ndof,ndof);
             for (int ibw=1;ibw<bandwidth+1;ibw++) {
                 H[ibw] = new TCSR<CPX>(H0,ntriblock-ndof,ndof,(ibw-1)*ndof,ndof);
-                H[ibw]->shift_resize(ntriblock-ndof,ndof,(ibw-1)*ndof,ndof);
             }
             for (int ibw=1;ibw<=bandwidth;ibw++) {
                 H[bandwidth+ibw] = new TCSR<CPX>(H[bandwidth-ibw]);
@@ -226,10 +220,17 @@ int worldrank; MPI_Comm_rank(MPI_COMM_WORLD,&worldrank);
     lambdavec=new CPX[2*bandwidth*ndof];
     eigvecc=new CPX[ndof*2*bandwidth*ndof];
     sabtime=get_time(d_zer);
-    if (eps_limit==1.0E-1) {
-        InjectionBeyn<double> *k_inj = new InjectionBeyn<double>(2*bandwidth,1.0/eps_limit);
-        int neigbeyn=ndof/5;//THIS IS 2*NM
-
+    int do_beyn=0;
+    if (do_beyn) {
+        Injection *k_inj;
+        int neigbeyn; // NUMBER OF RANDOM VECTORS
+        if (complexenergypoint) {
+            k_inj = new InjectionBeyn<CPX>(2*bandwidth,1.0/eps_limit);
+            neigbeyn=ndof;
+        } else {
+            k_inj = new InjectionBeyn<double>(2*bandwidth,1.0/eps_limit);
+            neigbeyn=ndof/5;
+        }
         int *nonzH = new int[nblocksband];
         int findxH;
         if (!boundary_rank) {
@@ -383,8 +384,7 @@ if (!boundary_rank) {
     CPX *matcpx=new CPX[ntriblock*neigbas];
     CPX *invgrs=new CPX[neigbas*neigbas];
     sabtime=get_time(d_zer);
-    int dotheh0ph1 = 0;
-    if (dotheh0ph1) {
+    if (eps_limit<1.0E-4) {
         full_transpose(neigbas,ntriblock,Vref,VT);
         H1t->trans_mat_vec_mult(VT,matcpx,neigbas,1);
         c_zgemm('T','N',neigbas,neigbas,ntriblock,z_one,Vref,ntriblock,matcpx,ntriblock,z_zer,invgrs,neigbas);
@@ -416,6 +416,7 @@ if (!worldrank) cout << "TIME FOR MATRIX MATRIX MULTIPLICATIONS FOR INVERSE OF G
     if (iinfo) return (LOGCERR, EXIT_FAILURE);
     delete[] cworkcond;
     delete[] dworkcond;
+if (!boundary_rank) cout<<worldrank<<" HAS CONDITION NUMBER "<<rcond<<" SIGN "<<inj_sign<<endl;
     if (rcond<numeric_limits<double>::epsilon()) return (LOGCERR, EXIT_FAILURE);
     sigma = new CPX[triblocksize];
     CPX* RCOR = new CPX[ntriblock*neigbas];
@@ -501,6 +502,17 @@ if (!worldrank) cout << "TIME FOR INVERSION AND MATRIX MATRIX MULTIPLICATIONS FO
         delete[] presigma;
     }
 if (!worldrank) cout << "TIME FOR SYMMETRIZATION " << get_time(sabtime) << endl;
+// */
+
+// ONLY CHANGES THE RESULT SLIGHTLY BUT IS IMPORTANT FOR PEXSI
+// /*
+    for (int i=0;i<ntriblock;i++) for (int j=0;j<i;j++) {
+        sigma[i+ntriblock*j]+=sigma[j+ntriblock*i];
+        sigma[i+ntriblock*j]*=0.5;
+    }
+    for (int i=0;i<ntriblock;i++) for (int j=0;j<i;j++) {
+        sigma[j+ntriblock*i]=sigma[i+ntriblock*j];
+    }
 // */
 
     if (compute_inj) {

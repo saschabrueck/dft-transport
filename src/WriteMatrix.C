@@ -12,7 +12,6 @@ void write_matrix(TCSR<double> *Overlap,TCSR<double> *KohnSham,transport_paramet
             TCSR<double> *Cut = new TCSR<double>(CutG,0,MPI_COMM_WORLD);
             delete CutG;
             if (!iam) {
-                Cut->shift_resize(bigblocksize,cutblocksize,i*bigblocksize,cutblocksize);
                 stringstream mysstream;
                 mysstream << "H_" << i+3 << ".bin";
                 Cut->write_CSR_bin(mysstream.str().c_str());
@@ -24,7 +23,6 @@ void write_matrix(TCSR<double> *Overlap,TCSR<double> *KohnSham,transport_paramet
             TCSR<double> *Cut = new TCSR<double>(CutG,0,MPI_COMM_WORLD);
             delete CutG;
             if (!iam) {
-                Cut->shift_resize(bigblocksize,cutblocksize,i*bigblocksize,cutblocksize);
                 stringstream mysstream;
                 mysstream << "S_" << i+3 << ".bin";
                 Cut->write_CSR_bin(mysstream.str().c_str());

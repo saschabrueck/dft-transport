@@ -91,8 +91,6 @@ int Singularities::Execute(TCSR<double> *KohnSham,TCSR<double> *Overlap)
         }
         if (!rank_bs_comm) {
             for (int ibw=0;ibw<=bandwidth;ibw++) {
-                H[bandwidth+inj_sign*ibw]->shift_resize(start,ndof,start+inj_sign*ibw*ndof,ndof);
-                S[bandwidth+inj_sign*ibw]->shift_resize(start,ndof,start+inj_sign*ibw*ndof,ndof);
             }
         }
         for (int ibw=1;ibw<=bandwidth;ibw++) {

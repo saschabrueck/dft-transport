@@ -142,7 +142,6 @@ for (uint i_mu=0;i_mu<contactvec.size();i_mu++) singularities.write_bandstructur
             transport_params->n_abscissae=0;
             add_real_axis_energies(energy_cb,nonequi_end,energyvector,stepvector,methodvector,singularities.energies_extremum,transport_params);
         } else if (transport_params->n_abscissae<0) {
-            transport_params->n_abscissae=-transport_params->n_abscissae;
             add_cmpx_cont_energies(singularities.energy_gs,muvec_min,energyvector,stepvector,methodvector,transport_params);
         } else if (transport_params->n_abscissae==0) {
             add_real_axis_energies(nonequi_start,nonequi_end,energyvector,stepvector,methodvector,singularities.energies_extremum,transport_params);
@@ -242,10 +241,10 @@ void Energyvector::add_real_axis_energies(double nonequi_start,double nonequi_en
 void Energyvector::add_cmpx_cont_energies(double start,double mu,std::vector<CPX> &energyvector,std::vector<CPX> &stepvector,std::vector<transport_methods::transport_method> &methodvector,transport_parameters *transport_params)
 {
     double Temp=transport_params->temperature;
+    int num_points_on_contour=abs(transport_params->n_abscissae);
     enum choose_method {do_pexsi,do_pole_summation,do_contour,do_line};
     choose_method method=do_pexsi;
     if (method==do_pexsi) {
-        int num_points_on_contour=transport_params->n_abscissae;
         energyvector.resize(num_points_on_contour);
         stepvector.resize(num_points_on_contour);
         double EM=abs(mu-start); // Max|E-mu| for all Eigenvalues E of 
@@ -280,13 +279,17 @@ void Energyvector::add_cmpx_cont_energies(double start,double mu,std::vector<CPX
             stepvector.push_back(CPX(2.0*M_PI*K_BOLTZMANN*Temp_i,0.0)*(fermi(zval,CPX(1.0,0.0)*mu,Temp,0)-fermi(zval,CPX(1.0,0.0)*mu_r,Temp_r,0)));
         }
     } else if (method==do_contour) {
-        Quadrature quadrature(quadrature_types::CCGL,start,mu,transport_params->n_abscissae);//mu is end here
+        Quadrature quadrature(quadrature_types::CCGL,start,mu,num_points_on_contour);//mu is end here
         energyvector.insert(energyvector.end(),quadrature.abscissae.begin(),quadrature.abscissae.end());
         stepvector.insert(stepvector.end(),quadrature.weights.begin(),quadrature.weights.end());
     } else if (method==do_line) {
-        Quadrature quadrature(quadrature_types::MR,start,mu,transport_params->n_abscissae);//mu is end here
+        Quadrature quadrature(quadrature_types::MR,start,mu,num_points_on_contour);//mu is end here
         energyvector.insert(energyvector.end(),quadrature.abscissae.begin(),quadrature.abscissae.end());
         stepvector.insert(stepvector.end(),quadrature.weights.begin(),quadrature.weights.end());
     }
-    methodvector.resize(energyvector.size(),transport_methods::PBC);
+    if (transport_params->n_abscissae<0) {
+        methodvector.resize(energyvector.size(),transport_methods::PBC);
+    } else {
+        methodvector.resize(energyvector.size(),transport_methods::GF);
+    }
 }
