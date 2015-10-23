@@ -96,12 +96,10 @@ public:
 // sab begin
     void write_CSR_bin(const char*);
     void mat_vec_mult_add(T*,T*,int,T);
-    void shift_resize(int,int,int,int);
-    void replicate_cell(int,int,int,int,MPI_Comm);
-    void fill_pbc_block(TCSR<T>*,int,int,int,MPI_Comm);
     int additionalentries(TCSR<T>*);
     void add(TCSR<T>*,T);
     void add_real(TCSR<CPX>*,CPX);
+    void copy_shifted(TCSR<T>*,int,int,int,int);
     void add_pot(TCSR<T>*,T*);
     void Bcast(int,MPI_Comm);
     void scatter(TCSR<T>*,int,MPI_Comm);
@@ -196,16 +194,22 @@ inline TCSR<T>::TCSR(TCSR<T> *mat)
 template <class T>
 inline TCSR<T>::TCSR(TCSR<T> *mat,int istart, int ilength, int jstart, int jlength)
 {
-    size       = mat->size;
-    size_tot   = mat->size_tot;
-    type       = mat->type;
-    findx      = mat->findx;
-    first_row  = mat->first_row;
+    if (istart<0)                     throw CSR_Exception(__LINE__,__FILE__);
+    if (jstart<0)                     throw CSR_Exception(__LINE__,__FILE__);
+    if (ilength<0)                    throw CSR_Exception(__LINE__,__FILE__);
+    if (jlength<0)                    throw CSR_Exception(__LINE__,__FILE__);
+    if (istart+ilength>mat->size_tot) throw CSR_Exception(__LINE__,__FILE__);
 
     int iend       = istart+ilength;
     int jend       = jstart+jlength;
-    int loc_istart = max(0,min(size,istart-first_row));
-    int loc_iend   = max(0,min(size,iend-first_row));
+    int loc_istart = max(0,min(mat->size,istart-mat->first_row));
+    int loc_iend   = max(0,min(mat->size,iend-mat->first_row));
+
+    size       = loc_iend-loc_istart;
+    size_tot   = ilength;
+    type       = mat->type;
+    findx      = mat->findx;
+    first_row  = min(ilength,max(0,mat->first_row-istart));
 
     n_nonzeros = 0;
 
@@ -229,8 +233,8 @@ inline TCSR<T>::TCSR(TCSR<T> *mat,int istart, int ilength, int jstart, int jleng
     for (int i=loc_istart;i<loc_iend;i++) {
         for(int e=mat->edge_i[i]-mat->findx;e<mat->edge_i[i+1]-mat->findx;e++){
             if(mat->index_j[e]-mat->findx>=jstart && mat->index_j[e]-mat->findx<jend){
-                index_i[i]++;
-                index_j[n_nonzeros]=mat->index_j[e];
+                index_i[i-loc_istart]++;
+                index_j[n_nonzeros]=mat->index_j[e]-jstart;
                 nnz[n_nonzeros]=mat->nnz[e];
                 n_nonzeros++;
             }
@@ -1680,153 +1684,6 @@ inline void TCSR<CPX>::mat_vec_mult_add(CPX *in, CPX *out, int nrhs, CPX fac)
 /************************************************************************************************/
 
 template <class T>
-void TCSR<T>::shift_resize(int istart, int ilength, int jstart, int jlength)
-{
-    if (first_row)           throw CSR_Exception(__LINE__,__FILE__);
-    if (istart<0)            throw CSR_Exception(__LINE__,__FILE__);
-    if (istart+ilength>size) throw CSR_Exception(__LINE__,__FILE__);
-
-    for (int e=0;e<n_nonzeros;e++){
-        index_j[e]-=jstart;
-        if (index_j[e]-findx<0)        throw CSR_Exception(__LINE__,__FILE__);
-        if (index_j[e]-findx>=jlength) throw CSR_Exception(__LINE__,__FILE__);
-    }
-
-    for (int i=0;i<ilength;i++){
-        index_i[i]=index_i[i+istart];
-    }
-
-    size = ilength;
-    size_tot = ilength;
-
-    get_row_edge();
-    get_diag_pos();
-}
-
-/************************************************************************************************/
-
-template <class T>
-void TCSR<T>::replicate_cell(int ndof,int bandw,int contact,int strinum,MPI_Comm my_comm)
-{
-    int i,e;
-    T* linefull = new T[(2*bandw+1)*ndof];
-    if (contact==1) {
-        TCSR<T> *Pscut = new TCSR<T>(this,strinum*ndof,ndof,0,size_tot*ndof);
-        TCSR<T> *Pcell = new TCSR<T>(Pscut,my_comm);
-        delete Pscut;
-        for (int i_elem=strinum*ndof;i_elem<(strinum+1)*ndof;i_elem++) {
-            for (e=Pcell->edge_i[i_elem]-Pcell->findx;e<Pcell->edge_i[i_elem+1]-Pcell->findx;e++) {
-                Pcell->index_j[e]=(Pcell->index_j[e]+(bandw-strinum)*ndof+size_tot)%size_tot;
-            }
-        }
-        Pcell->shift_resize(strinum*ndof,ndof,0,(2*bandw+1)*ndof);
-        for (i=0;i<size;i++) {
-            int i_band=(i+first_row)/ndof;
-            int i_elem=(i+first_row)%ndof;
-            if (i_band<bandw) {
-                init_variable(linefull,(2*bandw+1)*ndof);
-                for (e=Pcell->edge_i[i_elem]-Pcell->findx;e<Pcell->edge_i[i_elem+1]-Pcell->findx;e++) {
-                    linefull[Pcell->index_j[e]-Pcell->findx]=Pcell->nnz[e];
-                }
-                for (e=edge_i[i]-findx;e<edge_i[i+1]-findx;e++) {
-                    nnz[e]=linefull[(index_j[e]-findx+(bandw-i_band)*ndof+size_tot)%size_tot];
-                }
-            }
-        }
-        delete Pcell;
-    } else if (contact==-1) {
-        TCSR<T> *Pscut = new TCSR<T>(this,size_tot-(strinum+1)*ndof,ndof,0,size_tot*ndof);
-        TCSR<T> *Pcell = new TCSR<T>(Pscut,my_comm);
-        delete Pscut;
-        for (int i_elem=size_tot-(strinum+1)*ndof;i_elem<size_tot-strinum*ndof;i_elem++) {
-            for (e=Pcell->edge_i[i_elem]-Pcell->findx;e<Pcell->edge_i[i_elem+1]-Pcell->findx;e++) {
-                Pcell->index_j[e]=(Pcell->index_j[e]-(bandw-strinum)*ndof+size_tot)%size_tot;
-            }
-        }
-        Pcell->shift_resize(size_tot-(strinum+1)*ndof,ndof,size_tot-(2*bandw+1)*ndof,(2*bandw+1)*ndof);
-        for (i=0;i<size;i++) {
-            int i_band=(i+first_row)/ndof;
-            int i_elem=(i+first_row)%ndof;
-            if (i_band>size_tot/ndof-bandw-1) {
-                init_variable(linefull,(2*bandw+1)*ndof);
-                for (e=Pcell->edge_i[i_elem]-Pcell->findx;e<Pcell->edge_i[i_elem+1]-Pcell->findx;e++) {
-                    linefull[Pcell->index_j[e]-Pcell->findx]=Pcell->nnz[e];
-                }
-                for (e=edge_i[i]-findx;e<edge_i[i+1]-findx;e++) {
-                    nnz[e]=linefull[(index_j[e]-findx+(bandw-i_band)*ndof+size_tot)%size_tot];
-                }
-            }
-        }
-        delete Pcell;
-    }
-    delete[] linefull;
-}
-
-/************************************************************************************************/
-
-template <class T>
-void TCSR<T>::fill_pbc_block(TCSR<T> *A,int ndof,int bandw,int contact,MPI_Comm my_comm)
-{
-    if (size      != A->size      ) throw CSR_Exception(__LINE__,__FILE__);
-    if (size_tot  != A->size_tot  ) throw CSR_Exception(__LINE__,__FILE__);
-    if (type      != A->type      ) throw CSR_Exception(__LINE__,__FILE__);
-    if (first_row != A->first_row ) throw CSR_Exception(__LINE__,__FILE__);
-
-    int i,e;
-    T* linefull = new T[size_tot];
-    if (contact==1) {
-        TCSR<T> **Pcell = new TCSR<T>*[bandw];
-        for (int i_band=0;i_band<bandw;i_band++) {
-            TCSR<T> *Pscut = new TCSR<T>(A,(i_band+1)*ndof,(bandw-i_band)*ndof,0,ndof);
-            Pcell[i_band] = new TCSR<T>(Pscut,my_comm);
-            delete Pscut;
-            Pcell[i_band]->shift_resize((i_band+1)*ndof,bandw*ndof,-A->size_tot+(i_band+1)*ndof,size_tot);
-        }
-        TCSR<T> *Pblock = new TCSR<T>(bandw,NULL,Pcell,size_tot);
-        for (int i_band=0;i_band<bandw;i_band++) {
-            delete Pcell[i_band];
-        }
-        delete[] Pcell;
-        for (i=0;i<Pblock->size;i++) {
-            init_variable(linefull,size_tot);
-            for (e=Pblock->edge_i[i]-Pblock->findx;e<Pblock->edge_i[i+1]-Pblock->findx;e++) {
-                linefull[Pblock->index_j[e]-Pblock->findx]=Pblock->nnz[e];
-            }
-            for (e=edge_i[i]-findx;e<edge_i[i+1]-findx;e++) {
-                nnz[e]=linefull[index_j[e]-findx];
-            }
-        }
-        delete Pblock;
-    } else if (contact==-1) {
-        TCSR<T> **Pcell = new TCSR<T>*[bandw];
-        for (int i_band=0;i_band<bandw;i_band++) {
-            TCSR<T> *Pscut = new TCSR<T>(A,size_tot-(bandw+1+i_band)*ndof,bandw*ndof,size_tot-ndof,ndof);
-            Pcell[i_band] = new TCSR<T>(Pscut,my_comm);
-            delete Pscut;
-            Pcell[i_band]->shift_resize(size_tot-(bandw+1+i_band)*ndof,bandw*ndof,size_tot-(i_band+1)*ndof,size_tot);
-        }
-        TCSR<T> *Pblock = new TCSR<T>(bandw,NULL,Pcell,size_tot);
-        for (int i_band=0;i_band<bandw;i_band++) {
-            delete Pcell[i_band];
-        }
-        delete[] Pcell;
-        for (i=0;i<Pblock->size;i++) {
-            init_variable(linefull,size_tot);
-            for (e=Pblock->edge_i[i]-Pblock->findx;e<Pblock->edge_i[i+1]-Pblock->findx;e++) {
-                linefull[Pblock->index_j[e]-Pblock->findx]=Pblock->nnz[e];
-            }
-            for (e=edge_i[i+size_tot-bandw*ndof]-findx;e<edge_i[i+size_tot-bandw*ndof+1]-findx;e++) {
-                nnz[e]=linefull[index_j[e]-findx];
-            }
-        }
-        delete Pblock;
-    }
-    delete[] linefull;
-}
-
-/************************************************************************************************/
-
-template <class T>
 int TCSR<T>::additionalentries(TCSR<T> *mat)
 {
     int additional=0;
@@ -1894,6 +1751,28 @@ inline void TCSR<double>::add_real(TCSR<CPX> *A,CPX factor)
         }
         for (e=edge_i[i]-findx;e<edge_i[i+1]-findx;e++) {
             nnz[e]+=linefull[index_j[e]-findx];
+        }
+    }
+    delete[] linefull;
+}
+
+/************************************************************************************************/
+
+template <class T>
+void TCSR<T>::copy_shifted(TCSR<T> *A,int istart, int ilength, int jstart, int jlength)
+{
+    int i,e;
+    T *linefull=new T[A->size_tot];
+
+    for (i=0;i<A->size;i++) {
+        init_variable(linefull,A->size_tot);
+        for (e=A->edge_i[i]-A->findx;e<A->edge_i[i+1]-A->findx;e++) {
+            linefull[A->index_j[e]-A->findx]=A->nnz[e];
+        }
+        for (e=edge_i[i+istart+A->first_row-first_row]-findx;e<edge_i[i+istart+A->first_row-first_row+1]-findx;e++) {
+            if (index_j[e]-findx>=jstart && index_j[e]-findx<jstart+jlength) {
+                nnz[e]=linefull[index_j[e]-findx-jstart];
+            }
         }
     }
     delete[] linefull;

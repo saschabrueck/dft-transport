@@ -147,7 +147,6 @@ if (npror!=propnum[1] && propnum[1]>=0) if (!matrix_rank) cout << "WARNING: FOUN
         PPEXSISetDefaultOptions(&options);
         options.npSymbFact = matrix_procs;
         options.ordering = 0;
-        options.verbosity = 0;
   
         PPEXSIPlan   plan;
         plan = PPEXSIPlanInitialize(matrix_comm,1,matrix_procs,-1,&info);
@@ -166,6 +165,36 @@ if (npror!=propnum[1] && propnum[1]>=0) if (!matrix_rank) cout << "WARNING: FOUN
         dos=c_ddot(Overlap->n_nonzeros,Overlap->nnz,1,HS_nnz_out,2);
         c_daxpy(Overlap->n_nonzeros,1.0,HS_nnz_out,2,Ps->nnz,1);
         delete[] HS_nnz_out;
+    } else if (method==transport_methods::GF) {
+        if (HamSig->findx!=1) return (LOGCERR, EXIT_FAILURE);
+ 
+        double *HS_nnz_inp = new double[2*HamSig->n_nonzeros]();
+        c_dcopy(2*HamSig->n_nonzeros,(double*)HamSig->nnz,1,HS_nnz_inp,1);
+ 
+        int n_nonzeros_global;
+        MPI_Allreduce(&HamSig->n_nonzeros,&n_nonzeros_global,1,MPI_INT,MPI_SUM,matrix_comm);
+        int info;
+ 
+        PPEXSIOptions  options;
+        PPEXSISetDefaultOptions(&options);
+        options.npSymbFact = matrix_procs;
+        options.ordering = 0;
+  
+        PPEXSIPlan   plan;
+        plan = PPEXSIPlanInitialize(matrix_comm,1,matrix_procs,-1,&info);
+        if (info) return (LOGCERR, EXIT_FAILURE);
+        PPEXSILoadRealSymmetricHSMatrix(plan,options,HamSig->size_tot,n_nonzeros_global,HamSig->n_nonzeros,HamSig->size,HamSig->edge_i,HamSig->index_j,HS_nnz_inp,1,NULL,&info);
+        if (info) return (LOGCERR, EXIT_FAILURE);
+        PPEXSISymbolicFactorizeComplexSymmetricMatrix(plan,options,&info);
+        if (info) return (LOGCERR, EXIT_FAILURE);
+        PPEXSISelInvComplexSymmetricMatrix(plan,options,HS_nnz_inp,(double*)HamSig->nnz,&info);
+        if (info) return (LOGCERR, EXIT_FAILURE);
+        PPEXSIPlanFinalize(plan,&info);
+        if (info) return (LOGCERR, EXIT_FAILURE);
+ 
+        delete[] HS_nnz_inp;
+        Ps->add_real(HamSig,-weight/M_PI*CPX(0.0,1.0));
+        delete HamSig;
     } else if (method==transport_methods::WF) {
         int tra_block=0;
         TCSR<CPX> *H1cut = new TCSR<CPX>(HamSig,tra_block*ntriblock,ntriblock,(tra_block+1)*ntriblock,ntriblock);
@@ -247,7 +276,6 @@ if (!worldrank) cout << "TIME FOR CONSTRUCTION OF S-PATTERN DENSITY MATRIX " << 
 // transmission
         if (!matrix_rank) {
             CPX *vecoutdof=new CPX[ntriblock];
-            H1->shift_resize(tra_block*ntriblock,ntriblock,(tra_block+1)*ntriblock,ntriblock);
             double transml=d_zer;
             for (int ipro=0;ipro<nprol;ipro++) {
                 H1->mat_vec_mult(&Sol[Ps->size_tot*ipro+(tra_block+1)*ntriblock],vecoutdof,1);

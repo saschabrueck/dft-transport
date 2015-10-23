@@ -18,7 +18,7 @@
 #include "Injection.H"
 
 template<class T>
-class InjectionBeyn : public Injection<T>{
+class InjectionBeyn : public Injection{
 public:
     
     InjectionBeyn(int,double);
@@ -1002,7 +1002,7 @@ int InjectionBeyn<T>::parallel_decompose(CPX *Q1,CPX *Q2,int ND,int NM, MPI_Comm
     c_pzgeadd('N',ND,NM,1.0,Q2,1,1,descQ,0.0,q_dist,1,1,descq);
 
     int NM_new = 0;
-    while(Sval[NM_new++]>svd_fac*Sval[0]*ND*(numeric_limits<double>::epsilon)());//THIS MIGHT GIVE ONE TOO MUCH
+    while(Sval[NM_new+1]>svd_fac*Sval[0]*ND*(numeric_limits<double>::epsilon)()) NM_new++;
 
     CPX *UtxQ2_dist = new CPX[rloc*cloc];
     c_pzgemm('C','N',NM_new,NM,ND,CPX(1.0,0.0),u_dist,1,1,descq,q_dist,1,1,descq,CPX(0.0,0.0),UtxQ2_dist,1,1,descq);
@@ -1034,7 +1034,7 @@ int InjectionBeyn<T>::decompose(CPX *Q1,CPX *Q2,int ND,int NM)
     CPX *vtrans = new CPX[NM*NM];
     if (svd(Q1,vtrans,Sval,ND,NM)) return 0;
     int NM_new = 0;
-    while(Sval[NM_new++]>svd_fac*Sval[0]*ND*(numeric_limits<double>::epsilon)());//THIS MIGHT GIVE ONE TOO MUCH
+    while(Sval[NM_new+1]>svd_fac*Sval[0]*ND*(numeric_limits<double>::epsilon)()) NM_new++;
     CPX *UtxQ2 = new CPX[NM_new*NM];
     c_zgemm('C','N',NM_new,NM,ND,CPX(1.0,0.0),Q1,ND,Q2,ND,CPX(0.0,0.0),UtxQ2,NM_new);
     c_zgemm('N','C',NM_new,NM_new,NM,CPX(1.0,0.0),UtxQ2,NM_new,vtrans,NM,CPX(0.0,0.0),Q2,NM_new);
