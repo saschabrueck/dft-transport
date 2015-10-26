@@ -13,6 +13,7 @@ void c_scf_method(cp2k_transport_parameters cp2k_transport_params, cp2k_csr_inte
    int rank = Comm.Get_rank();
 
    TCSR<double> *Overlap, *KohnSham;
+   TCSR<double> *OverlapCut, *KohnShamCut;
    Overlap = new TCSR<double>(S.nrows_local, S.nze_local, 1);
    KohnSham = new TCSR<double>(KS.nrows_local, KS.nze_local, 1);
    cp2kCSR_to_CSR(S, Overlap);
@@ -38,24 +39,40 @@ void c_scf_method(cp2k_transport_parameters cp2k_transport_params, cp2k_csr_inte
      case 3:
      default:
          if (!rank) cout << "Starting Transport" << endl;
-
-         if ( Overlap->size_tot%transport_params->n_cells || transport_params->bandwidth<1 ) throw SCF_Exception(__LINE__,__FILE__);
+         int cut_l=0;
+         int cut_r=0;
+         if (cut_l+cut_r) {
+             OverlapCut  = new TCSR<double>(Overlap, cut_l,Overlap->size_tot-cut_r,cut_l,Overlap->size_tot-cut_r);
+             KohnShamCut = new TCSR<double>(KohnSham,cut_l,Overlap->size_tot-cut_r,cut_l,Overlap->size_tot-cut_r);
+         } else {
+             OverlapCut  = Overlap;
+             KohnShamCut = KohnSham;
+         }
+         if ( OverlapCut->size_tot%transport_params->n_cells || transport_params->bandwidth<1 ) throw SCF_Exception(__LINE__,__FILE__);
          std::vector<double> muvec(transport_params->num_contacts);
          std::vector<contact_type> contactvec(transport_params->num_contacts+1);
          for (int i_mu=0;i_mu<contactvec.size();i_mu++) {
              contactvec[i_mu].bandwidth=transport_params->bandwidth;
-             contactvec[i_mu].ndof=Overlap->size_tot/transport_params->n_cells; // ONLY IF ALL CELLS EQUAL
-             contactvec[i_mu].n_occ=transport_params->n_occ/transport_params->n_cells; // THIS IS AN INTEGER DIVISION, IN GENERAL THE RESULT IS NOT CORRECT
+             contactvec[i_mu].ndof=OverlapCut->size_tot/transport_params->n_cells; // ONLY IF ALL CELLS EQUAL
+             contactvec[i_mu].n_occ=transport_params->n_occ/transport_params->n_cells; // THIS IS AN INTEGER DIVISION, IN GENERAL THE RESULT IS NOT CORRECT AND FOR CUT IT IS NOT CORRECT
          }
          contactvec[0].start=0;
          contactvec[0].inj_sign=+1;
-         contactvec[1].start=Overlap->size_tot-contactvec[1].ndof*contactvec[1].bandwidth;
+         contactvec[1].start=OverlapCut->size_tot-contactvec[1].ndof*contactvec[1].bandwidth;
          contactvec[1].inj_sign=-1;
-         contactvec[2].start=Overlap->size_tot/2;
+         contactvec[2].start=OverlapCut->size_tot/2;
          contactvec[2].inj_sign=+1;
 
          Energyvector energyvector;
-         if (energyvector.Execute(Overlap,KohnSham,muvec,contactvec,transport_params)) throw SCF_Exception(__LINE__,__FILE__);
+         if (energyvector.Execute(OverlapCut,KohnShamCut,muvec,contactvec,transport_params)) throw SCF_Exception(__LINE__,__FILE__);
+
+         if (cut_l+cut_r) {
+             cp2kCSR_to_CSR(*P, Overlap);
+             c_dscal(Overlap->n_nonzeros,0.5,Overlap->nnz,1);
+             Overlap->copy_shifted(OverlapCut,cut_l,Overlap->size_tot-cut_r,cut_l,Overlap->size_tot-cut_r);
+             delete OverlapCut;
+             delete KohnShamCut;
+         }
    }
 
    CSR_to_cp2kCSR(Overlap, *P);

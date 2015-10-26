@@ -89,10 +89,6 @@ int Singularities::Execute(TCSR<double> *KohnSham,TCSR<double> *Overlap)
             delete Hcut;
             delete Scut;
         }
-        if (!rank_bs_comm) {
-            for (int ibw=0;ibw<=bandwidth;ibw++) {
-            }
-        }
         for (int ibw=1;ibw<=bandwidth;ibw++) {
             H[bandwidth-inj_sign*ibw] = new TCSR<double>(H[bandwidth+inj_sign*ibw]);
             H[bandwidth-inj_sign*ibw]->sparse_transpose(H[bandwidth+inj_sign*ibw]);
