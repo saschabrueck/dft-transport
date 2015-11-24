@@ -42,8 +42,8 @@ void c_scf_method(cp2k_transport_parameters cp2k_transport_params, cp2k_csr_inte
          int cut_l=0;
          int cut_r=0;
          if (cut_l+cut_r) {
-             OverlapCut  = new TCSR<double>(Overlap, cut_l,Overlap->size_tot-cut_r,cut_l,Overlap->size_tot-cut_r);
-             KohnShamCut = new TCSR<double>(KohnSham,cut_l,Overlap->size_tot-cut_r,cut_l,Overlap->size_tot-cut_r);
+             OverlapCut  = new TCSR<double>(Overlap, cut_l,Overlap->size_tot-cut_l-cut_r,cut_l,Overlap->size_tot-cut_r);
+             KohnShamCut = new TCSR<double>(KohnSham,cut_l,Overlap->size_tot-cut_l-cut_r,cut_l,Overlap->size_tot-cut_r);
          } else {
              OverlapCut  = Overlap;
              KohnShamCut = KohnSham;
@@ -51,7 +51,7 @@ void c_scf_method(cp2k_transport_parameters cp2k_transport_params, cp2k_csr_inte
          if ( OverlapCut->size_tot%transport_params->n_cells || transport_params->bandwidth<1 ) throw SCF_Exception(__LINE__,__FILE__);
          std::vector<double> muvec(transport_params->num_contacts);
          std::vector<contact_type> contactvec(transport_params->num_contacts+1);
-         for (int i_mu=0;i_mu<contactvec.size();i_mu++) {
+         for (uint i_mu=0;i_mu<contactvec.size();i_mu++) {
              contactvec[i_mu].bandwidth=transport_params->bandwidth;
              contactvec[i_mu].ndof=OverlapCut->size_tot/transport_params->n_cells; // ONLY IF ALL CELLS EQUAL
              contactvec[i_mu].n_occ=transport_params->n_occ/transport_params->n_cells; // THIS IS AN INTEGER DIVISION, IN GENERAL THE RESULT IS NOT CORRECT AND FOR CUT IT IS NOT CORRECT
