@@ -42,8 +42,8 @@ void c_scf_method(cp2k_transport_parameters cp2k_transport_params, cp2k_csr_inte
          int cut_l=0;
          int cut_r=0;
          if (cut_l+cut_r) {
-             OverlapCut  = new TCSR<double>(Overlap, cut_l,Overlap->size_tot-cut_l-cut_r,cut_l,Overlap->size_tot-cut_r);
-             KohnShamCut = new TCSR<double>(KohnSham,cut_l,Overlap->size_tot-cut_l-cut_r,cut_l,Overlap->size_tot-cut_r);
+             OverlapCut  = new TCSR<double>(Overlap, cut_l,Overlap->size_tot-cut_l-cut_r,cut_l,Overlap->size_tot-cut_l-cut_r);
+             KohnShamCut = new TCSR<double>(KohnSham,cut_l,Overlap->size_tot-cut_l-cut_r,cut_l,Overlap->size_tot-cut_l-cut_r);
          } else {
              OverlapCut  = Overlap;
              KohnShamCut = KohnSham;
