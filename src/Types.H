@@ -426,21 +426,22 @@ struct VOLTAGE
     double Tmax; 	
 };
 
-struct transport_parameters
+struct transport_parameters 
 {
+// no constructor; this is initialized only with a data of type cp2k_transport_parameters
     int    n_occ;
     int    n_atoms;
+    double energy_diff;
     double evoltfactor;
     int    method;
-    int    bandwidth;
-    int    n_cells;
+    int    injection_method;
+    int    linear_solver;
     int    n_abscissae;
     int    n_kpoint;
     int    num_interval;
     int    num_contacts;
-    int    ndof;
     int    tasks_per_point;
-    int    cores_per_node;
+    int    cutout[2];
     double colzero_threshold;
     double eps_limit;
     double eps_decay;
@@ -450,6 +451,9 @@ struct transport_parameters
     double energy_interval;
     double min_interval;
     double temperature;
+    int*   contacts_data;              // size 5*num_contacts
+
+    ~transport_parameters(){ delete[] contacts_data; }
 };
 
 struct contact_type
