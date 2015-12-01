@@ -9,7 +9,6 @@
 #include <mpi.h>
 #include "CSR.H"
 #include "libcp2k.H"
-#include "libcp2k_tools.H"
 #include "Types.H"
 
 /* here include header files of OMEN source files that evaluate a density matrix    *

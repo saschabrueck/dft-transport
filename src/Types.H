@@ -428,11 +428,8 @@ struct VOLTAGE
 
 struct transport_parameters 
 {
-// no constructor; this is initialized only with a data of type cp2k_transport_parameters
     int    n_occ;
     int    n_atoms;
-    double energy_diff;
-    double evoltfactor;
     int    method;
     int    injection_method;
     int    linear_solver;
@@ -442,6 +439,9 @@ struct transport_parameters
     int    num_contacts;
     int    tasks_per_point;
     int    cutout[2];
+    int    bandwidth;
+    int    n_cells;
+    int    cutblocksize;
     double colzero_threshold;
     double eps_limit;
     double eps_decay;
@@ -451,14 +451,12 @@ struct transport_parameters
     double energy_interval;
     double min_interval;
     double temperature;
-    int*   contacts_data;              // size 5*num_contacts
-
-    ~transport_parameters(){ delete[] contacts_data; }
 };
 
 struct contact_type
 {
-    int bandwidth, ndof, start, inj_sign, n_occ;
+    int    bandwidth, ndof, start, inj_sign;
+    double n_ele;
 };
 
 namespace transport_methods {

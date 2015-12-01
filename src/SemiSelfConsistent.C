@@ -16,11 +16,11 @@ int semiselfconsistent(TCSR<double> *Overlap,TCSR<double> *KohnSham,transport_pa
     if ( Overlap->size_tot%transport_params->n_cells || transport_params->bandwidth<1 ) return (LOGCERR, EXIT_FAILURE);
     int n_mu=transport_params->num_contacts;
     std::vector<double> muvec(n_mu);
-    std::vector<contact_type> contactvec(n_mu);
+    std::vector<contact_type> contactvec(n_mu); //ASSUME ALL CELLS ARE EQUAL
     for (int i_mu=0;i_mu<n_mu;i_mu++) {
         contactvec[i_mu].bandwidth=transport_params->bandwidth;
-        contactvec[i_mu].ndof=Overlap->size_tot/transport_params->n_cells; // ONLY IF ALL CELLS EQUAL
-        contactvec[i_mu].n_occ=transport_params->n_occ/transport_params->n_cells; // THIS IS AN INTEGER DIVISION, IN GENERAL THE RESULT IS NOT CORRECT
+        contactvec[i_mu].ndof=Overlap->size_tot/transport_params->n_cells;
+        contactvec[i_mu].n_ele=2.0*(transport_params->n_occ/transport_params->n_cells);
     }
     contactvec[0].start=0;
     contactvec[0].inj_sign=+1;
@@ -74,10 +74,10 @@ if (!iam) cout << "DOPING " << doping_cell[0] << " " << doping_cell[transport_pa
     } else {
         Singularities singularities(transport_params,contactvec);
         if ( singularities.Execute(KohnSham,Overlap) ) return (LOGCERR, EXIT_FAILURE);
-        for (int i_mu=0;i_mu<n_mu;i_mu++) muvec[i_mu]=singularities.determine_fermi(0.0,i_mu);
+        for (int i_mu=0;i_mu<n_mu;i_mu++) muvec[i_mu]=singularities.determine_fermi(contactvec[i_mu].n_ele,i_mu);
         Vm=std::accumulate(muvec.begin(),muvec.end(),0.0)/n_mu;
-        muvec[0]=singularities.determine_fermi(doping_cell[0],0);
-        muvec[1]=singularities.determine_fermi(doping_cell[transport_params->n_cells-1],1);
+        muvec[0]=singularities.determine_fermi(contactvec[0].n_ele+doping_cell[0],0);
+        muvec[1]=singularities.determine_fermi(contactvec[1].n_ele+doping_cell[transport_params->n_cells-1],1);
         double mu_avg=std::accumulate(muvec.begin(),muvec.end(),0.0)/n_mu;
         dV=(muvec[0]-muvec[1])/2.0;
         Vg+=mu_avg-*min_element(singularities.energies_cb.begin(),singularities.energies_cb.end());

@@ -141,10 +141,7 @@ int main (int argc, char **argv)
    paraminfile >> transport_env_params->n_kpoint;
    paraminfile >> transport_env_params->num_interval;
    paraminfile >> transport_env_params->num_contacts;
-   paraminfile >> transport_env_params->ndof;
    paraminfile >> transport_env_params->tasks_per_point;
-   paraminfile >> transport_env_params->cores_per_node;
-   paraminfile >> transport_env_params->evoltfactor;
    paraminfile >> transport_env_params->colzero_threshold;
    paraminfile >> transport_env_params->eps_limit;
    paraminfile >> transport_env_params->eps_decay;
@@ -156,7 +153,7 @@ int main (int argc, char **argv)
    paraminfile >> transport_env_params->temperature;
    paraminfile.close();
    TCSR<double>* KohnSham = new TCSR<double>("KohnSham",w_size,w_rank);
-   c_dscal(KohnSham->n_nonzeros,-1.0/transport_env_params->evoltfactor,KohnSham->nnz,1);
+   c_dscal(KohnSham->n_nonzeros,-1.0,KohnSham->nnz,1);
    TCSR<double>* Overlap;
    if (FILE *ovlfile = fopen("Overlap","r")) {
       fclose(ovlfile);

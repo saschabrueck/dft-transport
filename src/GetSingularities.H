@@ -28,6 +28,7 @@ std::vector<double> energies_cb;
 
 private:
 double eps_singularities;
+double eps_mu;
 int n_k;
 double Temp;
 int n_mu;
