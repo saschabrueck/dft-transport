@@ -11,6 +11,7 @@ Singularities::Singularities(transport_parameters *parameter_sab,std::vector<con
     contactvec=pcontactvec;
 
     eps_singularities=parameter_sab->eps_singularity_curvatures;
+    eps_mu=parameter_sab->eps_mu;
     n_k=parameter_sab->n_kpoint;
     Temp=parameter_sab->temperature;
     n_mu=contactvec.size();
@@ -75,7 +76,7 @@ int Singularities::Execute(TCSR<double> *KohnSham,TCSR<double> *Overlap)
         int start=contactvec[i_mu].start;
         int bandwidth=contactvec[i_mu].bandwidth;
         int ndof=contactvec[i_mu].ndof;
-        int noccunitcell=contactvec[i_mu].n_occ;
+        int noccunitcell=floor(contactvec[i_mu].n_ele/2.0);
         TCSR<double> **H = new TCSR<double>*[2*bandwidth+1];
         TCSR<double> **S = new TCSR<double>*[2*bandwidth+1];
         if (contactvec[i_mu].inj_sign==-1) {
@@ -181,65 +182,63 @@ std::vector< std::vector< std::vector<double> > > Singularities::get_propagating
     }
 }
 
-double Singularities::determine_fermi(double doping,int i_mu)
+double Singularities::determine_fermi(double n_ele,int i_mu)
 {
     double mu;
     if (!iam) {
-        double nocctol=max(1.0E-2/n_k*abs(doping),1.0E-4/n_k);//WHAT IS THE MAX PRECISION I CAN GET DEPENDING ON n_k?
-        cout << "Fermi Level / Number of Electrons with precision " << nocctol << endl;
-        int noccunitcell=contactvec[i_mu].n_occ;
+        cout << "Fermi Level / Number of Electrons" << endl;
         int ndof=contactvec[i_mu].ndof;
-        mu=(energies_matrix[i_mu][noccunitcell-1]+energies_matrix[i_mu][noccunitcell])/2;
-        double nocciter = 0.0;
+        mu=(energies_matrix[i_mu][floor(n_ele/2.0)-1]+energies_matrix[i_mu][floor(n_ele/2.0)])/2.0;
+        double n_ele_iter = 0.0;
         for (int j=0;j<n_k;j++) {
             for (int i=0;i<ndof;i++) {
-                nocciter+=2.0/(n_k-1)*fermi(energies_matrix[i_mu][i+j*ndof],mu,Temp,0);
-                if (j==0 || j==n_k-1) nocciter-=1.0/(n_k-1)*fermi(energies_matrix[i_mu][i+j*ndof],mu,Temp,0);
+                n_ele_iter+=2.0/(n_k-1)*fermi(energies_matrix[i_mu][i+j*ndof],mu,Temp,0);
+                if (j==0 || j==n_k-1) n_ele_iter-=1.0/(n_k-1)*fermi(energies_matrix[i_mu][i+j*ndof],mu,Temp,0);
             }
         }
-        cout << mu << " / " << nocciter << endl;
+        cout << mu << " / " << n_ele_iter << endl;
         double mu_a = mu;
-        double nocc_a = nocciter;
+        double n_ele_a = n_ele_iter;
 //Find Interval
-        while ((2.0*noccunitcell+doping-nocc_a)*(2.0*noccunitcell+doping-nocciter)>0 && abs(2.0*noccunitcell+doping-nocciter)>nocctol) {
+        while ((n_ele-n_ele_a)*(n_ele-n_ele_iter)>0 && abs(n_ele-n_ele_iter)>eps_mu) {
             mu_a=mu;
-            nocc_a=nocciter;
-            mu+=(2.0*noccunitcell+doping-nocciter);
-            nocciter=0.0;
+            n_ele_a=n_ele_iter;
+            mu+=(n_ele-n_ele_iter);
+            n_ele_iter=0.0;
             for (int j=0;j<n_k;j++) {
                 for (int i=0;i<ndof;i++) {
-                    nocciter+=2.0/(n_k-1)*fermi(energies_matrix[i_mu][i+j*ndof],mu,Temp,0);
-                    if (j==0 || j==n_k-1) nocciter-=1.0/(n_k-1)*fermi(energies_matrix[i_mu][i+j*ndof],mu,Temp,0);
+                    n_ele_iter+=2.0/(n_k-1)*fermi(energies_matrix[i_mu][i+j*ndof],mu,Temp,0);
+                    if (j==0 || j==n_k-1) n_ele_iter-=1.0/(n_k-1)*fermi(energies_matrix[i_mu][i+j*ndof],mu,Temp,0);
                 }
             }
-cout << "[" << mu_a << "," << mu << "]" << " / " << nocciter << " FIND" << endl;
+cout << "[" << mu_a << "," << mu << "]" << " / " << n_ele_iter << " FIND" << endl;
         }
         double mu_b = mu;
         if (mu_a>mu_b) {
             swap(mu_a,mu_b);
-            swap(nocc_a,nocciter);
+            swap(n_ele_a,n_ele_iter);
         }
 //Bisection
-        while (abs(mu_a-mu_b)>K_BOLTZMANN*Temp && abs(2.0*noccunitcell+doping-nocciter)>nocctol) {
+        while (abs(mu_a-mu_b)>K_BOLTZMANN*Temp && abs(n_ele-n_ele_iter)>eps_mu) {
             mu=(mu_a+mu_b)/2.0;
-            nocciter=0.0;
+            n_ele_iter=0.0;
             for (int j=0;j<n_k;j++) {
                 for (int i=0;i<ndof;i++) {
-                    nocciter+=2.0/(n_k-1)*fermi(energies_matrix[i_mu][i+j*ndof],mu,Temp,0);
-                    if (j==0 || j==n_k-1) nocciter-=1.0/(n_k-1)*fermi(energies_matrix[i_mu][i+j*ndof],mu,Temp,0);
+                    n_ele_iter+=2.0/(n_k-1)*fermi(energies_matrix[i_mu][i+j*ndof],mu,Temp,0);
+                    if (j==0 || j==n_k-1) n_ele_iter-=1.0/(n_k-1)*fermi(energies_matrix[i_mu][i+j*ndof],mu,Temp,0);
                 }
             }
-            if ((2.0*noccunitcell+doping-nocc_a)*(2.0*noccunitcell+doping-nocciter)>0) {
+            if ((n_ele-n_ele_a)*(n_ele-n_ele_iter)>0) {
                 mu_a=mu;
-                nocc_a=nocciter;
+                n_ele_a=n_ele_iter;
             } else {
                 mu_b=mu;
             }
-cout << "[" << mu_a << "," << mu_b << "]" << " / " << nocciter << " BISECT" << endl;
+cout << "[" << mu_a << "," << mu_b << "]" << " / " << n_ele_iter << " BISECT" << endl;
         }
         mu=(mu_a+mu_b)/2.0;
 //Newton
-        while (abs(2.0*noccunitcell+doping-nocciter)>nocctol) {
+        while (abs(n_ele-n_ele_iter)>eps_mu) {
             double dfermi=0.0;
             for (int j=0;j<n_k;j++) {
                 for (int i=0;i<ndof;i++) {
@@ -247,17 +246,17 @@ cout << "[" << mu_a << "," << mu_b << "]" << " / " << nocciter << " BISECT" << e
                     if (j==0 || j==n_k-1) dfermi-=1.0/(n_k-1)*fermi(energies_matrix[i_mu][i+j*ndof],mu,Temp,2);
                 }
             }
-            mu+=(2.0*noccunitcell+doping-nocciter)/dfermi;
-            nocciter=0.0;
+            mu+=(n_ele-n_ele_iter)/dfermi;
+            n_ele_iter=0.0;
             for (int j=0;j<n_k;j++) {
                 for (int i=0;i<ndof;i++) {
-                    nocciter+=2.0/(n_k-1)*fermi(energies_matrix[i_mu][i+j*ndof],mu,Temp,0);
-                    if (j==0 || j==n_k-1) nocciter-=1.0/(n_k-1)*fermi(energies_matrix[i_mu][i+j*ndof],mu,Temp,0);
+                    n_ele_iter+=2.0/(n_k-1)*fermi(energies_matrix[i_mu][i+j*ndof],mu,Temp,0);
+                    if (j==0 || j==n_k-1) n_ele_iter-=1.0/(n_k-1)*fermi(energies_matrix[i_mu][i+j*ndof],mu,Temp,0);
                 }
             }
-cout << mu << " / " << nocciter << " NEWTON" << endl;
+cout << mu << " / " << n_ele_iter << " NEWTON" << endl;
         }
-        cout << mu << " / " << nocciter << " FERMI" << endl;
+        cout << mu << " / " << n_ele_iter << " FERMI" << endl;
     }
     MPI_Bcast(&mu,1,MPI_DOUBLE,0,MPI_COMM_WORLD);
     return mu;

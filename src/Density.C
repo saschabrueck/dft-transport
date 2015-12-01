@@ -38,6 +38,7 @@ int density(TCSR<double> *KohnSham,TCSR<double> *Overlap,TCSR<double> *Ps,CPX en
 int worldrank; MPI_Comm_rank(MPI_COMM_WORLD,&worldrank);
 // get parameters always at the beginning of a subroutine (or maybe even better in the constructor) to make it independent of the structure containing the parameters
     int n_mu=muvec.size();
+    int solver_method=parameter_sab->linear_solver;
     int ncells=parameter_sab->n_cells;
     int bandwidth=parameter_sab->bandwidth;
     int ndof=Overlap->size_tot/parameter_sab->n_cells;
@@ -202,7 +203,6 @@ if (npror!=propnum[1] && propnum[1]>=0) if (!matrix_rank) cout << "WARNING: FOUN
         delete H1cut;
         sabtime=get_time(d_zer);
         LinearSolver<CPX>* solver;
-        int solver_method=0;
         if (solver_method==0) {
             solver = new SuperLU<CPX>(HamSig,matrix_comm);
 #ifdef HAVE_MUMPS

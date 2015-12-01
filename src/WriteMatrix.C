@@ -4,9 +4,9 @@ void write_matrix(TCSR<double> *Overlap,TCSR<double> *KohnSham,transport_paramet
     int iam;MPI_Comm_rank(MPI_COMM_WORLD,&iam);
     KohnSham->change_findx(1);
     Overlap->change_findx(1);
-    if (transport_params->ndof) {
+    if (transport_params->cutblocksize) {
         int bigblocksize=Overlap->size_tot/3;
-        int cutblocksize=transport_params->ndof;
+        int cutblocksize=transport_params->cutblocksize;
         for (int i=0;i<3;i++) {
             TCSR<double> *CutG = new TCSR<double>(KohnSham,bigblocksize,cutblocksize,i*bigblocksize,cutblocksize);
             TCSR<double> *Cut = new TCSR<double>(CutG,0,MPI_COMM_WORLD);
@@ -44,32 +44,6 @@ void write_matrix(TCSR<double> *Overlap,TCSR<double> *KohnSham,transport_paramet
             OverlapCollect->write_CSR_bin("S_4.bin");
         }
         delete OverlapCollect;
-        if (!iam) {
-            ofstream paramoutfile("TransportParams");
-            paramoutfile << transport_params->method << endl;
-            paramoutfile << transport_params->bandwidth << endl;
-            paramoutfile << transport_params->n_cells << endl;
-            paramoutfile << transport_params->n_occ << endl;
-            paramoutfile << transport_params->n_atoms << endl;
-            paramoutfile << transport_params->n_abscissae << endl;
-            paramoutfile << transport_params->n_kpoint << endl;
-            paramoutfile << transport_params->num_interval << endl;
-            paramoutfile << transport_params->num_contacts << endl;
-            paramoutfile << transport_params->ndof << endl;
-            paramoutfile << transport_params->tasks_per_point << endl;
-            paramoutfile << transport_params->cores_per_node << endl;
-            paramoutfile << transport_params->evoltfactor << endl;
-            paramoutfile << transport_params->colzero_threshold << endl;
-            paramoutfile << transport_params->eps_limit << endl;
-            paramoutfile << transport_params->eps_decay << endl;
-            paramoutfile << transport_params->eps_singularity_curvatures << endl;
-            paramoutfile << transport_params->eps_mu << endl;
-            paramoutfile << transport_params->eps_eigval_degen << endl;
-            paramoutfile << transport_params->energy_interval << endl;
-            paramoutfile << transport_params->min_interval << endl;
-            paramoutfile << transport_params->temperature << endl;
-            paramoutfile.close();
-        }
     }
     MPI_Barrier(MPI_COMM_WORLD);
     exit(0);
