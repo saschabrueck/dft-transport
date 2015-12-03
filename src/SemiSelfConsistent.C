@@ -5,30 +5,25 @@
 #include <limits>
 #include "SemiSelfConsistent.H"
  
-int semiselfconsistent(TCSR<double> *Overlap,TCSR<double> *KohnSham,transport_parameters *transport_params)
+int semiselfconsistent(TCSR<double> *Overlap,TCSR<double> *KohnSham,std::vector<double> muvec,std::vector<contact_type> contactvec,transport_parameters *transport_params)
 {
     int iam;MPI_Comm_rank(MPI_COMM_WORLD,&iam);
     int procs;MPI_Comm_size(MPI_COMM_WORLD,&procs);
 
-//if (Overlap->additionalentries(KohnSham)) return (LOGCERR, EXIT_FAILURE);
-//if (KohnSham->additionalentries(Overlap)) return (LOGCERR, EXIT_FAILURE);
-
-    if ( Overlap->size_tot%transport_params->n_cells || transport_params->bandwidth<1 ) return (LOGCERR, EXIT_FAILURE);
-    int n_mu=transport_params->num_contacts;
-    std::vector<double> muvec(n_mu);
-    std::vector<contact_type> contactvec(n_mu); //ASSUME ALL CELLS ARE EQUAL
-    for (int i_mu=0;i_mu<n_mu;i_mu++) {
-        contactvec[i_mu].bandwidth=transport_params->bandwidth;
-        contactvec[i_mu].ndof=Overlap->size_tot/transport_params->n_cells;
-        contactvec[i_mu].n_ele=2.0*(transport_params->n_occ/transport_params->n_cells);
-    }
-    contactvec[0].start=0;
-    contactvec[0].inj_sign=+1;
-    contactvec[1].start=Overlap->size_tot-contactvec[1].ndof*contactvec[1].bandwidth;
-    contactvec[1].inj_sign=-1;
+    int n_mu=muvec.size();
 
     if (FEM->NAtom != transport_params->n_atoms) return (LOGCERR, EXIT_FAILURE);
 
+/*
+    double *doping_atom = new double[FEM->NAtom];
+    for (int ia=0;ia<FEM->NAtom;ia++) {
+        doping_atom[ia]=FEM->doping[FEM->real_at_index[ia]];
+    }
+    delete[] doping_atom;
+*/
+
+    double *Vnew = new double[FEM->NGrid]();
+    double *Vold = new double[FEM->NGrid];
     double *Vbf = new double[Overlap->size_tot];
     double *rho_atom = new double[2*FEM->NAtom]();//ZERO IN THE SECOND COMPONENT
     double *rho_atom_previous = new double[2*FEM->NAtom];
@@ -37,23 +32,10 @@ int semiselfconsistent(TCSR<double> *Overlap,TCSR<double> *KohnSham,transport_pa
     double *drho_atom_dV_previous = new double[2*FEM->NAtom];
     int *atom_of_bf = new int[Overlap->size_tot];
     for (int ibf=0;ibf<Overlap->size_tot;ibf++) {
-        atom_of_bf[ibf]=ibf/(Overlap->size_tot/FEM->NAtom);
+        atom_of_bf[ibf]=ibf/(Overlap->size_tot/FEM->NAtom);//ONLY IF EQUAL NUMBER OF BASIS FUNCTIONS FOR EACH ATOMS
     }
 
     double Temp=transport_params->temperature;
-    double *Vnew = new double[FEM->NGrid]();
-    double *Vold = new double[FEM->NGrid];
-    double *doping_atom = new double[FEM->NAtom];
-    for (int ia=0;ia<FEM->NAtom;ia++) {
-        doping_atom[ia]=FEM->doping[FEM->real_at_index[ia]];
-    }
-    double *doping_cell = new double[transport_params->n_cells]();
-    for (int ia=0;ia<FEM->NAtom;ia++) {
-        doping_cell[ia/(FEM->NAtom/transport_params->n_cells)]+=doping_atom[ia];
-    }
-
-if (!iam) cout << "DOPING " << doping_cell[0] << " " << doping_cell[transport_params->n_cells-1] << endl;
-
     double Vs=voltage->Vsmin;
     double Vd=voltage->Vdmin;
     double Vg=-voltage->Vgmin[0];
@@ -76,8 +58,8 @@ if (!iam) cout << "DOPING " << doping_cell[0] << " " << doping_cell[transport_pa
         if ( singularities.Execute(KohnSham,Overlap) ) return (LOGCERR, EXIT_FAILURE);
         for (int i_mu=0;i_mu<n_mu;i_mu++) muvec[i_mu]=singularities.determine_fermi(contactvec[i_mu].n_ele,i_mu);
         Vm=std::accumulate(muvec.begin(),muvec.end(),0.0)/n_mu;
-        muvec[0]=singularities.determine_fermi(contactvec[0].n_ele+doping_cell[0],0);
-        muvec[1]=singularities.determine_fermi(contactvec[1].n_ele+doping_cell[transport_params->n_cells-1],1);
+        muvec[0]=singularities.determine_fermi(contactvec[0].n_ele,0);
+        muvec[1]=singularities.determine_fermi(contactvec[1].n_ele,1);
         double mu_avg=std::accumulate(muvec.begin(),muvec.end(),0.0)/n_mu;
         dV=(muvec[0]-muvec[1])/2.0;
         Vg+=mu_avg-*min_element(singularities.energies_cb.begin(),singularities.energies_cb.end());
@@ -178,17 +160,21 @@ rhofile.close();
         Overlap->atom_allocate(atom_of_bf,rho_dist,2.0);
         MPI_Allreduce(rho_dist,rho_atom,FEM->NAtom,MPI_DOUBLE,MPI_SUM,MPI_COMM_WORLD);
         if (!iam) {
+/*
             cout << "Number of electrons per unit cell";
-            double e_total=0.0;
-            for (int icell=0;icell<transport_params->n_cells;icell++) {
+            for (int icell=0;icell<ncells;icell++) {
                 double e_per_unit_cell=0.0;
-                for (int iatom=icell*FEM->NAtom/transport_params->n_cells;iatom<(icell+1)*FEM->NAtom/transport_params->n_cells;iatom++) {
+                for (int iatom=icell*FEM->NAtom/ncells;iatom<(icell+1)*FEM->NAtom/ncells;iatom++) {
                     e_per_unit_cell+=rho_atom[iatom];
-                    e_total+=rho_atom[iatom];
                 }
                 cout << " " << e_per_unit_cell;
             }
             cout << endl;
+*/
+            double e_total=0.0;
+            for (int iatom=0;iatom<FEM->NAtom;iatom++) {
+                e_total+=rho_atom[iatom];
+            }
             cout << "Total number of electrons " << e_total << endl;
         }
 
@@ -257,6 +243,15 @@ rhofile.close();
 
     }
 
-    MPI_Barrier(MPI_COMM_WORLD);
-    exit(0);
+    delete[] Vnew;
+    delete[] Vold;
+    delete[] Vbf;
+    delete[] rho_atom;
+    delete[] rho_atom_previous;
+    delete[] rho_dist;
+    delete[] drho_atom_dV;
+    delete[] drho_atom_dV_previous;
+    delete[] atom_of_bf;
+    delete[] Overlap_nnz;
+    delete[] KohnSham_nnz;
 }

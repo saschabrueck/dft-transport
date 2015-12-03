@@ -11,6 +11,6 @@ extern FEMGrid *FEM;
 extern PARAM *parameter;
 extern VOLTAGE *voltage;
 
-int semiselfconsistent(TCSR<double>* , TCSR<double>* , transport_parameters* );
+int semiselfconsistent(TCSR<double>*,TCSR<double>*,std::vector<double>,std::vector<contact_type>,transport_parameters*);
 
 #endif

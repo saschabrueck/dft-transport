@@ -438,10 +438,6 @@ struct transport_parameters
     int    num_interval;
     int    num_contacts;
     int    tasks_per_point;
-    int    cutout[2];
-    int    bandwidth;
-    int    n_cells;
-    int    cutblocksize;
     double colzero_threshold;
     double eps_limit;
     double eps_decay;
@@ -461,7 +457,7 @@ struct contact_type
 
 namespace transport_methods {
 enum transport_method {
-  PBC=0,
+  EQ=0,
   NEGF=1,
   GF=2,
   WF=3,

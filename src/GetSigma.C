@@ -189,10 +189,11 @@ int BoundarySelfEnergy::GetSigma(MPI_Comm boundary_comm,int evecpos,transport_pa
     int nblocksband=2*bandwidth+1;
     int ntriblock=bandwidth*ndof;
     int triblocksize=ntriblock*ntriblock;
+    int injection_method=parameter_sab->injection_method;
     double colzerothr=parameter_sab->colzero_threshold;
     double eps_limit=parameter_sab->eps_limit;
     double eps_decay=parameter_sab->eps_decay;
-    double eps_eigval_degen=1.0E-6;
+    double eps_eigval_degen=parameter_sab->eps_eigval_degen;
     int boundary_rank;
     MPI_Comm_rank(boundary_comm,&boundary_rank);
 int worldrank; MPI_Comm_rank(MPI_COMM_WORLD,&worldrank);
@@ -220,8 +221,7 @@ int worldrank; MPI_Comm_rank(MPI_COMM_WORLD,&worldrank);
     lambdavec=new CPX[2*bandwidth*ndof];
     eigvecc=new CPX[ndof*2*bandwidth*ndof];
     sabtime=get_time(d_zer);
-    int do_beyn=0;
-    if (do_beyn) {
+    if (injection_method==22) {
         Injection *k_inj;
         int neigbeyn; // NUMBER OF RANDOM VECTORS
         if (complexenergypoint) {

@@ -10,29 +10,30 @@ extern "C" {
 /* transport parameters read from a CP2K input file. */                               
 /* DO NOT change the ORDERING or the NAMES           */
     typedef struct{
-           int    n_occ;
-           int    n_atoms;
-           double energy_diff;
-           double evoltfactor;
-           int    method;
-           int    injection_method;
-           int    linear_solver;
-           int    n_abscissae;
-           int    n_kpoint;
-           int    num_interval;
-           int    num_contacts;
-           int    tasks_per_point;
-           int    cutout[2];
-           double colzero_threshold;
-           double eps_limit;
-           double eps_decay;
-           double eps_singularity_curvatures;
-           double eps_mu;
-           double eps_eigval_degen;
-           double energy_interval;
-           double min_interval;
-           double temperature;
-           int*   contacts_data;
+           int     n_occ;
+           int     n_atoms;
+           double  energy_diff;
+           double  evoltfactor;
+           int     method;
+           int     injection_method;
+           int     linear_solver;
+           int     n_abscissae;
+           int     n_kpoint;
+           int     num_interval;
+           int     num_contacts;
+           int     tasks_per_point;
+           int     cutout[2];
+           double  colzero_threshold;
+           double  eps_limit;
+           double  eps_decay;
+           double  eps_singularity_curvatures;
+           double  eps_mu;
+           double  eps_eigval_degen;
+           double  energy_interval;
+           double  min_interval;
+           double  temperature;
+           int*    contacts_data;
+           double* contacts_nelec;
            } cp2k_transport_parameters;
 
 /* CP2K's C-interoperable CSR matrix                 */
