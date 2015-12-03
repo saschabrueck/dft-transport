@@ -1,12 +1,11 @@
 #include "WriteMatrix.H"
 
-void write_matrix(TCSR<double> *Overlap,TCSR<double> *KohnSham,transport_parameters *transport_params) {
+void write_matrix(TCSR<double> *Overlap,TCSR<double> *KohnSham,int cutblocksize,int bandwidth,int ndof) {
     int iam;MPI_Comm_rank(MPI_COMM_WORLD,&iam);
     KohnSham->change_findx(1);
     Overlap->change_findx(1);
-    if (transport_params->cutblocksize) {
+    if (cutblocksize) {
         int bigblocksize=Overlap->size_tot/3;
-        int cutblocksize=transport_params->cutblocksize;
         for (int i=0;i<3;i++) {
             TCSR<double> *CutG = new TCSR<double>(KohnSham,bigblocksize,cutblocksize,i*bigblocksize,cutblocksize);
             TCSR<double> *Cut = new TCSR<double>(CutG,0,MPI_COMM_WORLD);
@@ -33,18 +32,16 @@ void write_matrix(TCSR<double> *Overlap,TCSR<double> *KohnSham,transport_paramet
         TCSR<double> *KohnShamCollect = new TCSR<double>(KohnSham,0,MPI_COMM_WORLD);
         if (!iam) {
             KohnShamCollect->write_CSR("KohnSham");
-            KohnShamCollect->removepbc(transport_params->bandwidth,KohnShamCollect->size_tot/transport_params->n_cells);
+            KohnShamCollect->removepbc(bandwidth,ndof);
             KohnShamCollect->write_CSR_bin("H_4.bin");
         }
         delete KohnShamCollect;
         TCSR<double> *OverlapCollect = new TCSR<double>(Overlap,0,MPI_COMM_WORLD);
         if (!iam) {
             OverlapCollect->write_CSR("Overlap");
-            OverlapCollect->removepbc(transport_params->bandwidth,OverlapCollect->size_tot/transport_params->n_cells);
+            OverlapCollect->removepbc(bandwidth,ndof);
             OverlapCollect->write_CSR_bin("S_4.bin");
         }
         delete OverlapCollect;
     }
-    MPI_Barrier(MPI_COMM_WORLD);
-    exit(0);
 }

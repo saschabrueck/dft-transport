@@ -39,12 +39,12 @@ int worldrank; MPI_Comm_rank(MPI_COMM_WORLD,&worldrank);
 // get parameters always at the beginning of a subroutine (or maybe even better in the constructor) to make it independent of the structure containing the parameters
     int n_mu=muvec.size();
     int solver_method=parameter_sab->linear_solver;
-    int ncells=parameter_sab->n_cells;
-    int bandwidth=parameter_sab->bandwidth;
-    int ndof=Overlap->size_tot/parameter_sab->n_cells;
+int bandwidth=contactvec[0].bandwidth;
+int ndof=contactvec[0].ndof;
+int ncells=Overlap->size_tot/ndof;
     int ntriblock=bandwidth*ndof;
     std::vector<TCSR<CPX>*> Gamma(n_mu);
-    if (method!=transport_methods::PBC) {
+    if (method!=transport_methods::EQ) {
 sabtime=get_time(d_zer);
         TCSR<CPX> *SumHamC = new TCSR<CPX>(Overlap->size,Overlap->n_nonzeros,Overlap->findx);
         SumHamC->copy_contain(Overlap,d_one);
@@ -130,7 +130,7 @@ if (npror!=propnum[1] && propnum[1]>=0) if (!matrix_rank) cout << "WARNING: FOUN
             //Gamma
         }
     }
-    if (method==transport_methods::PBC) {
+    if (method==transport_methods::EQ) {
         if (KohnSham->findx!=1 || Overlap->findx!=1) return (LOGCERR, EXIT_FAILURE);
  
         double *HS_nnz_inp = new double[2*Overlap->n_nonzeros]();
@@ -203,10 +203,10 @@ if (npror!=propnum[1] && propnum[1]>=0) if (!matrix_rank) cout << "WARNING: FOUN
         delete H1cut;
         sabtime=get_time(d_zer);
         LinearSolver<CPX>* solver;
-        if (solver_method==0) {
+        if (solver_method==12) {
             solver = new SuperLU<CPX>(HamSig,matrix_comm);
 #ifdef HAVE_MUMPS
-        } else if (solver_method==1) {
+        } else if (solver_method==13) {
             solver = new MUMPS<CPX>(HamSig,matrix_comm);
 #endif
         } else return (LOGCERR, EXIT_FAILURE);
