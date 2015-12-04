@@ -3,118 +3,24 @@ HOW TO START:
 Prepare CP2K:
 1) get CP2K : svn checkout svn://svn.code.sf.net/p/cp2k/code/trunk cp2k 
 1) (optional) if you already have CP2K on your machine, update your working copy of CP2K using svn -update
-
-Update CP2K:
-2-1) copy "CP2Kupdates/modules/poisson/*.F" to the "cp2k/cp2k/src/pw" directory of CP2K 
-3) copy "CP2Kupdates/patchfiles/patch.poisson_[date].diff" to the src directory of CP2K
-4) in the src directory of CP2K run : "patch -p0 < patch.poisson_[date].diff"
-5) compile CP2K with popt or pdbg with target libcp2k : "make -j ARCH=...  VERSION=pdbg libcp2k"
+2) compile CP2K with popt or pdbg with target libcp2k : "make -j ARCH=...  VERSION=pdbg libcp2k"
    and make sure it works with an arbitray input file
 
 Compile and run:
-6) cd to makefiles/ and using the sample .mk file (arch1.mk) write a .mk file (say, myarch.mk) according to your local installations.
+3) cd to makefiles/ and using the sample .mk file (arch1.mk) write a .mk file (say, myarch.mk) according to your local installations.
    * In order to use CP2K add -Dlibcp2k to DFLAGS 
 
-7) create a Makefile and run make 
+4) create a Makefile and run make 
    > cd src/
    > ./configure --with-arch=myarch
    > make 
-8) to run 
+5) to run (example) 
    > cd ../inputfiles/files/ 
    > mpirun -np N ../../src/transport test_external_scf
+
+* more information about input parameters can be found at : 
+  https://manual.cp2k.org/trunk/CP2K_INPUT/FORCE_EVAL/DFT/TRANSPORT.html
 
 Extra functionalities: 
 9) to use PARDISO run 
    > ./configure --with-pardiso
-
-==========================================================================================================
-CP2K INPUT: (see test_external_scf.inp as an example)
-Under the input section DFT add the subsection TRANSPORT with the following keywords:
-DENSITY_MATRIX_CONSTRUCTION_METHOD
-   valid keywords are:
-   keyword      description                                                in C++(*)  
-   -------      ----------------------------------------------------       ------
-   DIAG         diagonalization using ScaLapack routines   (default)         1
-   EXPER        experimental code                                            2
-   TRANSPORT    transport code                                               3 
-   MISC         miscellaneous method                                         0 
-BANDWIDTH                   INTEGER (int)        default value 2
-N_CELLS                     INTEGER (int)        default value 5
-N_ABSCISSAE                 INTEGER (int)        default value 0
-N_KPOINTS                   INTEGER (int)        default value 64
-NUM_INTERVAL                INTEGER (int)        default value 10 
-NUM_CONTACTS                INTEGER (int)        default value 2
-N_DOF                       INTEGER (int)        default value 0 
-TASKS_PER_POINT             INTEGER (int)        default value 1 
-CORES_PER_NODE              INTEGER (int)        default value 1 
-COLZERO_THRESHOLD           REAL    (double)     default value 1.0E-12
-EPS_LIMIT                   REAL    (double)     default value 1.0E-6
-EPS_DECAY                   REAL    (double)     default value 1.0E-6
-EPS_SINGULARITY_CURVATURES  REAL    (double)     default value 1.0E-12
-EPS_MU                      REAL    (double)     default value 1.0E-4
-EPS_EIGVAL_DEGEN            REAL    (double)     default value 0.0
-ENERGY_INTERVAL             REAL    (double)     default value 1.0E-2
-MIN_INTERVAL                REAL    (double)     default value 1.0E-4
-TEMPERATURE                 REAL    (double)     default value 300.0
-
-(*)  TO DO: keywords to be defined as constants to avoid confusion  
-
-Poisson solver :
-- To activate the new Poisson solver: under the input section DFT/POISSON add 
-      POISSON_SOLVER IMPLICIT
-  If the keyword already exists just change the type of the solver into IMPLICIT
-- Add the subsection IMPLICIT with the following subsection and keywords:
-&IMPLICIT
-  BOUNDARY_CONDITIONS <type>               type of boundary conditions {PERIODIC, MIXED_PERIODIC, MIXED}
-  ZERO_INITIAL_GUESS  <logical>            whether or not to use zero initial guess (optional)
-  MAX_ITER            <integer>            maximum number of iterations
-  TOL                 <real>               stopping tolerance
-  OMEGA               <real>               over-relaxation parameter (use for large dielectric constants)
-  &DIELECTRIC        dielectric constant settings
-    eps0              <real>               dielectric constant 
-    rho_min           <real>               lower density threshold (default: 1.0E-4)
-    rho_max           <real>               upper density threshold (default: 1.0E-3)
-    derivative_method <method>             preferred method for evaluating the gradient of ln(eps) {fft, fft_use_deps, fft_use_drho, cd3, cd5, cd7}
-  &END DIELECTRIC
-  &DIRICHLET_BC      dirichlet BC settings (the subsections are optional and can also be repeated as many times as needed)
-    &AA_PLANAR       axis-aligned planar region 
-      v_D             <real>               value at the Dirichlet boundary 
-      X_xtnt          <real> <real>        the extents of the plane in the x direction (specify, has no default)
-      Y_xtnt          <real> <real>        the extents of the plane in the y direction (specify, has no default)
-      Z_xtnt          <real> <real>        the extents of the plane in the z direction (specify, has no default)
-      n_prtn          <int> <int> <int>    # of partitions in the x, y and z directions for tiling the plane (default: 1 1 1)
-      SMOOTH          <logical>            whether or not to smoothen (mollify) the dirichlet boundary region (optional)
-      smoothing_width <real>               the width of the standard mollifier (optional)
-    &END AA_PLANAR
-    &AA_CUBOIDAL     axis-aligned cuboidal region
-      v_D             <real>               value at the Dirichlet boundary 
-      X_xtnt          <real> <real>        the extents of the plane in the x direction (specify, has no default)
-      Y_xtnt          <real> <real>        the extents of the plane in the y direction (specify, has no default)
-      Z_xtnt          <real> <real>        the extents of the plane in the z direction (specify, has no default)
-      n_prtn          <int> <int> <int>    # of partitions in the x, y and z directions for tiling the cuboid (default: 1 1 1)
-      SMOOTH          <logical>            whether or not to smoothen (mollify) the dirichlet boundary region (optional)
-      smoothing_width <real>               the width of the standard mollifier (optional)
-    &END AA_CUBOIDAL
-    &XAA_CYLINDRICAL x-axis-aligned cylindrical region
-      v_D             <real>               value at the Dirichlet boundary
-      X_xtnt          <real> <real>        the extents of the cylinder in the x direction (specify, has no default)
-      base_center     <real> <real>        the y and z coordinates of the cylinder's base center (specify, has no default)
-      base_radius     <real>               the base radius of the cylinder (specify, has no default)
-      apx_type        <type>               the type of the n-gonal prism approximating the cylinder {CIRCUMSCRIBED, INSCRIBED}
-      n_sides         <int>                # of sides os the n-gonal prism approximating the cylinder (default: 5) 
-      n_prtn          <int> <int> <int>    # of partitions in the x, y and z directions for tiling the cuboid (default: 1 1 1)
-      SMOOTH          <logical>            whether or not to smoothen (mollify) the dirichlet boundary region (optional)
-      smoothing_width <real>               the width of the standard mollifier (optional)
-    &END XAA_CYLINDRICAL
-    &PLANAR          arbitrary planar region
-      v_D             <real>               value at the Dirichlet boundary
-      A               <real> <real> <real> coordinates of the vertex A (specify, has no default) 
-      B               <real> <real> <real> coordinates of the vertex B (specify, has no default)
-      C               <real> <real> <real> coordinates of the vertex C (specify, has no default)
-      D               <real> <real> <real> coordinates of the vertex D (specify, has no default)
-      n_prtn          <int> <int> <int>    # of partitions in the x, y and z directions for tiling the plane (default: 1 1 1)
-      SMOOTH          <logical>            whether or not to smoothen (mollify) the dirichlet boundary region (optional)
-      smoothing_width <real>               the width of the standard mollifier (optional)
-    &END PLANAR
- &END DIRICHLET_BC
-&END IMPLICIT
