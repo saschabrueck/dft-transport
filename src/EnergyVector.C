@@ -145,11 +145,11 @@ for (uint i_mu=0;i_mu<contactvec.size();i_mu++) singularities.write_bandstructur
             add_cmpx_cont_energies(singularities.energy_gs,muvec_min,energyvector,stepvector,methodvector,transport_params);
             add_real_axis_energies(nonequi_start,nonequi_end,energyvector,stepvector,methodvector,singularities.energies_extremum,transport_params);
         } else if (transport_params->method==4) {
-            if (transport_params->n_abscissae) {
+              if (!transport_params->extra_scf) {
                 add_cmpx_cont_energies(singularities.energy_gs,muvec_min,energyvector,stepvector,methodvector,transport_params);
-            } else {
+              } else {
                 add_real_axis_energies(nonequi_start,nonequi_end,energyvector,stepvector,methodvector,singularities.energies_extremum,transport_params);
-            }
+              }
         } else return (LOGCERR, EXIT_FAILURE);
         if (!iam) {
             ofstream myfile("E_dat");

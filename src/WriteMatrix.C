@@ -2,8 +2,10 @@
 
 void write_matrix(TCSR<double> *Overlap,TCSR<double> *KohnSham,int cutblocksize,int bandwidth,int ndof) {
     int iam;MPI_Comm_rank(MPI_COMM_WORLD,&iam);
-    KohnSham->change_findx(1);
-    Overlap->change_findx(1);
+    if (Overlap->findx==0) {
+        KohnSham->change_findx(1);
+        Overlap->change_findx(1);
+    }
     if (cutblocksize) {
         int bigblocksize=Overlap->size_tot/3;
         for (int i=0;i<3;i++) {
@@ -32,14 +34,14 @@ void write_matrix(TCSR<double> *Overlap,TCSR<double> *KohnSham,int cutblocksize,
         TCSR<double> *KohnShamCollect = new TCSR<double>(KohnSham,0,MPI_COMM_WORLD);
         if (!iam) {
             KohnShamCollect->write_CSR("KohnSham");
-            KohnShamCollect->removepbc(bandwidth,ndof);
+            if (bandwidth) KohnShamCollect->removepbc(bandwidth,ndof);
             KohnShamCollect->write_CSR_bin("H_4.bin");
         }
         delete KohnShamCollect;
         TCSR<double> *OverlapCollect = new TCSR<double>(Overlap,0,MPI_COMM_WORLD);
         if (!iam) {
             OverlapCollect->write_CSR("Overlap");
-            OverlapCollect->removepbc(bandwidth,ndof);
+            if (bandwidth) OverlapCollect->removepbc(bandwidth,ndof);
             OverlapCollect->write_CSR_bin("S_4.bin");
         }
         delete OverlapCollect;

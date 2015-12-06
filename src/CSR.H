@@ -2030,42 +2030,40 @@ void TCSR<T>::removepbc(int bw, int ndof)
 {
     int i,e;
 
-    if (bw) {
-        for (i=0;i<max(0,min(size,bw*ndof-first_row));i++) {
-            for (e=edge_i[i]-findx;e<edge_i[i+1]-findx;e++) {
-                if ( (index_j[e]-findx)/ndof - (i+first_row)/ndof > bw ) {
-                    index_j[e]=-1;
-                }
+    for (i=0;i<max(0,min(size,bw*ndof-first_row));i++) {
+        for (e=edge_i[i]-findx;e<edge_i[i+1]-findx;e++) {
+            if ( (index_j[e]-findx)/ndof - (i+first_row)/ndof > bw ) {
+                index_j[e]=-1;
             }
         }
- 
-        for (i=max(0,min(size,size_tot-bw*ndof-first_row));i<size;i++) {
-            for (e=edge_i[i]-findx;e<edge_i[i+1]-findx;e++) {
-                if ( (index_j[e]-findx)/ndof - (i+first_row)/ndof < -bw ) {
-                    index_j[e]=-1;
-                }
-            }
-        }
- 
-        n_nonzeros = 0;
-        init_variable(index_i,size);
- 
-        for (int i=0;i<size;i++) {
-            for(int e=edge_i[i]-findx;e<edge_i[i+1]-findx;e++){
-                if(index_j[e]>=0){
-                    index_i[i]++;
-                    index_j[n_nonzeros]=index_j[e];
-                    nnz[n_nonzeros]=nnz[e];
-                    n_nonzeros++;
-                }
-            }
-        }
- 
-        get_row_edge();
-        get_diag_pos();
- 
-        if (n_nonzeros!=edge_i[size]-findx) throw CSR_Exception(__LINE__,__FILE__);
     }
+
+    for (i=max(0,min(size,size_tot-bw*ndof-first_row));i<size;i++) {
+        for (e=edge_i[i]-findx;e<edge_i[i+1]-findx;e++) {
+            if ( (index_j[e]-findx)/ndof - (i+first_row)/ndof < -bw ) {
+                index_j[e]=-1;
+            }
+        }
+    }
+
+    n_nonzeros = 0;
+    init_variable(index_i,size);
+
+    for (int i=0;i<size;i++) {
+        for(int e=edge_i[i]-findx;e<edge_i[i+1]-findx;e++){
+            if(index_j[e]>=0){
+                index_i[i]++;
+                index_j[n_nonzeros]=index_j[e];
+                nnz[n_nonzeros]=nnz[e];
+                n_nonzeros++;
+            }
+        }
+    }
+
+    get_row_edge();
+    get_diag_pos();
+
+    if (n_nonzeros!=edge_i[size]-findx) throw CSR_Exception(__LINE__,__FILE__);
 }
 
 /************************************************************************************************/
