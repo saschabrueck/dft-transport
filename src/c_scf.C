@@ -77,6 +77,7 @@ void c_scf_method(cp2k_transport_parameters cp2k_transport_params, cp2k_csr_inte
       case 0:
          if (!rank) cout << "Writing Matrices" << endl;
          write_matrix(OverlapCut,KohnShamCut,transport_params->n_abscissae,transport_params->n_kpoint,transport_params->num_interval);
+         break;
       case 1:
          if (!rank) cout << "Starting ScaLaPackDiag" << endl;
          if (diagscalapack(OverlapCut,KohnShamCut,transport_params)) throw SCF_Exception(__LINE__,__FILE__);
