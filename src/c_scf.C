@@ -51,6 +51,7 @@ void c_scf_method(cp2k_transport_parameters cp2k_transport_params, cp2k_csr_inte
    transport_params->energy_interval            = cp2k_transport_params.energy_interval;
    transport_params->min_interval               = cp2k_transport_params.min_interval;
    transport_params->temperature                = cp2k_transport_params.temperature;
+   transport_params->extra_scf                  = cp2k_transport_params.extra_scf;
 
    std::vector<contact_type> contactvec(transport_params->num_contacts);
    int size_muvec=0;
@@ -72,10 +73,6 @@ void c_scf_method(cp2k_transport_parameters cp2k_transport_params, cp2k_csr_inte
       contactvec[i_t].n_ele     = cp2k_transport_params.contacts_nelec[i_c];
    }
 
-   contactvec[0].start=0;
-   contactvec[1].start=OverlapCut->size_tot-contactvec[1].ndof*contactvec[1].bandwidth;
-   contactvec[2].start=OverlapCut->size_tot/2;
-
    switch (transport_params->method) {
       case 0:
          if (!rank) cout << "Writing Matrices" << endl;
@@ -92,6 +89,9 @@ void c_scf_method(cp2k_transport_parameters cp2k_transport_params, cp2k_csr_inte
      case 4:
      default:
          if (!rank) cout << "Starting Transport " << transport_params->method << endl;
+contactvec[0].start=0;
+contactvec[1].start=OverlapCut->size_tot-contactvec[1].ndof*contactvec[1].bandwidth;
+contactvec[2].start=OverlapCut->size_tot/2;
          Energyvector energyvector;
          if (energyvector.Execute(OverlapCut,KohnShamCut,muvec,contactvec,transport_params)) throw SCF_Exception(__LINE__,__FILE__);
    }
@@ -104,7 +104,7 @@ void c_scf_method(cp2k_transport_parameters cp2k_transport_params, cp2k_csr_inte
        delete KohnShamCut;
    }
 
-   CSR_to_cp2kCSR(Overlap, *P);
+   if (!transport_params->extra_scf) CSR_to_cp2kCSR(Overlap, *P);
 
    delete Overlap;
    delete KohnSham;

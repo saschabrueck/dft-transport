@@ -34,6 +34,7 @@ extern "C" {
            double  temperature;
            int*    contacts_data;
            double* contacts_nelec;
+           bool    extra_scf;
            } cp2k_transport_parameters;
 
 /* CP2K's C-interoperable CSR matrix                 */

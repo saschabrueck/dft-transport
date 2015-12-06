@@ -72,7 +72,7 @@ private:
 template<class T>
 InjectionBeyn<T>::InjectionBeyn(int pslab_per_bc,double pcontour_radius)
 {
-    imag_limit      = 5.0e-5; //eps_decay
+    imag_limit      = 5.0e-5; //eps_decay for OMEN part
     mult_factor     = 1.2;
     svd_fac         = 1.0;
     NQDR            = 32;
