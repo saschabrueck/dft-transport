@@ -1,5 +1,0 @@
-i=`grep -n Mulliken $1 | cut -d : -f 1`
-ii=$((i+3))
-i=`grep -n "# Total charge" $1 | cut -d : -f 1`
-ie=$((i-1))
-sed -n $ii','$ie'p' $1 | awk '{print $5}'
