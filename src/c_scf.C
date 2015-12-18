@@ -19,6 +19,8 @@ void c_scf_method(cp2k_transport_parameters cp2k_transport_params, cp2k_csr_inte
    cp2kCSR_to_CSR(S, Overlap);
    cp2kCSR_to_CSR(KS, KohnSham);
 
+   c_dscal(P->nze_local,0.5,P->nzvals_local,1);
+
    c_dscal(KohnSham->n_nonzeros,cp2k_transport_params.evoltfactor,KohnSham->nnz,1);
 
    int cut_l=cp2k_transport_params.cutout[0];
@@ -68,7 +70,15 @@ void c_scf_method(cp2k_transport_parameters cp2k_transport_params, cp2k_csr_inte
       }
       contactvec[i_t].bandwidth = cp2k_transport_params.contacts_data[0+5*i_c];
       contactvec[i_t].ndof      = cp2k_transport_params.contacts_data[1+5*i_c];
-      contactvec[i_t].start     = cp2k_transport_params.contacts_data[2+5*i_c];
+      if (cp2k_transport_params.contacts_data[2+5*i_c]>=0) {
+          contactvec[i_t].start = cp2k_transport_params.contacts_data[2+5*i_c];
+      } else if (!cp2k_transport_params.contacts_data[4+5*i_c]) {
+          contactvec[i_t].start = OverlapCut->size_tot/2;
+      } else if (cp2k_transport_params.contacts_data[3+5*i_c]==-1) {
+          contactvec[i_t].start = OverlapCut->size_tot-contactvec[i_t].ndof*contactvec[i_t].bandwidth;
+      } else {
+          contactvec[i_t].start = 0;
+      }
       contactvec[i_t].inj_sign  = cp2k_transport_params.contacts_data[3+5*i_c];
       contactvec[i_t].n_ele     = cp2k_transport_params.contacts_nelec[i_c];
    }
@@ -90,9 +100,6 @@ void c_scf_method(cp2k_transport_parameters cp2k_transport_params, cp2k_csr_inte
      case 4:
      default:
          if (!rank) cout << "Starting Transport " << transport_params->method << endl;
-contactvec[0].start=0;
-contactvec[1].start=OverlapCut->size_tot-contactvec[1].ndof*contactvec[1].bandwidth;
-contactvec[2].start=OverlapCut->size_tot/2;
          Energyvector energyvector;
          if (energyvector.Execute(OverlapCut,KohnShamCut,muvec,contactvec,transport_params)) throw SCF_Exception(__LINE__,__FILE__);
    }
