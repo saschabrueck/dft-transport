@@ -129,7 +129,7 @@ inline int p_eig(CPX *KSfull,CPX *OVfull,double *eigval,int nvec,MPI_Comm p_eig_
     c_pzgeadd('N',nvec,nvec,CPX(1.0,0.0),KSfull,1,1,descKSfull,CPX(0.0,0.0),KSloc,1,1,descKS);
     c_pzgeadd('N',nvec,nvec,CPX(1.0,0.0),OVfull,1,1,descOVfull,CPX(0.0,0.0),OVloc,1,1,descOV);
 
-    int fac_degen=3;
+    int fac_degen=16;
     double eps_eigval_degen=1.0E-6;
     double abstol = 2.0*c_pdlamch(icontxt,'S');
     CPX workytest[3];

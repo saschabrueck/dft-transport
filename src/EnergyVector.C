@@ -132,6 +132,7 @@ for (uint i_mu=0;i_mu<contactvec.size();i_mu++) singularities.write_bandstructur
         double delta_eps_fermi=-log((numeric_limits<double>::epsilon)())*K_BOLTZMANN*Temp;
         double muvec_min=*min_element(muvec.begin(),muvec.end());
         double muvec_max=*max_element(muvec.begin(),muvec.end());
+        double muvec_avg=accumulate(muvec.begin(),muvec.end(),0.0)/muvec.size();
         double nonequi_start=muvec_min-delta_eps_fermi;
         double nonequi_end=muvec_max+delta_eps_fermi;
 
@@ -146,7 +147,7 @@ for (uint i_mu=0;i_mu<contactvec.size();i_mu++) singularities.write_bandstructur
             add_real_axis_energies(nonequi_start,nonequi_end,energyvector,stepvector,methodvector,singularities.energies_extremum,transport_params);
         } else if (transport_params->method==4) {
             if (!transport_params->extra_scf) {
-                add_cmpx_cont_energies(singularities.energy_gs,muvec_min,energyvector,stepvector,methodvector,transport_params);
+                add_cmpx_cont_energies(singularities.energy_gs,muvec_avg,energyvector,stepvector,methodvector,transport_params);
             } else {
                 add_real_axis_energies(nonequi_start,nonequi_end,energyvector,stepvector,methodvector,singularities.energies_extremum,transport_params);
             }
