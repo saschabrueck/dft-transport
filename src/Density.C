@@ -42,7 +42,9 @@ int worldrank; MPI_Comm_rank(MPI_COMM_WORLD,&worldrank);
 int bandwidth=contactvec[0].bandwidth;
 int ndof=contactvec[0].ndof;
 int ncells=Overlap->size_tot/ndof;
-    int ntriblock=bandwidth*ndof;
+int cutout=0;
+int ntriblock=bandwidth*ndof;
+int tra_block=0;
     std::vector<TCSR<CPX>*> Gamma(n_mu);
     if (method!=transport_methods::EQ) {
 sabtime=get_time(d_zer);
@@ -52,7 +54,7 @@ sabtime=get_time(d_zer);
         c_daxpy(SumHamC->n_nonzeros,d_one,KohnSham->nnz,1,(double*)SumHamC->nnz,2);
 if (!worldrank) cout << "TIME FOR SumHamC " << get_time(sabtime) << endl;
 // set pbc to zero 
-        SumHamC->settozeropbc(bandwidth,ndof);
+        if (!cutout) SumHamC->settozeropbc(bandwidth,ndof);
 //SumHamC->remove_thr(1.0E-6);
 // compute self energies
         std::vector<BoundarySelfEnergy> selfenergies(n_mu);
@@ -150,7 +152,7 @@ if (npror!=propnum[1] && propnum[1]>=0) if (!matrix_rank) cout << "WARNING: FOUN
         options.ordering = 0;
   
         PPEXSIPlan   plan;
-        plan = PPEXSIPlanInitialize(matrix_comm,1,matrix_procs,matrix_rank,&info);
+        plan = PPEXSIPlanInitialize(matrix_comm,1,matrix_procs,-1,&info);
         if (info) return (LOGCERR, EXIT_FAILURE);
         PPEXSILoadRealSymmetricHSMatrix(plan,options,Overlap->size_tot,n_nonzeros_global,Overlap->n_nonzeros,Overlap->size,Overlap->edge_i,Overlap->index_j,HS_nnz_inp,1,NULL,&info);
         if (info) return (LOGCERR, EXIT_FAILURE);
@@ -197,7 +199,6 @@ if (npror!=propnum[1] && propnum[1]>=0) if (!matrix_rank) cout << "WARNING: FOUN
         Ps->add_real(HamSig,-weight/M_PI*CPX(0.0,1.0));
         delete HamSig;
     } else if (method==transport_methods::WF) {
-        int tra_block=0;
         TCSR<CPX> *H1cut = new TCSR<CPX>(HamSig,tra_block*ntriblock,ntriblock,(tra_block+1)*ntriblock,ntriblock);
         TCSR<CPX> *H1 = new TCSR<CPX>(H1cut,0,matrix_comm);
         delete H1cut;
