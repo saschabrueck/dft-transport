@@ -150,7 +150,7 @@ if (npror!=propnum[1] && propnum[1]>=0) if (!matrix_rank) cout << "WARNING: FOUN
         options.ordering = 0;
   
         PPEXSIPlan   plan;
-        plan = PPEXSIPlanInitialize(matrix_comm,1,matrix_procs,-1,&info);
+        plan = PPEXSIPlanInitialize(matrix_comm,1,matrix_procs,matrix_rank,&info);
         if (info) return (LOGCERR, EXIT_FAILURE);
         PPEXSILoadRealSymmetricHSMatrix(plan,options,Overlap->size_tot,n_nonzeros_global,Overlap->n_nonzeros,Overlap->size,Overlap->edge_i,Overlap->index_j,HS_nnz_inp,1,NULL,&info);
         if (info) return (LOGCERR, EXIT_FAILURE);
@@ -225,54 +225,60 @@ if (!worldrank) cout << "TIME FOR WAVEFUNCTION SPARSE SOLVER " << get_time(sabti
         delete[] sol;
         delete[] dist_sol;
         delete[] displc_sol;
-        CPX* Soll = new CPX[solsize*(nprol+npror)]();
-        CPX* Solr = new CPX[solsize*(nprol+npror)]();
-        for (int ibw=bandwidth+1;ibw<ncells;ibw++) {
-//        for (int ibw=0;ibw<ncells;ibw++) {
-            c_zlacpy('A',ndof,nprol+npror,Sol,solsize,&Soll[ndof*ibw],solsize);
-            c_zlacpy('A',ndof,nprol+npror,&Sol[solsize-ndof],solsize,&Solr[solsize-ndof*(ibw+1)],solsize);
-            for (int ipro=0;ipro<nprol+npror;ipro++) {
-                c_zscal(solsize,pow(lambda[ipro],-1),&Soll[ipro*solsize],1);
-                c_zscal(solsize,pow(lambda[ipro],+1),&Solr[ipro*solsize],1);
+        if (parameter_sab->method==4) {
+            if (muvec[0]>muvec[1]) {
+                double fermil = fermi(real(energy),muvec[0],parameter_sab->temperature,0)-fermi(real(energy),muvec[1],parameter_sab->temperature,0);
+                CPX* SolT = new CPX[solsize*nprol];
+                full_transpose(nprol,solsize,Sol,SolT);
+                Ps->psipsidagger_transpose(SolT,nprol,+weight*fermil);
+                delete[] SolT;
+            } else {
+                double fermir = fermi(real(energy),muvec[1],parameter_sab->temperature,0)-fermi(real(energy),muvec[0],parameter_sab->temperature,0);
+                CPX* SolT = new CPX[solsize*npror];
+                full_transpose(npror,solsize,&Sol[solsize*nprol],SolT);
+                Ps->psipsidagger_transpose(SolT,npror,+weight*fermir);
+                delete[] SolT;
             }
         }
-        delete[] lambda;
-        double Temp=parameter_sab->temperature;
-        double fermil=0.0;
-        double fermir=0.0;
-        if (!parameter_sab->n_abscissae) {
-            fermil=fermi(real(energy),muvec[0],Temp,0);
-            fermir=fermi(real(energy),muvec[1],Temp,0);
-        } else if (muvec[0]>muvec[1]) {
-            fermil=fermi(real(energy),muvec[0],Temp,0)-fermi(real(energy),muvec[1],Temp,0);
-        } else {
-            fermir=fermi(real(energy),muvec[1],Temp,0)-fermi(real(energy),muvec[0],Temp,0);
-        }
-//        double dfermil=fermi(real(energy),muvec[0],Temp,2);
-//        double dfermir=fermi(real(energy),muvec[1],Temp,2);
+        if (parameter_sab->method==2) {
+            CPX* Soll = new CPX[solsize*(nprol+npror)]();
+            CPX* Solr = new CPX[solsize*(nprol+npror)]();
+            for (int ibw=bandwidth+1;ibw<ncells;ibw++) {
+//            for (int ibw=0;ibw<ncells;ibw++) {
+                c_zlacpy('A',ndof,nprol+npror,Sol,solsize,&Soll[ndof*ibw],solsize);
+                c_zlacpy('A',ndof,nprol+npror,&Sol[solsize-ndof],solsize,&Solr[solsize-ndof*(ibw+1)],solsize);
+                for (int ipro=0;ipro<nprol+npror;ipro++) {
+                    c_zscal(solsize,pow(lambda[ipro],-1),&Soll[ipro*solsize],1);
+                    c_zscal(solsize,pow(lambda[ipro],+1),&Solr[ipro*solsize],1);
+                }
+            }
+            double fermil=fermi(real(energy),muvec[0],parameter_sab->temperature,0);
+            double fermir=fermi(real(energy),muvec[1],parameter_sab->temperature,0);
 sabtime=get_time(d_zer);
-        CPX* SolT = new CPX[solsize*max(nprol,npror)];
-        CPX* SollT = new CPX[solsize*max(nprol,npror)];
-        CPX* SolrT = new CPX[solsize*max(nprol,npror)];
-        full_transpose(nprol,solsize,Sol,SolT);
-        full_transpose(nprol,solsize,Soll,SollT);
-        full_transpose(nprol,solsize,Solr,SolrT);
-        double dosl=Ps->psipsidagger_transpose(Overlap,SolT,SollT,SolrT,nprol,ndof,bandwidth,+weight*fermil);
-        full_transpose(npror,solsize,&Sol[solsize*nprol],SolT);
-        full_transpose(npror,solsize,&Soll[solsize*nprol],SollT);
-        full_transpose(npror,solsize,&Solr[solsize*nprol],SolrT);
-        double dosr=Ps->psipsidagger_transpose(Overlap,SolT,SollT,SolrT,npror,ndof,bandwidth,+weight*fermir);
-        delete[] SolT;
-        delete[] SollT;
-        delete[] SolrT;
+            CPX* SolT = new CPX[solsize*max(nprol,npror)];
+            CPX* SollT = new CPX[solsize*max(nprol,npror)];
+            CPX* SolrT = new CPX[solsize*max(nprol,npror)];
+            full_transpose(nprol,solsize,Sol,SolT);
+            full_transpose(nprol,solsize,Soll,SollT);
+            full_transpose(nprol,solsize,Solr,SolrT);
+            double dosl=Ps->psipsidagger_transpose(Overlap,SolT,SollT,SolrT,nprol,ndof,bandwidth,+weight*fermil);
+            full_transpose(npror,solsize,&Sol[solsize*nprol],SolT);
+            full_transpose(npror,solsize,&Soll[solsize*nprol],SollT);
+            full_transpose(npror,solsize,&Solr[solsize*nprol],SolrT);
+            double dosr=Ps->psipsidagger_transpose(Overlap,SolT,SollT,SolrT,npror,ndof,bandwidth,+weight*fermir);
+            delete[] SolT;
+            delete[] SollT;
+            delete[] SolrT;
 /*
-        double dosl=Ps->psipsidagger(Overlap,Sol,Soll,Solr,nprol,ndof,bandwidth,+weight*fermil);
-        double dosr=Ps->psipsidagger(Overlap,&Sol[Ps->size_tot*nprol],&Soll[Ps->size_tot*nprol],&Solr[Ps->size_tot*nprol],npror,ndof,bandwidth,+weight*fermir);
+            double dosl=Ps->psipsidagger(Overlap,Sol,Soll,Solr,nprol,ndof,bandwidth,+weight*fermil);
+            double dosr=Ps->psipsidagger(Overlap,&Sol[Ps->size_tot*nprol],&Soll[Ps->size_tot*nprol],&Solr[Ps->size_tot*nprol],npror,ndof,bandwidth,+weight*fermir);
 */
-        dos=dosl+dosr;
+            dos=dosl+dosr;
 if (!worldrank) cout << "TIME FOR CONSTRUCTION OF S-PATTERN DENSITY MATRIX " << get_time(sabtime) << endl;
-        delete[] Soll;
-        delete[] Solr;
+            delete[] Soll;
+            delete[] Solr;
+        }
+        delete[] lambda;
 // transmission
         if (!matrix_rank) {
             CPX *vecoutdof=new CPX[ntriblock];
@@ -290,7 +296,7 @@ if (!worldrank) cout << "TIME FOR CONSTRUCTION OF S-PATTERN DENSITY MATRIX " << 
 if (abs(abs(transml)-abs(transmr))/max(1.0,min(abs(transml),abs(transmr)))>0.1) cout << "CAUTION: TRANSMISSION " << transml << " " << transmr << " AT ENERGY " << real(energy) << " AT POSITION " << evecpos << endl;
 //if (abs(transml)<1.0E-2 && nprol>0 && npror>0) cout << "RED ALERT: ZERO TRANSMISSION IN SPITE OF " << nprol << " AND " << npror << " AT ENERGY " << real(energy) << " AT POSITION " << evecpos << endl;
             transm=transml;
-            double diff_fermi=fermi(real(energy),muvec[0],Temp,0)-fermi(real(energy),muvec[1],Temp,0);
+            double diff_fermi=fermi(real(energy),muvec[0],parameter_sab->temperature,0)-fermi(real(energy),muvec[1],parameter_sab->temperature,0);
             current=2.0*E_ELECTRON*E_ELECTRON/(2.0*M_PI*H_BAR)*diff_fermi*transm;
         }
         delete[] Sol;
