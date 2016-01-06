@@ -15,6 +15,7 @@ int Execute(TCSR<double>*,TCSR<double>*,std::vector<double>,std::vector<contact_
 
 private:
 int determine_energyvector(std::vector<CPX>&,std::vector<CPX>&,std::vector<transport_methods::transport_method>&,std::vector< std::vector<int> >&,TCSR<double>*,TCSR<double>*,std::vector<double>&,std::vector<contact_type>,transport_parameters*);
+void read_real_axis_energies(std::vector<CPX>&,std::vector<CPX>&,std::vector<transport_methods::transport_method>&,ifstream&);
 void add_real_axis_energies(double,double,std::vector<CPX>&,std::vector<CPX>&,std::vector<transport_methods::transport_method>&,const std::vector< std::vector<double> > &,transport_parameters*);
 void add_cmpx_cont_energies(double,double,std::vector<CPX>&,std::vector<CPX>&,std::vector<transport_methods::transport_method>&,transport_parameters*);
 int iam, nprocs;
