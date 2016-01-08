@@ -100,6 +100,7 @@ public:
     void add(TCSR<T>*,T);
     void add_real(TCSR<CPX>*,CPX);
     void copy_shifted(TCSR<T>*,int,int,int,int);
+    void copy_pbc_cell(contact_type,int,MPI_Comm);
     void add_pot(TCSR<T>*,T*);
     void Bcast(int,MPI_Comm);
     void scatter(TCSR<T>*,int,MPI_Comm);
@@ -1775,6 +1776,73 @@ void TCSR<T>::copy_shifted(TCSR<T> *A,int istart, int ilength, int jstart, int j
                 nnz[e]=linefull[index_j[e]-findx-jstart];
             }
         }
+    }
+    delete[] linefull;
+}
+
+/************************************************************************************************/
+
+template <class T>
+void TCSR<T>::copy_pbc_cell(contact_type contact,int strinum,MPI_Comm my_comm)
+{
+    int i,j,e;
+    int bandw    = contact.bandwidth;
+    int ndof     = contact.ndof;
+    int start    = contact.start;//WARNING NOT IMPLEMENTED YET
+    int inj_sign = contact.inj_sign;
+    T* linefull = new T[(2*bandw+1)*ndof];
+    if (inj_sign==1) {
+        TCSR<T> *Pscut = new TCSR<T>(this,strinum*ndof,ndof,0,size_tot+bandw*ndof);
+        TCSR<T> *Pcell = new TCSR<T>(Pscut,my_comm);
+        delete Pscut;
+        for (int i_elem=0;i_elem<ndof;i_elem++) {
+            for (e=Pcell->edge_i[i_elem]-Pcell->findx;e<Pcell->edge_i[i_elem+1]-Pcell->findx;e++) {
+                Pcell->index_j[e]=(Pcell->index_j[e]+(bandw-strinum)*ndof+size_tot)%size_tot;
+            }
+        }
+        for (i=0;i<size;i++) {
+            int i_band=(i+first_row)/ndof;
+            int i_elem=(i+first_row)%ndof;
+            if (i_band<bandw) {
+                init_variable(linefull,(2*bandw+1)*ndof);
+                for (e=Pcell->edge_i[i_elem]-Pcell->findx;e<Pcell->edge_i[i_elem+1]-Pcell->findx;e++) {
+                    j=Pcell->index_j[e]-Pcell->findx;
+                    if (j>=0 && j<(2*bandw+1)*ndof) {
+                        linefull[j]=Pcell->nnz[e];
+                    }
+                }
+                for (e=edge_i[i]-findx;e<edge_i[i+1]-findx;e++) {
+                    nnz[e]=linefull[(index_j[e]-findx+(bandw-i_band)*ndof+size_tot)%size_tot];
+                }
+            }
+        }
+        delete Pcell;
+    } else if (inj_sign==-1) {
+        TCSR<T> *Pscut = new TCSR<T>(this,size_tot-(strinum+1)*ndof,ndof,0,size_tot+bandw*ndof);
+        TCSR<T> *Pcell = new TCSR<T>(Pscut,my_comm);
+        delete Pscut;
+        for (int i_elem=0;i_elem<ndof;i_elem++) {
+            for (e=Pcell->edge_i[i_elem]-Pcell->findx;e<Pcell->edge_i[i_elem+1]-Pcell->findx;e++) {
+                Pcell->index_j[e]=(Pcell->index_j[e]-(bandw-strinum)*ndof+size_tot)%size_tot;
+            }
+        }
+        for (i=0;i<size;i++) {
+            int i_band=(i+first_row)/ndof;
+            int i_elem=(i+first_row)%ndof;
+            if (i_band>size_tot/ndof-bandw-1) {
+                init_variable(linefull,(2*bandw+1)*ndof);
+                for (e=Pcell->edge_i[i_elem]-Pcell->findx;e<Pcell->edge_i[i_elem+1]-Pcell->findx;e++) {
+                    j=Pcell->index_j[e]-Pcell->findx-(size_tot-(2*bandw+1)*ndof);
+                    if (j>=0 && j<(2*bandw+1)*ndof) {
+                        linefull[j]=Pcell->nnz[e];
+                    }
+                }
+                for (e=edge_i[i]-findx;e<edge_i[i+1]-findx;e++) {
+                    nnz[e]=linefull[(index_j[e]-findx+(bandw-i_band)*ndof+size_tot)%size_tot];
+                }
+            }
+        }
+        delete Pcell;
     }
     delete[] linefull;
 }
