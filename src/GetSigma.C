@@ -229,7 +229,7 @@ int worldrank; MPI_Comm_rank(MPI_COMM_WORLD,&worldrank);
             neigbeyn=ndof;
         } else {
             k_inj = new InjectionBeyn<double>(2*bandwidth,1.0/eps_limit);
-            neigbeyn=ndof/5;
+            neigbeyn=ndof/2;
         }
         int *nonzH = new int[nblocksband];
         int findxH;
@@ -527,14 +527,16 @@ if (!worldrank) cout << "TIME FOR SYMMETRIZATION " << get_time(sabtime) << endl;
             for (int j=0;j<i;j++) {
                 if (abs(lambdaref[i]-lambdaref[j])<eps_eigval_degen && abs(velref[i]-velref[j])<eps_eigval_degen) {
                     degeneracy++;
+/*
                     CPX prod=c_zdotc(ntriblock,&Vref[i*ntriblock],1,&Vref[j*ntriblock],1);
                     c_zaxpy(ntriblock,-prod,&Vref[i*ntriblock],1,&Vref[j*ntriblock],1);
                     CPX norm=CPX(d_one/c_dznrm2(ntriblock,&Vref[j*ntriblock],1),d_zer);
                     c_zscal(ntriblock,norm,&Vref[j*ntriblock],1);
+*/
                 }
             }
-if (degeneracy==2) cout << "DEGENERATE ON " << evecpos << endl;
-            if (degeneracy>2) return (LOGCERR, EXIT_FAILURE);
+if (degeneracy>1) cout << "DEGENERACY " << degeneracy << " ON " << evecpos << endl;
+//            if (degeneracy>2) return (LOGCERR, EXIT_FAILURE);
         }
         inj = new CPX[ntriblock*nprotra];
         lambdapro = new CPX[nprotra];
