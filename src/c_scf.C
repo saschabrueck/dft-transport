@@ -107,7 +107,7 @@ void c_scf_method(cp2k_transport_parameters cp2k_transport_params, cp2k_csr_inte
    if (cut_l+cut_r) {
        cp2kCSR_to_CSR(*P, Overlap);
        c_dscal(Overlap->n_nonzeros,0.5,Overlap->nnz,1);
-       Overlap->copy_shifted(OverlapCut,cut_l,Overlap->size_tot-cut_r,cut_l,Overlap->size_tot-cut_r);
+       Overlap->copy_shifted(OverlapCut,cut_l,Overlap->size_tot-cut_l-cut_r,cut_l,Overlap->size_tot-cut_l-cut_r);
        delete OverlapCut;
        delete KohnShamCut;
    }
