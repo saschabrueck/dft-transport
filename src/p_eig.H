@@ -9,14 +9,11 @@ inline int p_eig(double *KSfull,double *OVfull,double *eigval,int nvec,MPI_Comm 
     MPI_Comm_size(p_eig_comm,&nprocs);
     MPI_Comm_rank(p_eig_comm,&iam);
     int icontxt=MPI_Comm_c2f(p_eig_comm);
-
-    int nprow, npcol, myrow, mycol;
-    nprow=int(sqrt(double(nprocs)));
-    npcol=nprocs/nprow;
-    while (npcol*nprow!=nprocs) {
-        nprow++;
-        npcol=nprocs/nprow;
-    } // end while
+    int nprowcol[2]={0,0};
+    MPI_Dims_create(nprocs,2,nprowcol);
+    int nprow = nprowcol[0];
+    int npcol = nprowcol[1];
+    int myrow, mycol;
     char gridr[1] = {'R'};
     Cblacs_gridinit(&icontxt,gridr,nprow,npcol);
     Cblacs_gridinfo(icontxt,&nprow,&npcol,&myrow,&mycol);
@@ -47,7 +44,7 @@ inline int p_eig(double *KSfull,double *OVfull,double *eigval,int nvec,MPI_Comm 
     c_pdgeadd('N',nvec,nvec,1.0,KSfull,1,1,descKSfull,0.0,KSloc,1,1,descKS);
     c_pdgeadd('N',nvec,nvec,1.0,OVfull,1,1,descOVfull,0.0,OVloc,1,1,descOV);
 
-    int fac_degen=5;
+    int fac_degen=max(0,int(floor(double(nvec)/sqrt(double(nprocs))))-1);
     double eps_eigval_degen=1.0E-6;
     double abstol = 2.0*c_pdlamch(icontxt,'S');
     double workytest[3];
@@ -91,14 +88,11 @@ inline int p_eig(CPX *KSfull,CPX *OVfull,double *eigval,int nvec,MPI_Comm p_eig_
     MPI_Comm_size(p_eig_comm,&nprocs);
     MPI_Comm_rank(p_eig_comm,&iam);
     int icontxt=MPI_Comm_c2f(p_eig_comm);
-
-    int nprow, npcol, myrow, mycol;
-    nprow=int(sqrt(double(nprocs)));
-    npcol=nprocs/nprow;
-    while (npcol*nprow!=nprocs) {
-        nprow++;
-        npcol=nprocs/nprow;
-    } // end while
+    int nprowcol[2]={0,0};
+    MPI_Dims_create(nprocs,2,nprowcol);
+    int nprow = nprowcol[0];
+    int npcol = nprowcol[1];
+    int myrow, mycol;
     char gridr[1] = {'R'};
     Cblacs_gridinit(&icontxt,gridr,nprow,npcol);
     Cblacs_gridinfo(icontxt,&nprow,&npcol,&myrow,&mycol);
@@ -129,7 +123,7 @@ inline int p_eig(CPX *KSfull,CPX *OVfull,double *eigval,int nvec,MPI_Comm p_eig_
     c_pzgeadd('N',nvec,nvec,CPX(1.0,0.0),KSfull,1,1,descKSfull,CPX(0.0,0.0),KSloc,1,1,descKS);
     c_pzgeadd('N',nvec,nvec,CPX(1.0,0.0),OVfull,1,1,descOVfull,CPX(0.0,0.0),OVloc,1,1,descOV);
 
-    int fac_degen=16;
+    int fac_degen=max(0,int(floor(double(nvec)/sqrt(double(nprocs))))-1);
     double eps_eigval_degen=1.0E-6;
     double abstol = 2.0*c_pdlamch(icontxt,'S');
     CPX workytest[3];

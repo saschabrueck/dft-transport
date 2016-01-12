@@ -305,7 +305,7 @@ void Energyvector::add_cmpx_cont_energies(double start,double mu,std::vector<CPX
         energyvector.insert(energyvector.end(),quadrature.abscissae.begin(),quadrature.abscissae.end());
         stepvector.insert(stepvector.end(),quadrature.weights.begin(),quadrature.weights.end());
     }
-    if (transport_params->method==4) {
+    if (transport_params->method==4 && !transport_params->cutout) {
         methodvector.resize(energyvector.size(),transport_methods::EQ);
     } else {
         methodvector.resize(energyvector.size(),transport_methods::GF);

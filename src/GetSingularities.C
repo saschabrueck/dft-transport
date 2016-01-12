@@ -448,8 +448,10 @@ int Singularities::determine_velocities(TCSR<double> **H,TCSR<double> **S,double
     } else {
 
         int icontxt=MPI_Comm_c2f(bs_comm);
-        int nprow = size_bs_comm;
-        int npcol = 1;
+        int nprowcol[2]={0,0};
+        MPI_Dims_create(size_bs_comm,2,nprowcol);
+        int nprow = nprowcol[0];
+        int npcol = nprowcol[1];
         int myrow, mycol;
         int nbl = 64;
         char gridr[1] = {'R'};
