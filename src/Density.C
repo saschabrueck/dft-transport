@@ -39,10 +39,10 @@ int worldrank; MPI_Comm_rank(MPI_COMM_WORLD,&worldrank);
 // get parameters always at the beginning of a subroutine (or maybe even better in the constructor) to make it independent of the structure containing the parameters
     int n_mu=muvec.size();
     int solver_method=parameter_sab->linear_solver;
+    int cutout=parameter_sab->cutout;
 int bandwidth=contactvec[0].bandwidth;
 int ndof=contactvec[0].ndof;
 int ncells=Overlap->size_tot/ndof;
-int cutout=0;
 int ntriblock=bandwidth*ndof;
 int tra_block=0;
     std::vector<TCSR<CPX>*> Gamma(n_mu);
@@ -146,13 +146,15 @@ if (npror!=propnum[1] && propnum[1]>=0) if (!matrix_rank) cout << "WARNING: FOUN
         MPI_Allreduce(&Overlap->n_nonzeros,&n_nonzeros_global,1,MPI_INT,MPI_SUM,matrix_comm);
         int info;
  
-        PPEXSIOptions  options;
+        PPEXSIOptions options;
         PPEXSISetDefaultOptions(&options);
         options.npSymbFact = matrix_procs;
         options.ordering = 0;
   
-        PPEXSIPlan   plan;
-        plan = PPEXSIPlanInitialize(matrix_comm,1,matrix_procs,-1,&info);
+        PPEXSIPlan plan;
+        int nprowcol[2]={0,0};
+        MPI_Dims_create(matrix_procs,2,nprowcol);
+        plan = PPEXSIPlanInitialize(matrix_comm,nprowcol[0],nprowcol[1],-1,&info);
         if (info) return (LOGCERR, EXIT_FAILURE);
         PPEXSILoadRealSymmetricHSMatrix(plan,options,Overlap->size_tot,n_nonzeros_global,Overlap->n_nonzeros,Overlap->size,Overlap->edge_i,Overlap->index_j,HS_nnz_inp,1,NULL,&info);
         if (info) return (LOGCERR, EXIT_FAILURE);
@@ -178,13 +180,15 @@ if (npror!=propnum[1] && propnum[1]>=0) if (!matrix_rank) cout << "WARNING: FOUN
         MPI_Allreduce(&HamSig->n_nonzeros,&n_nonzeros_global,1,MPI_INT,MPI_SUM,matrix_comm);
         int info;
  
-        PPEXSIOptions  options;
+        PPEXSIOptions options;
         PPEXSISetDefaultOptions(&options);
         options.npSymbFact = matrix_procs;
         options.ordering = 0;
   
-        PPEXSIPlan   plan;
-        plan = PPEXSIPlanInitialize(matrix_comm,1,matrix_procs,-1,&info);
+        PPEXSIPlan plan;
+        int nprowcol[2]={0,0};
+        MPI_Dims_create(matrix_procs,2,nprowcol);
+        plan = PPEXSIPlanInitialize(matrix_comm,nprowcol[0],nprowcol[1],-1,&info);
         if (info) return (LOGCERR, EXIT_FAILURE);
         PPEXSILoadRealSymmetricHSMatrix(plan,options,HamSig->size_tot,n_nonzeros_global,HamSig->n_nonzeros,HamSig->size,HamSig->edge_i,HamSig->index_j,HS_nnz_inp,1,NULL,&info);
         if (info) return (LOGCERR, EXIT_FAILURE);

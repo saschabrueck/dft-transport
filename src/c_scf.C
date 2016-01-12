@@ -54,6 +54,7 @@ void c_scf_method(cp2k_transport_parameters cp2k_transport_params, cp2k_csr_inte
    transport_params->min_interval               = cp2k_transport_params.min_interval;
    transport_params->temperature                = cp2k_transport_params.temperature;
    transport_params->extra_scf                  = cp2k_transport_params.extra_scf;
+   transport_params->cutout                     = cut_l+cut_r;
 
    std::vector<contact_type> contactvec(transport_params->num_contacts);
    int size_muvec=0;

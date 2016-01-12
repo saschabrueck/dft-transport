@@ -944,14 +944,11 @@ int InjectionBeyn<T>::parallel_decompose(CPX *Q1,CPX *Q2,int ND,int NM, MPI_Comm
     double *Sval = new double[NM];
 
     int icontxt=MPI_Comm_c2f(comm);
-
-    int nprow, npcol, myrow, mycol;
-    nprow=int(sqrt(double(loc_size)));
-    npcol=loc_size/nprow;
-    while (npcol*nprow!=loc_size) {
-        nprow++;
-        npcol=loc_size/nprow;
-    } // end while
+    int nprowcol[2]={0,0};
+    MPI_Dims_create(loc_size,2,nprowcol);
+    int nprow = nprowcol[0];
+    int npcol = nprowcol[1];
+    int myrow, mycol;
     char gridr[1] = {'R'};
     Cblacs_gridinit(&icontxt,gridr,nprow,npcol);
     Cblacs_gridinfo(icontxt,&nprow,&npcol,&myrow,&mycol);

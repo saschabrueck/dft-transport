@@ -439,6 +439,7 @@ struct transport_parameters
     int    num_contacts;
     int    tasks_per_point;
     int    extra_scf;
+    int    cutout;
     double colzero_threshold;
     double eps_limit;
     double eps_decay;
