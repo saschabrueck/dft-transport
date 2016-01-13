@@ -19,7 +19,7 @@ void c_scf_method(cp2k_transport_parameters cp2k_transport_params, cp2k_csr_inte
    cp2kCSR_to_CSR(S, Overlap);
    cp2kCSR_to_CSR(KS, KohnSham);
 
-   c_dscal(P->nze_local,0.5,P->nzvals_local,1);
+   if (cp2k_transport_params.extra_scf) c_dscal(P->nze_local,0.5,P->nzvals_local,1);
 
    c_dscal(KohnSham->n_nonzeros,cp2k_transport_params.evoltfactor,KohnSham->nnz,1);
 

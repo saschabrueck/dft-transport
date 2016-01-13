@@ -148,8 +148,8 @@ if (npror!=propnum[1] && propnum[1]>=0) if (!matrix_rank) cout << "WARNING: FOUN
  
         PPEXSIOptions options;
         PPEXSISetDefaultOptions(&options);
-        options.npSymbFact = matrix_procs;
-        options.ordering = 0;
+        options.npSymbFact = 1;
+        options.ordering = 1;
   
         PPEXSIPlan plan;
         int nprowcol[2]={0,0};
@@ -182,8 +182,8 @@ if (npror!=propnum[1] && propnum[1]>=0) if (!matrix_rank) cout << "WARNING: FOUN
  
         PPEXSIOptions options;
         PPEXSISetDefaultOptions(&options);
-        options.npSymbFact = matrix_procs;
-        options.ordering = 0;
+        options.npSymbFact = 1;
+        options.ordering = 1;
   
         PPEXSIPlan plan;
         int nprowcol[2]={0,0};
@@ -230,7 +230,8 @@ if (!worldrank) cout << "TIME FOR WAVEFUNCTION SPARSE SOLVER " << get_time(sabti
         delete[] sol;
         delete[] dist_sol;
         delete[] displc_sol;
-        if (parameter_sab->method==4) {
+        if (parameter_sab->method==3) {
+sabtime=get_time(d_zer);
             if (muvec[0]>muvec[1]) {
                 double fermil = fermi(real(energy),muvec[0],parameter_sab->temperature,0)-fermi(real(energy),muvec[1],parameter_sab->temperature,0);
                 CPX* SolT = new CPX[solsize*nprol];
@@ -244,6 +245,7 @@ if (!worldrank) cout << "TIME FOR WAVEFUNCTION SPARSE SOLVER " << get_time(sabti
                 Ps->psipsidagger_transpose(SolT,npror,+weight*fermir);
                 delete[] SolT;
             }
+if (!worldrank) cout << "TIME FOR CONSTRUCTION OF S-PATTERN DENSITY MATRIX " << get_time(sabtime) << endl;
         }
         if (parameter_sab->method==2) {
             CPX* Soll = new CPX[solsize*(nprol+npror)]();
