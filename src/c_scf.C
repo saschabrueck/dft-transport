@@ -69,19 +69,26 @@ void c_scf_method(cp2k_transport_parameters cp2k_transport_params, cp2k_csr_inte
       } else {
          i_t=muvec.size()+i_n++;
       }
-      contactvec[i_t].bandwidth = cp2k_transport_params.contacts_data[0+5*i_c];
-      contactvec[i_t].ndof      = cp2k_transport_params.contacts_data[1+5*i_c];
-      if (cp2k_transport_params.contacts_data[2+5*i_c]>=0) {
-          contactvec[i_t].start = cp2k_transport_params.contacts_data[2+5*i_c];
-      } else if (!cp2k_transport_params.contacts_data[4+5*i_c]) {
-          contactvec[i_t].start = OverlapCut->size_tot/2;
-      } else if (cp2k_transport_params.contacts_data[3+5*i_c]==-1) {
-          contactvec[i_t].start = OverlapCut->size_tot-contactvec[i_t].ndof*contactvec[i_t].bandwidth;
-      } else {
-          contactvec[i_t].start = 0;
+      int bandwidth  = cp2k_transport_params.contacts_data[0+5*i_c];
+      int inj_sign   = cp2k_transport_params.contacts_data[3+5*i_c];
+      int atom_start = cp2k_transport_params.contacts_data[1+5*i_c];
+      int n_atoms_c  = cp2k_transport_params.contacts_data[2+5*i_c];
+      if (atom_start==-1) {
+         if (!cp2k_transport_params.contacts_data[4+5*i_c]) {
+            atom_start = cp2k_transport_params.n_atoms/2;
+        } else if (inj_sign==-1) {
+            atom_start = cp2k_transport_params.n_atoms-n_atoms_c*bandwidth;
+         } else {
+            atom_start = 0;
+         }
       }
-      contactvec[i_t].inj_sign  = cp2k_transport_params.contacts_data[3+5*i_c];
-      contactvec[i_t].n_ele     = cp2k_transport_params.contacts_nelec[i_c];
+      int atom_stop  = atom_start + n_atoms_c;
+      contactvec[i_t].bandwidth = bandwidth;
+      contactvec[i_t].inj_sign  = inj_sign;
+      contactvec[i_t].start     = std::accumulate(&cp2k_transport_params.nsgf[0],&cp2k_transport_params.nsgf[atom_start],0);
+      contactvec[i_t].ndof      = std::accumulate(&cp2k_transport_params.nsgf[atom_start],&cp2k_transport_params.nsgf[atom_stop],0);
+      contactvec[i_t].n_ele     = std::accumulate(&cp2k_transport_params.zeff[atom_start],&cp2k_transport_params.zeff[atom_stop],0.0);
+if (!rank) cout << "Contact " << i_t << " Bandw " << bandwidth << " InjSign " << inj_sign << " Start " << contactvec[i_t].start << " N_DOF " << contactvec[i_t].ndof << " N_Electr " << contactvec[i_t].n_ele << endl;
    }
 
    switch (transport_params->method) {
