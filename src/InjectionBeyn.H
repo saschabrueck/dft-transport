@@ -1000,6 +1000,7 @@ int InjectionBeyn<T>::parallel_decompose(CPX *Q1,CPX *Q2,int ND,int NM, MPI_Comm
 
     int NM_new = 0;
     while(Sval[NM_new+1]>svd_fac*Sval[0]*ND*(numeric_limits<double>::epsilon)()) NM_new++;
+if (NM_new>=NM) cout << "BAD ERROR IN BEYN" << endl;
 
     CPX *UtxQ2_dist = new CPX[rloc*cloc];
     c_pzgemm('C','N',NM_new,NM,ND,CPX(1.0,0.0),u_dist,1,1,descq,q_dist,1,1,descq,CPX(0.0,0.0),UtxQ2_dist,1,1,descq);

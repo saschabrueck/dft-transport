@@ -33,7 +33,8 @@ extern "C" {
            double  min_interval;
            double  temperature;
            int*    contacts_data;
-           double* contacts_nelec;
+           int*    nsgf;
+           double* zeff;
            bool    extra_scf;
            } cp2k_transport_parameters;
 
