@@ -480,7 +480,7 @@ void InjectionBeyn<double>::get_Q_matrix(CPX *Q,CPX *Q2,CPX *Y,TCSR<CPX> **A,\
 
     c_dscal(NR*NM,0.0,((double*)Y)+1,2);
 
-    for(IR=loc_rank;IR<2*NQDR;IR=IR+loc_size){
+    for(IR=loc_rank;IR<NQDR;IR=IR+loc_size){
 
         if(IR<NQDR/2){
 
@@ -492,9 +492,9 @@ void InjectionBeyn<double>::get_Q_matrix(CPX *Q,CPX *Q2,CPX *Y,TCSR<CPX> **A,\
 	        solve_Q_full(QLoc,QLoc2,Y,A,NR,NM,z,+1.0/NQDR);
 	    }
 
-	}else if(IR>=NQDR && IR<NQDR+NQDR/2){
+	}else if(IR>=NQDR/2 && IR<NQDR){
 
-            z = R_in*exp(CPX(0.0,2.0*((IR-NQDR)+0.5)*M_PI/NQDR));
+            z = R_in*exp(CPX(0.0,2.0*((IR-NQDR/2)+0.5)*M_PI/NQDR));
 
 	    if(slab_per_bc==1){
                 solve_Q_sparse(QLoc,QLoc2,Y,A,NR,NM,z,-1.0/NQDR);

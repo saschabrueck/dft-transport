@@ -59,6 +59,7 @@ extern "C" {
     void fortran_name(pzgetrf,PZGETRF)(int*,int*,CPX*,int*,int*,int*,int*,int*);
     void fortran_name(pzgetrs,PZGETRS)(char*,int*,int*,CPX*,int*,int*,int*,int*,CPX*,int*,\
                                        int*,int*,int*);
+    void fortran_name(pzgetri,PZGETRI)(int*,CPX*,int*,int*,int*,int*,CPX*,int*,int*,int*,int*);
     void fortran_name(pdgeadd,PDGEADD)(char*,int*,int*,double*,double*,int*,int*,int*,double*,double*,int*,int*,int*);
     void fortran_name(pzgeadd,PZGEADD)(char*,int*,int*,CPX*,CPX*,int*,int*,int*,CPX*,CPX*,int*,int*,int*);
     void fortran_name(pzgesvd,PZGESVD)(char*,char*,int*,int*,CPX*,int*,int*,int*,double*,CPX*,int*,int*,int*,CPX*,int*,int*,int*,CPX*,int*,double*,int*);
@@ -325,6 +326,14 @@ inline void c_pzgetrs(char TRANS,int N,int NRHS,CPX *A,int IA,int JA,int *DESCA,
                       CPX *B,int IB,int JB,int *DESCB,int *INFO)
 {
     fortran_name(pzgetrs,PZGETRS)(&TRANS,&N,&NRHS,A,&IA,&JA,DESCA,IPIV,B,&IB,&JB,DESCB,INFO);
+}
+
+/************************************************************************************************/
+
+inline void c_pzgetri(int N,CPX *A,int IA,int JA,int *DESCA,int *IPIV,CPX *WORK,int LWORK,\
+                      int *IWORK,int LIWORK,int *INFO)
+{
+    fortran_name(pzgetri,PZGETRI)(&N,A,&IA,&JA,DESCA,IPIV,WORK,&LWORK,IWORK,&LIWORK,INFO);
 }
 
 /************************************************************************************************/
