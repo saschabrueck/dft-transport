@@ -48,6 +48,7 @@ int BoundarySelfEnergy::Set_master(MPI_Comm matrix_comm,MPI_Comm boundary_comm)
     int boundary_rank, boundary_procs;
     MPI_Comm_size(boundary_comm,&boundary_procs);
     MPI_Comm_rank(boundary_comm,&boundary_rank);
+/*
     MPI_Group matrix_group;
     MPI_Group boundary_group;
     MPI_Comm_group(matrix_comm,&matrix_group);
@@ -66,6 +67,8 @@ int BoundarySelfEnergy::Set_master(MPI_Comm matrix_comm,MPI_Comm boundary_comm)
     }
     delete[] matrix_ranks_array;
     delete[] boundary_ranks_array;
+*/
+    if (!boundary_rank) master_rank = matrix_rank;
     return 0;
 }
 
@@ -85,6 +88,7 @@ int BoundarySelfEnergy::Cutout(TCSR<CPX> *SumHamC,contact_type pcontact,CPX pene
     int iam,nprocs;
     MPI_Comm_size(matrix_comm,&nprocs);
     MPI_Comm_rank(matrix_comm,&iam);
+/*
     int *gathered_master_ranks = new int[nprocs];
     MPI_Allgather(&master_rank,1,MPI_INT,gathered_master_ranks,1,MPI_INT,matrix_comm);
     master_rank=-1;
@@ -94,6 +98,9 @@ int BoundarySelfEnergy::Cutout(TCSR<CPX> *SumHamC,contact_type pcontact,CPX pene
         }
     }
     delete[] gathered_master_ranks;
+*/
+    int master_rank_local = master_rank;
+    MPI_Allreduce(&master_rank_local,&master_rank,1,MPI_INT,MPI_MAX,matrix_comm);
 
     TCSR<CPX> *H0cut = new TCSR<CPX>(SumHamC,start,ntriblock,start,ntriblock);
     TCSR<CPX> *H1cut = new TCSR<CPX>(SumHamC,start,ntriblock,start+inj_sign*ntriblock,ntriblock);
@@ -192,6 +199,7 @@ int BoundarySelfEnergy::GetSigma(MPI_Comm boundary_comm,int evecpos,transport_pa
     int injection_method=parameter_sab->injection_method;
     double colzerothr=parameter_sab->colzero_threshold;
     double eps_limit=parameter_sab->eps_limit;
+//if (complexenergypoint) eps_limit=1.0E-6;
     double eps_decay=parameter_sab->eps_decay;
     double eps_eigval_degen=parameter_sab->eps_eigval_degen;
     int boundary_rank;
@@ -229,7 +237,7 @@ int worldrank; MPI_Comm_rank(MPI_COMM_WORLD,&worldrank);
             neigbeyn=ndof;
         } else {
             k_inj = new InjectionBeyn<double>(2*bandwidth,1.0/eps_limit);
-            neigbeyn=ndof/2;
+            neigbeyn=ndof;
         }
         int *nonzH = new int[nblocksband];
         int findxH;
@@ -416,7 +424,7 @@ if (!worldrank) cout << "TIME FOR MATRIX MATRIX MULTIPLICATIONS FOR INVERSE OF G
     if (iinfo) return (LOGCERR, EXIT_FAILURE);
     delete[] cworkcond;
     delete[] dworkcond;
-if (!boundary_rank) cout<<worldrank<<" HAS CONDITION NUMBER "<<rcond<<" SIGN "<<inj_sign<<endl;
+if (!boundary_rank) cout<<evecpos<<" HAS CONDITION NUMBER "<<rcond<<" SIGN "<<inj_sign<<endl;
     if (rcond<numeric_limits<double>::epsilon()) return (LOGCERR, EXIT_FAILURE);
     sigma = new CPX[triblocksize];
     CPX* RCOR = new CPX[ntriblock*neigbas];
@@ -506,12 +514,14 @@ if (!worldrank) cout << "TIME FOR SYMMETRIZATION " << get_time(sabtime) << endl;
 
 // ONLY CHANGES THE RESULT SLIGHTLY BUT IS IMPORTANT FOR PEXSI
 // /*
-    for (int i=0;i<ntriblock;i++) for (int j=0;j<i;j++) {
-        sigma[i+ntriblock*j]+=sigma[j+ntriblock*i];
-        sigma[i+ntriblock*j]*=0.5;
-    }
-    for (int i=0;i<ntriblock;i++) for (int j=0;j<i;j++) {
-        sigma[j+ntriblock*i]=sigma[i+ntriblock*j];
+    if (complexenergypoint) {
+        for (int i=0;i<ntriblock;i++) for (int j=0;j<i;j++) {
+            sigma[i+ntriblock*j]+=sigma[j+ntriblock*i];
+            sigma[i+ntriblock*j]*=0.5;
+        }
+        for (int i=0;i<ntriblock;i++) for (int j=0;j<i;j++) {
+            sigma[j+ntriblock*i]=sigma[i+ntriblock*j];
+        }
     }
 // */
 

@@ -77,15 +77,15 @@ if (!iam) cout << "TIME FOR DENSITY " << get_time(sabtime) << endl;
     if (!iam) {
         ofstream myfile("CurrentFromTransmission");
         myfile.precision(15);
-        for (int ibias=1;ibias<=12;ibias++) {
+        for (int ibias=1;ibias<=600;ibias++) {
             double current = 0.0;
             for (uint iele=0;iele<energyvector.size();iele++) {
                 if (!imag(energyvector[iele])) {
-                    double diff_fermi = fermi(real(energyvector[iele]),muvec[0]+ibias*0.05,transport_params->temperature,0)-fermi(real(energyvector[iele]),muvec[0],transport_params->temperature,0);
+                    double diff_fermi = fermi(real(energyvector[iele]),muvec[0]+ibias*0.001,transport_params->temperature,0)-fermi(real(energyvector[iele]),muvec[0],transport_params->temperature,0);
                     current += 2.0*E_ELECTRON*E_ELECTRON/(2.0*M_PI*H_BAR)*diff_fermi*real(stepvector[iele])*(-transmission2[iele]);
                 }
             }
-            myfile << ibias*0.05 << " " << current << endl;
+            myfile << ibias*0.001 << " " << current << endl;
         }
         myfile.close();
     }
@@ -104,7 +104,7 @@ int Energyvector::determine_energyvector(std::vector<CPX> &energyvector,std::vec
     Singularities singularities(transport_params,contactvec);
     double bands_start;
     ifstream evecfile("OMEN_E");
-    if (!evecfile) {
+    {
 double sabtime=get_time(0.0);
         if ( singularities.Execute(KohnSham,Overlap) ) return (LOGCERR, EXIT_FAILURE);
         if (transport_params->method!=2) for (uint i_mu=0;i_mu<muvec.size();i_mu++) muvec[i_mu]=singularities.determine_fermi(contactvec[i_mu].n_ele,i_mu);

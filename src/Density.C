@@ -65,7 +65,7 @@ if (!worldrank) cout << "TIME FOR SumHamC " << get_time(sabtime) << endl;
         int boundary_id=matrix_rank*n_mu/matrix_procs;
         int n_bound_comm=min(matrix_procs,n_mu);
         MPI_Comm boundary_comm;
-        MPI_Comm_split(matrix_comm,boundary_id,matrix_rank,&boundary_comm);
+        MPI_Comm_split(matrix_comm,boundary_id,contactvec[boundary_id].inj_sign*matrix_rank,&boundary_comm);
         for (int iseq=0;iseq<n_mu/n_bound_comm;iseq++) {
             int ipos=boundary_id+iseq*n_bound_comm;
             if (ipos<n_mu) {
