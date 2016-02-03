@@ -206,7 +206,7 @@ if (npror!=propnum[1] && propnum[1]>=0) if (!matrix_rank) cout << "WARNING: FOUN
         TCSR<CPX> *H1cut = new TCSR<CPX>(HamSig,tra_block*ntriblock,ntriblock,(tra_block+1)*ntriblock,ntriblock);
         TCSR<CPX> *H1 = new TCSR<CPX>(H1cut,0,matrix_comm);
         delete H1cut;
-        sabtime=get_time(d_zer);
+sabtime=get_time(d_zer);
         LinearSolver<CPX>* solver;
         if (solver_method==12) {
             solver = new SuperLU<CPX>(HamSig,matrix_comm);
@@ -216,12 +216,14 @@ if (npror!=propnum[1] && propnum[1]>=0) if (!matrix_rank) cout << "WARNING: FOUN
 #endif
         } else return (LOGCERR, EXIT_FAILURE);
         solver->prepare();
+if (!worldrank) cout << "TIME FOR WAVEFUNCTION SPARSE DECOMPOSITION PHASE" << get_time(sabtime) << endl;
+sabtime=get_time(d_zer);
         CPX* sol = new CPX[dist_sol[matrix_rank]*(nprol+npror)]();
         solver->solve_equation(sol, inj, nprol+npror);
         delete[] inj;
         delete solver;
         delete HamSig;
-if (!worldrank) cout << "TIME FOR WAVEFUNCTION SPARSE SOLVER " << get_time(sabtime) << endl;
+if (!worldrank) cout << "TIME FOR WAVEFUNCTION SPARSE SOLVE PHASE " << get_time(sabtime) << endl;
         int solsize=displc_sol[matrix_procs];
         CPX* Sol = new CPX[solsize*(nprol+npror)];
         for (int icol=0;icol<nprol+npror;icol++) {
@@ -305,6 +307,7 @@ if (abs(abs(transml)-abs(transmr))/max(1.0,min(abs(transml),abs(transmr)))>0.1) 
             transm=transml;
             double diff_fermi=fermi(real(energy),muvec[0],parameter_sab->temperature,0)-fermi(real(energy),muvec[1],parameter_sab->temperature,0);
             current=2.0*E_ELECTRON*E_ELECTRON/(2.0*M_PI*H_BAR)*diff_fermi*transm;
+cout << evecpos << " Transmission LEFT TO RIGHT: " << transml << " RIGHT TO LEFT: " << transmr << " FERMI DIFFERENCE: " << diff_fermi << endl;
         }
         delete[] Sol;
         delete H1;
