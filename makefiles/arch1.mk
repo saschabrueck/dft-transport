@@ -8,7 +8,7 @@ CFLAGS   = -g -w -Wall -fopenmp
 CXXFLAGS = -std=c++11 $(CFLAGS)
 
 TOP_DIR       = /data/seyedb/cp2k-omen
-TOOLCHAIN_DIR = /data/vjoost/toolchain-r16358/install
+TOOLCHAIN_DIR = /data/vjoost/toolchain-r16466/install
 LIB_TOP       = $(TOP_DIR)/libs
 
 # Common include paths
@@ -31,7 +31,7 @@ TOOLCHAIN_LIB = $(TOOLCHAIN_DIR)/lib
 LFLAGS   = -L$(LIBCP2K) -L$(TOOLCHAIN_LIB) -L$(LIBAZTEC) \
            -L$(LIBMUMPS) -L$(LIBSSPARSE) -L$(LIBQHULL) -L$(LIBARPACK)
 
-DFLAGS   = -Dlibcp2k -DAdd_
+DFLAGS   = -Dlibcp2k -DAdd_ -DHAVE_MUMPS
 
 LIBS     = -lm -lgfortran -lstdc++ \
            -lcp2k \
