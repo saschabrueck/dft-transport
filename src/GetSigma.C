@@ -27,6 +27,8 @@ BoundarySelfEnergy::BoundarySelfEnergy()
     H1 = NULL;
     H1t = NULL;
 
+    H = NULL;
+
     compute_inj=0;
 }
 
@@ -239,33 +241,7 @@ int worldrank; MPI_Comm_rank(MPI_COMM_WORLD,&worldrank);
             k_inj = new InjectionBeyn<double>(2*bandwidth,1.0/eps_limit);
             neigbeyn=ndof;
         }
-        int *nonzH = new int[nblocksband];
-        int findxH;
-        if (!boundary_rank) {
-            for (int ibw=0;ibw<nblocksband;ibw++) {
-                nonzH[ibw] = H[ibw]->n_nonzeros;
-            }
-            findxH = H[0]->findx;
-        }
-        MPI_Bcast(nonzH,nblocksband,MPI_INT,0,boundary_comm);
-        MPI_Bcast(&findxH,1,MPI_INT,0,boundary_comm);
-        if (boundary_rank) {
-            H = new TCSR<CPX>*[nblocksband];
-            for (int ibw=0;ibw<nblocksband;ibw++) {
-                H[ibw] = new TCSR<CPX>(ndof,nonzH[ibw],findxH);
-            }
-        }
-        delete[] nonzH;
-        for (int ibw=0;ibw<nblocksband;ibw++) {
-            H[ibw]->Bcast(0,boundary_comm);
-        }
         neigval = k_inj->execute(H,ndof,neigbeyn,lambdavec,eigvecc,inj_sign,boundary_comm);
-        if (boundary_rank) {
-            for (int ibw=0;ibw<nblocksband;ibw++) {
-                delete H[ibw];
-            }
-            delete[] H;
-        }
         delete k_inj;
     } else {
         CPX* KScpx;
