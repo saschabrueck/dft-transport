@@ -216,7 +216,7 @@ sabtime=get_time(d_zer);
 #endif
         } else return (LOGCERR, EXIT_FAILURE);
         solver->prepare();
-if (!worldrank) cout << "TIME FOR WAVEFUNCTION SPARSE DECOMPOSITION PHASE" << get_time(sabtime) << endl;
+if (!worldrank) cout << "TIME FOR WAVEFUNCTION SPARSE DECOMPOSITION PHASE " << get_time(sabtime) << endl;
 sabtime=get_time(d_zer);
         CPX* sol = new CPX[dist_sol[matrix_rank]*(nprol+npror)]();
         solver->solve_equation(sol, inj, nprol+npror);

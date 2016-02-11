@@ -103,7 +103,6 @@ extern "C" {
     void fortran_name(zgesdd,ZGESDD)(char *jobz,int *m,int *n,CPX *a,int *lda,double *s,CPX *u,int *ldu,\
                                      CPX *vt,int *ldvt,CPX *work,int *lwork,double *rwork,int *iwork,int *info);
     double fortran_name(dlamch,DLAMCH)(char*);
-    double fortran_name(pdlamch,PDLAMCH)(int*,char*);
     void fortran_name(dlasrt,DLASRT)(char*,int*,double*,int*);
 
 // MMC
@@ -564,13 +563,6 @@ inline void c_zgesdd(char jobz,int m,int n,CPX *a,int lda,double *s,CPX *u,int l
 inline double c_dlamch(char cmach)
 {
     return fortran_name(dlamch,DLAMCH)(&cmach);
-}
-
-/************************************************************************************************/
-
-inline double c_pdlamch(int ictxt,char cmach)
-{
-    return fortran_name(pdlamch,PDLAMCH)(&ictxt,&cmach);
 }
 
 /************************************************************************************************/

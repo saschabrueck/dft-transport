@@ -16,6 +16,7 @@ extern "C" {
     void fortran_name(dlacpy,DLACPY)(char*,int*,int*,double*,int*,double*,int*);
     void fortran_name(zlacpy,ZLACPY)(char*,int*,int*,CPX*,int*,CPX*,int*);
 #endif /* __BLAS */
+    double fortran_name(pdlamch,PDLAMCH)(int*,char*);
     void fortran_name(dorghr,DORGHR)(int*,int*,int*,double*,int*,double*,double*,int*,int*);
     void fortran_name(dhseqr,DHSEQR)(char*,char*,int*,int*,int*,double*,int*,double*,double*,\
                                      double*,int*,double*,int*,int*);
@@ -105,6 +106,13 @@ inline void c_zlacpy(char UPLO,int M,int N,CPX *A,int LDA,CPX *B,int LDB)
     fortran_name(zlacpy,ZLACPY)(&UPLO,&M,&N,A,&LDA,B,&LDB);
 }
 #endif /* __BLAS */
+
+/************************************************************************************************/
+
+inline double c_pdlamch(int ictxt,char cmach)
+{
+    return fortran_name(pdlamch,PDLAMCH)(&ictxt,&cmach);
+}
 
 /************************************************************************************************/
 

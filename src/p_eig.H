@@ -3,6 +3,8 @@
 
 #include "ScaLapack.H"
 
+#define LOGCERR std::cerr << "ERROR IN LINE " << __LINE__ << " OF FILE " << __FILE__ << std::endl
+
 inline int p_grid_desc_init(int &icontxt,int nprocs,int nvec,int &rloc, int &cloc,int *descfull,int *descloc)
 {
     int nprowcol[2]={0,0};
