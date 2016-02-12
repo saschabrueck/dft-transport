@@ -1034,6 +1034,8 @@ if (NM_new>=NM) cout << "BAD ERROR IN BEYN" << endl;
     if(loc_rank==root_rank) for (int inm=0;inm<NM_new;inm++) c_zscal(NM_new,CPX(1.0/Sval[inm],0.0),&Q2[inm*NM_new],1);
     delete[] Sval;
 
+    Cblacs_gridexit(icontxt);
+
     return NM_new;
 }
 
