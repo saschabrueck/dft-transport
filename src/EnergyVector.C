@@ -204,11 +204,11 @@ for (uint i_mu=0;i_mu<contactvec.size();i_mu++) singularities.write_bandstructur
 void Energyvector::read_real_axis_energies(std::vector<CPX> &energyvector,std::vector<CPX> &stepvector,std::vector<transport_methods::transport_method> &methodvector,ifstream &evecfile)
 {
     energyvector.clear();
+    stepvector.clear();
+    methodvector.clear();
     istream_iterator<double> start_evec(evecfile), end_evec;
     energyvector.assign(start_evec,end_evec);
-    methodvector.clear();
     methodvector.assign(energyvector.size(),transport_methods::WF);
-    stepvector.clear();
     if (energyvector.size()==1) {
         stepvector.assign(1,CPX(1.0,0.0));
     } else {
@@ -224,6 +224,9 @@ void Energyvector::add_real_axis_energies(double nonequi_start,double nonequi_en
 {
     std::vector<double> energylist;
     int n_energies;
+    energyvector.clear();
+    stepvector.clear();
+    methodvector.clear();
     if (!iam) {
         energylist.push_back(nonequi_start);
         for (int i_mu=0;i_mu<transport_params->num_contacts;i_mu++)
@@ -237,21 +240,38 @@ void Energyvector::add_real_axis_energies(double nonequi_start,double nonequi_en
     MPI_Bcast(&n_energies,1,MPI_INT,0,MPI_COMM_WORLD);
     energylist.resize(n_energies);
     MPI_Bcast(&energylist[0],n_energies,MPI_DOUBLE,0,MPI_COMM_WORLD);
-    double smallest_energy_distance=transport_params->min_interval;
-    if (!iam) cout<<"Smallest enery distance "<<smallest_energy_distance<<endl;
-    if (!iam) cout<<"Max number of points per small interval "<<transport_params->num_interval<<endl;
-    if (!iam) cout<<"Average distance for big intervals "<<transport_params->energy_interval<<endl;
-    if (!iam) cout<<"Singularities in range "<< n_energies-2 << endl;
-    for (uint i_energies=1;i_energies<energylist.size();i_energies++) {
-        int num_points_per_interval=max(transport_params->num_interval,int(ceil(abs(energylist[i_energies]-energylist[i_energies-1])/transport_params->energy_interval)));
-        while ((energylist[i_energies]-energylist[i_energies-1])/2.0*(1.0-cos(M_PI/(2.0*num_points_per_interval)))<smallest_energy_distance && num_points_per_interval>1)
-//        while ((energylist[i_energies]-energylist[i_energies-1])/2.0*(1.0-tanh(M_PI/2.0*sinh(3.0)))<smallest_energy_distance && num_points_per_interval>1)
-            --num_points_per_interval;
-        if (num_points_per_interval>1) {
-            Quadrature quadrature(quadrature_types::GC,energylist[i_energies-1],energylist[i_energies],num_points_per_interval);
-            energyvector.insert(energyvector.end(),quadrature.abscissae.begin(),quadrature.abscissae.end());
-            stepvector.insert(stepvector.end(),quadrature.weights.begin(),quadrature.weights.end());
-            methodvector.resize(energyvector.size(),transport_methods::WF);
+    int num_trapez=int(abs(nonequi_end-nonequi_start)/transport_params->energy_interval)+1;
+    if (num_trapez<n_energies*transport_params->num_interval) {
+        for (uint istep=0;istep<num_trapez;istep++) {
+            energyvector.push_back(nonequi_start+istep*transport_params->energy_interval);
+        }
+        methodvector.assign(energyvector.size(),transport_methods::WF);
+        if (energyvector.size()==1) {
+            stepvector.assign(1,CPX(1.0,0.0));
+        } else {
+            stepvector.assign(1,(energyvector[1]-energyvector[0])/2.0);
+            for (uint istep=1;istep<energyvector.size()-1;istep++) {
+                stepvector.push_back((energyvector[istep+1]-energyvector[istep-1])/2.0);
+            }
+            stepvector.push_back((energyvector[energyvector.size()-1]-energyvector[energyvector.size()-2])/2.0);
+        }
+    } else {
+        double smallest_energy_distance=transport_params->min_interval;
+        if (!iam) cout<<"Smallest enery distance "<<smallest_energy_distance<<endl;
+        if (!iam) cout<<"Max number of points per small interval "<<transport_params->num_interval<<endl;
+        if (!iam) cout<<"Average distance for big intervals "<<transport_params->energy_interval<<endl;
+        if (!iam) cout<<"Singularities in range "<< n_energies-2 << endl;
+        for (uint i_energies=1;i_energies<energylist.size();i_energies++) {
+            int num_points_per_interval=max(transport_params->num_interval,int(ceil(abs(energylist[i_energies]-energylist[i_energies-1])/transport_params->energy_interval)));
+            while ((energylist[i_energies]-energylist[i_energies-1])/2.0*(1.0-cos(M_PI/(2.0*num_points_per_interval)))<smallest_energy_distance && num_points_per_interval>1)
+//          while ((energylist[i_energies]-energylist[i_energies-1])/2.0*(1.0-tanh(M_PI/2.0*sinh(3.0)))<smallest_energy_distance && num_points_per_interval>1)
+                --num_points_per_interval;
+            if (num_points_per_interval>1) {
+                Quadrature quadrature(quadrature_types::GC,energylist[i_energies-1],energylist[i_energies],num_points_per_interval);
+                energyvector.insert(energyvector.end(),quadrature.abscissae.begin(),quadrature.abscissae.end());
+                stepvector.insert(stepvector.end(),quadrature.weights.begin(),quadrature.weights.end());
+                methodvector.resize(energyvector.size(),transport_methods::WF);
+            }
         }
     }
 }
