@@ -47,7 +47,6 @@ private:
     double imag_limit;
     int mpi_size,mpi_rank;
     int loc_size,loc_rank;
-    int root_rank;
     int NM_input;
     int slab_per_bc;
     int NQDR;
@@ -83,7 +82,6 @@ InjectionBeyn<T>::InjectionBeyn(int pslab_per_bc,double pcontour_radius)
     NQDR            = 32;
     NCRC            = 2;
     parallel_svd    = 1;
-    root_rank       = 0;
 
     slab_per_bc    = pslab_per_bc;
     contour_radius = pcontour_radius;
@@ -165,11 +163,11 @@ void InjectionBeyn<T>::calc_kphase(TCSR<T> *D,TCSR<T> *P,TCSR<CPX> *T01,int ND,i
     MPI_Comm_size(loc_comm,&loc_size);
     MPI_Comm_rank(loc_comm,&loc_rank);
 
-    if (loc_rank==root_rank) NR=D->size/slab_per_bc;
-    MPI_Bcast(&NR,1,MPI_INT,root_rank,loc_comm);
+    if (!loc_rank) NR=D->size/slab_per_bc;
+    MPI_Bcast(&NR,1,MPI_INT,0,loc_comm);
     CPX *YF      = NULL;
     CPX *lambdaR = NULL;
-    if(loc_rank==root_rank){
+    if(!loc_rank){
         YF      = new CPX[NR*NM];
         lambdaR = new CPX[NR];
     }
@@ -177,7 +175,7 @@ void InjectionBeyn<T>::calc_kphase(TCSR<T> *D,TCSR<T> *P,TCSR<CPX> *T01,int ND,i
 
     double t0 = get_time(0.0);
 
-    if(loc_rank==root_rank){
+    if(!loc_rank){
 
         TCSR<CPX> *AF = new TCSR<CPX>(D->size,D->n_nonzeros,D->findx);
         TCSR<CPX> *BF = new TCSR<CPX>(D->size,D->n_nonzeros,D->findx);
@@ -229,7 +227,7 @@ void InjectionBeyn<T>::calc_kphase(TCSR<T> *D,TCSR<T> *P,TCSR<CPX> *T01,int ND,i
 
     t0 = get_time(0.0);
 
-    if(loc_rank==root_rank){
+    if(!loc_rank){
 
         int *reord_index = new int[NM];
 
@@ -248,7 +246,7 @@ void InjectionBeyn<T>::calc_kphase(TCSR<T> *D,TCSR<T> *P,TCSR<CPX> *T01,int ND,i
 
     if(!mpi_rank) printf("Sort time: %e\n",get_time(t0));
 
-    if (loc_rank==root_rank){
+    if (!loc_rank){
         delete[] YF;
         delete[] lambdaR;
         for(int IP=0;IP<slab_per_bc+1;IP++){
@@ -293,7 +291,7 @@ int InjectionBeyn<T>::execute(TCSR<CPX> **A,int NR,int NM,CPX *lambdaR,CPX *YF, 
     CPX *QF1 = NULL;
     CPX *QF2 = NULL;
 
-    if(loc_rank==root_rank){
+    if(!loc_rank){
         init_Y_matrix(YF,NM,NR);
         QF1 = new CPX[NR*NM];
         QF2 = new CPX[NR*NM];
@@ -311,7 +309,7 @@ int InjectionBeyn<T>::execute(TCSR<CPX> **A,int NR,int NM,CPX *lambdaR,CPX *YF, 
 
         NM=parallel_decompose(QF1,QF2,NR,NM,comm);
 
-    }else if(loc_rank==root_rank){
+    }else if(!loc_rank){
 
         NM=decompose(QF1,QF2,NR,NM);
 
@@ -321,7 +319,7 @@ int InjectionBeyn<T>::execute(TCSR<CPX> **A,int NR,int NM,CPX *lambdaR,CPX *YF, 
 
     t0 = get_time(0.0);
 
-    if(loc_rank==root_rank){
+    if(!loc_rank){
 
         eig(QF2,NM,lambdaR);
 
@@ -343,7 +341,7 @@ int InjectionBeyn<T>::execute(TCSR<CPX> **A,int NR,int NM,CPX *lambdaR,CPX *YF, 
 
     if(!mpi_rank) printf("Sequential time: %e\n",get_time(t0));
 
-    if(loc_rank==root_rank){
+    if(!loc_rank){
         delete[] QF1;
         delete[] QF2;
     }
@@ -461,7 +459,7 @@ void InjectionBeyn<T>::get_Q_matrix(CPX *Q,CPX *Q2,CPX *Y,TCSR<CPX> **A,double R
             QLoc2 = new CPX[NR*NM];
         }
 
-        if(loc_rank==root_rank){
+        if(!loc_rank){
             c_zcopy(NM*NR,Y,1,QLoc2,1);
         }
         if(!rank_lin_comm){
@@ -494,11 +492,11 @@ void InjectionBeyn<T>::get_Q_matrix(CPX *Q,CPX *Q2,CPX *Y,TCSR<CPX> **A,double R
         }
 
         if(!rank_lin_comm){
-            MPI_Reduce(QLoc ,Q ,NR*NM,MPI_DOUBLE_COMPLEX,MPI_SUM,root_rank,master_comm);
-            MPI_Reduce(QLoc2,Q2,NR*NM,MPI_DOUBLE_COMPLEX,MPI_SUM,root_rank,master_comm);
+            MPI_Reduce(QLoc ,Q ,NR*NM,MPI_DOUBLE_COMPLEX,MPI_SUM,0,master_comm);
+            MPI_Reduce(QLoc2,Q2,NR*NM,MPI_DOUBLE_COMPLEX,MPI_SUM,0,master_comm);
             delete[] QLoc;
             delete[] QLoc2;
-            if(loc_rank!=root_rank){
+            if(loc_rank){
                 for(int IP=0;IP<slab_per_bc+1;IP++){
                     delete A[IP];
                 }
@@ -514,22 +512,22 @@ void InjectionBeyn<T>::get_Q_matrix(CPX *Q,CPX *Q2,CPX *Y,TCSR<CPX> **A,double R
         CPX *QLoc  = new CPX[NR*NR];
         CPX *QLoc2 = new CPX[NR*NM];
         CPX *QRed  = NULL;
-        if(loc_rank==root_rank){
+        if(!loc_rank){
             init_var(Q ,NR*NM);
             init_var(Q2,NR*NM);
             QRed  = new CPX[NR*NM];
         }
         if(loc_size>1){
-            allocate_bcast_H(A,root_rank,comm);
+            allocate_bcast_H(A,0,comm);
         }
 
         for(IR=loc_rank;IR<NCRC*NPOC;IR=IR+loc_size){
 
-            if(loc_rank==root_rank){
+            if(!loc_rank){
                 c_zcopy(NM*NR,Y,1,QLoc2,1);
             }
             if(loc_size>1){
-                MPI_Bcast(QLoc2,NM*NR,MPI_DOUBLE_COMPLEX,root_rank,comm);
+                MPI_Bcast(QLoc2,NM*NR,MPI_DOUBLE_COMPLEX,0,comm);
             }
  
             if(IR<NPOC){
@@ -559,19 +557,23 @@ void InjectionBeyn<T>::get_Q_matrix(CPX *Q,CPX *Q2,CPX *Y,TCSR<CPX> **A,double R
 
             }
 
-            MPI_Reduce(QLoc ,QRed,NR*NM,MPI_DOUBLE_COMPLEX,MPI_SUM,root_rank,comm);
-            c_zaxpy(NR*NM,CPX(1.0,0.0),QRed,1,Q ,1);
-            MPI_Reduce(QLoc2,QRed,NR*NM,MPI_DOUBLE_COMPLEX,MPI_SUM,root_rank,comm);
-            c_zaxpy(NR*NM,CPX(1.0,0.0),QRed,1,Q2,1);
+            MPI_Reduce(QLoc ,QRed,NR*NM,MPI_DOUBLE_COMPLEX,MPI_SUM,0,comm);
+            if(!loc_rank){
+                c_zaxpy(NR*NM,CPX(1.0,0.0),QRed,1,Q ,1);
+            }
+            MPI_Reduce(QLoc2,QRed,NR*NM,MPI_DOUBLE_COMPLEX,MPI_SUM,0,comm);
+            if(!loc_rank){
+                c_zaxpy(NR*NM,CPX(1.0,0.0),QRed,1,Q2,1);
+            }
  
         }
 
         delete[] QLoc;
         delete[] QLoc2;
-        if(loc_rank==root_rank){
+        if(!loc_rank){
             delete[] QRed;
         }
-        if(loc_rank!=root_rank){
+        if(loc_rank){
             for(int IP=0;IP<slab_per_bc+1;IP++){
                 delete A[IP];
             }
@@ -600,13 +602,13 @@ void InjectionBeyn<double>::get_Q_matrix_int(CPX *Q,CPX *Q2,CPX *Y,TCSR<CPX> **A
                                           double R_out,double R_in,int NR,int NM,MPI_Comm comm)
 {
 
-    if(loc_rank==root_rank){
+    if(!loc_rank){
         c_dscal(NR*NM,0.0,((double*)Y)+1,2);
     }
 
     get_Q_matrix(Q,Q2,Y,A,R_out,R_in,NR,NM,NQDR/2,comm);
 
-    if(loc_rank==root_rank){
+    if(!loc_rank){
         c_dscal(NR*NM,2.0, (double*)Q    ,2);
         c_dscal(NR*NM,0.0,((double*)Q )+1,2);
         c_dscal(NR*NM,2.0, (double*)Q2   ,2);
@@ -1037,7 +1039,7 @@ if (NM_new>=NM) cout << "BAD ERROR IN BEYN" << endl;
     c_descinit(descQ_out,NM_new,NM_new,NM_new,NM_new,0,0,icontxt,NM_new,&info);
     c_pzgeadd('N',NM_new,NM_new,1.0,q_dist,1,1,descq,0.0,Q2,1,1,descQ_out);
     delete[] q_dist;
-    if(loc_rank==root_rank) for (int inm=0;inm<NM_new;inm++) c_zscal(NM_new,CPX(1.0/Sval[inm],0.0),&Q2[inm*NM_new],1);
+    if(!loc_rank) for (int inm=0;inm<NM_new;inm++) c_zscal(NM_new,CPX(1.0/Sval[inm],0.0),&Q2[inm*NM_new],1);
     delete[] Sval;
 
     Cblacs_gridexit(icontxt);
