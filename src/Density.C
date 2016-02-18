@@ -24,7 +24,6 @@ int density(TCSR<double> *KohnSham,TCSR<double> *Overlap,TCSR<double> *Ps,CPX en
     double d_one=1.0;
     double d_zer=0.0;
     CPX z_one=CPX(d_one,d_zer);
-    CPX z_img=CPX(d_zer,d_one);
     double sabtime;
     TCSR<CPX> *HamSig;
     CPX* inj = NULL;
