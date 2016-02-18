@@ -165,11 +165,11 @@ int p_inv(CPX *Afull,int nvec,MPI_Comm p_eig_comm)
     c_pzgetrf(nvec,nvec,Aloc,1,1,descloc,ipiv,&iinfo);
     if (iinfo) return (LOGCERR, EXIT_FAILURE);
 
-    int lwork     = -1;
-    int liwork    = -1;
+    int lwork  = -1;
+    int liwork = -1;
     CPX workq;
     int iworkq;
-    CPX *work     = &workq;
+    CPX *work  = &workq;
     int *iwork = &iworkq;
 
     c_pzgetri(nvec,Aloc,1,1,descloc,ipiv,work,lwork,iwork,liwork,&iinfo);
@@ -196,6 +196,60 @@ int p_inv(CPX *Afull,int nvec,MPI_Comm p_eig_comm)
     return 0;
 }
 
+int p_inv(CPX *Afull,CPX *Bfull,int nvec,CPX z,MPI_Comm p_eig_comm)
+{
+    int nprocs;
+    MPI_Comm_size(p_eig_comm,&nprocs);
+    int icontxt=MPI_Comm_c2f(p_eig_comm);
+    int rloc,cloc;
+    int descfull[9];
+    int descloc[9];
+    if (p_grid_desc_init(icontxt,nprocs,nvec,rloc,cloc,descfull,descloc)) return (LOGCERR, EXIT_FAILURE);
+
+    CPX *Aloc = new CPX[rloc*cloc];
+
+    c_pzgeadd('N',nvec,nvec,1.0,Afull,1,1,descfull,0.0,Aloc,1,1,descloc);
+
+    int iinfo;
+    int *ipiv = new int[rloc+descloc[4]];
+
+    c_pzgetrf(nvec,nvec,Aloc,1,1,descloc,ipiv,&iinfo);
+    if (iinfo) return (LOGCERR, EXIT_FAILURE);
+
+    int lwork  = -1;
+    int liwork = -1;
+    CPX workq;
+    int iworkq;
+    CPX *work  = &workq;
+    int *iwork = &iworkq;
+
+    c_pzgetri(nvec,Aloc,1,1,descloc,ipiv,work,lwork,iwork,liwork,&iinfo);
+    if (iinfo) return (LOGCERR, EXIT_FAILURE);
+
+    lwork  = int(real(workq));
+    liwork = iworkq;
+    work   = new CPX[lwork];
+    iwork  = new int[liwork];
+
+    c_pzgetri(nvec,Aloc,1,1,descloc,ipiv,work,lwork,iwork,liwork,&iinfo);
+    if (iinfo) return (LOGCERR, EXIT_FAILURE);
+
+    delete[] work;
+    delete[] iwork;
+    delete[] ipiv;
+
+    c_pzgeadd('N',nvec,nvec,   1.0,Aloc,1,1,descloc,0.0,Afull,1,1,descfull);
+    c_pzgeadd('T',nvec,nvec,  -1.0,Aloc,1,1,descloc,1.0,Afull,1,1,descfull);
+    c_pzgeadd('N',nvec,nvec,     z,Aloc,1,1,descloc,0.0,Bfull,1,1,descfull);
+    c_pzgeadd('T',nvec,nvec,-1.0/z,Aloc,1,1,descloc,1.0,Bfull,1,1,descfull);
+
+    delete[] Aloc;
+
+    Cblacs_gridexit(icontxt);
+
+    return 0;
+}
+
 int p_lin(CPX *Afull,CPX *RHSfull,CPX *SOLfull,int nvec,int nrhs,MPI_Comm p_eig_comm)
 {
     int nprocs;
@@ -207,7 +261,7 @@ int p_lin(CPX *Afull,CPX *RHSfull,CPX *SOLfull,int nvec,int nrhs,MPI_Comm p_eig_
     if (p_grid_desc_init(icontxt,nprocs,nvec,rloc,cloc,descfull,descloc)) return (LOGCERR, EXIT_FAILURE);
 
     CPX *Aloc   = new CPX[rloc*cloc];
-    CPX *RHSloc = new CPX[rloc*cloc]();
+    CPX *RHSloc = new CPX[rloc*cloc];
 
     c_pzgeadd('N',nvec,nvec,1.0,Afull  ,1,1,descfull,0.0,Aloc  ,1,1,descloc);
     c_pzgeadd('N',nvec,nrhs,1.0,RHSfull,1,1,descfull,0.0,RHSloc,1,1,descloc);
@@ -227,6 +281,52 @@ int p_lin(CPX *Afull,CPX *RHSfull,CPX *SOLfull,int nvec,int nrhs,MPI_Comm p_eig_
     c_pzgeadd('N',nvec,nrhs,1.0,RHSloc,1,1,descloc,0.0,SOLfull,1,1,descfull);
 
     delete[] RHSloc;
+
+    Cblacs_gridexit(icontxt);
+
+    return 0;
+}
+
+int p_lin(CPX *Afull,CPX *RHSfull,int nvec,int nrhs,CPX z,MPI_Comm p_eig_comm)
+{
+    int nprocs;
+    MPI_Comm_size(p_eig_comm,&nprocs);
+    int icontxt=MPI_Comm_c2f(p_eig_comm);
+    int rloc,cloc;
+    int descfull[9];
+    int descloc[9];
+    if (p_grid_desc_init(icontxt,nprocs,nvec,rloc,cloc,descfull,descloc)) return (LOGCERR, EXIT_FAILURE);
+
+    CPX *Aloc   = new CPX[rloc*cloc];
+    CPX *RHSloc = new CPX[rloc*cloc];
+    CPX *RSSloc = new CPX[rloc*cloc];
+
+    c_pzgeadd('N',nvec,nvec,1.0,Afull  ,1,1,descfull,0.0,Aloc  ,1,1,descloc);
+    c_pzgeadd('N',nvec,nrhs,1.0,RHSfull,1,1,descfull,0.0,RHSloc,1,1,descloc);
+    c_pzgeadd('N',nvec,nrhs,1.0,RHSfull,1,1,descfull,0.0,RSSloc,1,1,descloc);
+
+    int iinfo;
+    int *ipiv = new int[rloc+descloc[4]];
+
+    c_pzgetrf(nvec,nvec,Aloc,1,1,descloc,ipiv,&iinfo);
+    if (iinfo) return (LOGCERR, EXIT_FAILURE);
+
+    c_pzgetrs('N',nvec,nrhs,Aloc,1,1,descloc,ipiv,RHSloc,1,1,descloc,&iinfo);
+    if (iinfo) return (LOGCERR, EXIT_FAILURE);
+    c_pzgetrs('T',nvec,nrhs,Aloc,1,1,descloc,ipiv,RSSloc,1,1,descloc,&iinfo);
+    if (iinfo) return (LOGCERR, EXIT_FAILURE);
+
+    delete[] Aloc;
+    delete[] ipiv;
+
+    c_pzgeadd('N',nvec,nrhs,   1.0,RHSloc,1,1,descloc,0.0,  Afull,1,1,descfull);
+    c_pzgeadd('N',nvec,nrhs,     z,RHSloc,1,1,descloc,0.0,RHSfull,1,1,descfull);
+
+    c_pzgeadd('N',nvec,nrhs,  -1.0,RSSloc,1,1,descloc,1.0,  Afull,1,1,descfull);
+    c_pzgeadd('N',nvec,nrhs,-1.0/z,RSSloc,1,1,descloc,1.0,RHSfull,1,1,descfull);
+
+    delete[] RHSloc;
+    delete[] RSSloc;
 
     Cblacs_gridexit(icontxt);
 
