@@ -66,10 +66,9 @@ private:
     void get_Q_matrix_int(CPX*,CPX*,CPX*,TCSR<CPX>**,double,double,int,int,MPI_Comm);
     void get_Q_matrix(CPX*,CPX*,CPX*,TCSR<CPX>**,double,double,int,int,int,MPI_Comm);
     void create_M_matrix(CPX*,TCSR<CPX>**,int,CPX);
-    void solve_Q_sparse(CPX*,CPX*,TCSR<CPX>**,int,int,CPX,double,MPI_Comm);
-    void solve_Q_full(CPX*,CPX*,TCSR<CPX>**,int,int,CPX,double,MPI_Comm);
-    void inv_Q_full(CPX*,CPX*,TCSR<CPX>**,int,CPX,double,MPI_Comm);
-    void solve_Q_full(CPX*,CPX*,TCSR<CPX>**,int,int,CPX,double);
+    void solve_Q_sparse(CPX*,CPX*,TCSR<CPX>**,int,int,CPX,MPI_Comm);
+    void solve_Q_full(CPX*,CPX*,TCSR<CPX>**,int,int,CPX,MPI_Comm);
+    void inv_Q_full(CPX*,CPX*,TCSR<CPX>**,int,CPX,MPI_Comm);
     void init_Y_matrix(CPX*,int,int);
 };
 
@@ -433,7 +432,6 @@ void InjectionBeyn<T>::get_Q_matrix(CPX *Q,CPX *Q2,CPX *Y,TCSR<CPX> **A,double R
 
     int IR;
     CPX z;
-    double f;
 
     int size_lin_comm = max(1,loc_size/(NCRC*NPOC));
 
@@ -468,25 +466,19 @@ void InjectionBeyn<T>::get_Q_matrix(CPX *Q,CPX *Q2,CPX *Y,TCSR<CPX> **A,double R
         }
 
         if(IR<NPOC){
-
             z = R_out*exp(CPX(0.0,2.0*(IR+0.5)*M_PI/NQDR));
-            f = +1.0/NQDR;
-
 	}else if(IR>=NPOC && IR<NCRC*NPOC){
-
             z = R_in*exp(CPX(0.0,2.0*((IR-NPOC)+0.5)*M_PI/NQDR));
-            f = -1.0/NQDR;
-
 	}
 
         if(IR<NCRC*NPOC){
 
 	    if(slab_per_bc==1){
-                solve_Q_sparse(QLoc,QLoc2,A,NR,NM,z,f,lin_comm);
+                solve_Q_sparse(QLoc,QLoc2,A,NR,NM,z,lin_comm);
   	    }else if(NR==NM){
-  	        inv_Q_full(QLoc,QLoc2,A,NM,z,f,lin_comm);
+  	        inv_Q_full(QLoc,QLoc2,A,NM,z,lin_comm);
 	    }else{
-	        solve_Q_full(QLoc,QLoc2,A,NR,NM,z,f,lin_comm);
+	        solve_Q_full(QLoc,QLoc2,A,NR,NM,z,lin_comm);
 	    }
 
         }
@@ -531,23 +523,17 @@ void InjectionBeyn<T>::get_Q_matrix(CPX *Q,CPX *Q2,CPX *Y,TCSR<CPX> **A,double R
             }
  
             if(IR<NPOC){
- 
                 z = R_out*exp(CPX(0.0,2.0*(IR+0.5)*M_PI/NQDR));
-                f = +1.0/NQDR;
- 
             }else if(IR>=NPOC && IR<NCRC*NPOC){
- 
                 z = R_in*exp(CPX(0.0,2.0*((IR-NPOC)+0.5)*M_PI/NQDR));
-                f = -1.0/NQDR;
-
             }
 
             if(IR<NCRC*NPOC){
  
                 if(slab_per_bc==1){
-                    solve_Q_sparse(QLoc,QLoc2,A,NR,NM,z,f,MPI_COMM_SELF);
+                    solve_Q_sparse(QLoc,QLoc2,A,NR,NM,z,MPI_COMM_SELF);
                 }else{
-                    solve_Q_full(QLoc,QLoc2,A,NR,NM,z,f);
+                    solve_Q_full(QLoc,QLoc2,A,NR,NM,z,MPI_COMM_SELF);
                 }
  
 	    }else{
@@ -639,8 +625,7 @@ void InjectionBeyn<T>::create_M_matrix(CPX *M,TCSR<CPX> **A,int NR,CPX z)
 /************************************************************************************************/
 
 template <class T>
-void InjectionBeyn<T>::solve_Q_sparse(CPX *QM,CPX *QY,TCSR<CPX> **A,\
-				      int NR,int NM,CPX z,double fac,MPI_Comm lin_comm)
+void InjectionBeyn<T>::solve_Q_sparse(CPX *QM,CPX *QY,TCSR<CPX> **A,int NR,int NM,CPX z,MPI_Comm lin_comm)
 {
     int lin_size,lin_rank;
     MPI_Comm_size(lin_comm,&lin_size);
@@ -660,7 +645,7 @@ void InjectionBeyn<T>::solve_Q_sparse(CPX *QM,CPX *QY,TCSR<CPX> **A,\
         delete M_solver;
         delete M_sp;
  
-        c_zscal(NR*NM,z*fac,QM,1);
+        if(abs(z)<1.0) c_zscal(NR*NM,-1.0,QM,1);
         c_zcopy(NR*NM,QM,1,QY,1);
         c_zscal(NR*NM,z,QY,1);
 
@@ -671,20 +656,29 @@ void InjectionBeyn<T>::solve_Q_sparse(CPX *QM,CPX *QY,TCSR<CPX> **A,\
 /************************************************************************************************/
 
 template <class T>
-void InjectionBeyn<T>::solve_Q_full(CPX *QM,CPX *QY,TCSR<CPX> **A,\
-				     int NR,int NM,CPX z,double fac,MPI_Comm lin_comm)
+void InjectionBeyn<T>::solve_Q_full(CPX *QM,CPX *QY,TCSR<CPX> **A,int NR,int NM,CPX z,MPI_Comm lin_comm)
 {
-    int lin_rank;
+    int lin_size,lin_rank;
+    MPI_Comm_size(lin_comm,&lin_size);
     MPI_Comm_rank(lin_comm,&lin_rank);
 
     if(!lin_rank){
         create_M_matrix(QM,A,NR,z);
     }
 
-    p_lin(QM,QY,QM,NR,NM,lin_comm);
+    if(lin_size==1){
+        int info;
+        int *ipiv = new int[NR];
+        c_zgetrf(NR,NR,QM,NR,ipiv,&info);
+        c_zgetrs('N',NR,NM,QM,NR,ipiv,QY,NR,&info);
+        delete[] ipiv;
+        c_zcopy(NR*NM,QY,1,QM,1);
+    }else{
+        p_lin(QM,QY,QM,NR,NM,lin_comm);
+    }
  
     if(!lin_rank){
-        c_zscal(NR*NM,z*fac,QM,1);
+        if(abs(z)<1.0) c_zscal(NR*NM,-1.0,QM,1);
         c_zcopy(NR*NM,QM,1,QY,1);
         c_zscal(NR*NM,z,QY,1);
     }
@@ -694,7 +688,7 @@ void InjectionBeyn<T>::solve_Q_full(CPX *QM,CPX *QY,TCSR<CPX> **A,\
 /************************************************************************************************/
 
 template <class T>
-void InjectionBeyn<T>::inv_Q_full(CPX *QM,CPX *QY,TCSR<CPX> **A,int NR,CPX z,double fac,MPI_Comm lin_comm)
+void InjectionBeyn<T>::inv_Q_full(CPX *QM,CPX *QY,TCSR<CPX> **A,int NR,CPX z,MPI_Comm lin_comm)
 {
     int lin_rank;
     MPI_Comm_rank(lin_comm,&lin_rank);
@@ -706,34 +700,10 @@ void InjectionBeyn<T>::inv_Q_full(CPX *QM,CPX *QY,TCSR<CPX> **A,int NR,CPX z,dou
     p_inv(QM,NR,lin_comm);
  
     if(!lin_rank){
-        c_zscal(NR*NR,z*fac,QM,1);
+        if(abs(z)<1.0) c_zscal(NR*NR,-1.0,QM,1);
         c_zcopy(NR*NR,QM,1,QY,1);
         c_zscal(NR*NR,z,QY,1);
     }
-
-}
-
-/************************************************************************************************/
-
-template <class T>
-void InjectionBeyn<T>::solve_Q_full(CPX *QM,CPX *QY,TCSR<CPX> **A,\
-				     int NR,int NM,CPX z,double fac)
-{
-
-    int info;
-    int *ipiv = new int[NR];
-
-    create_M_matrix(QM,A,NR,z);
-
-    c_zgetrf(NR,NR,QM,NR,ipiv,&info);
-    c_zgetrs('N',NR,NM,QM,NR,ipiv,QY,NR,&info);
-
-    delete[] ipiv;
-
-    c_zcopy(NR*NM,QY,1,QM,1);
-    c_zscal(NR*NM,z*fac,QM,1);
-    c_zcopy(NR*NM,QM,1,QY,1);
-    c_zscal(NR*NM,z,QY,1);
 
 }
 
