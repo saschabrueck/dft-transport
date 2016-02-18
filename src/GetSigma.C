@@ -202,6 +202,8 @@ int BoundarySelfEnergy::GetSigma(MPI_Comm boundary_comm,int evecpos,transport_pa
     double colzerothr=parameter_sab->colzero_threshold;
     double eps_limit=parameter_sab->eps_limit;
 //if (complexenergypoint) eps_limit=1.0E-6;
+    int neigbeyn=ndof; // NUMBER OF RANDOM VECTORS
+//if (complexenergypoint) neigbeyn=ndof;
     double eps_decay=parameter_sab->eps_decay;
     double eps_eigval_degen=parameter_sab->eps_eigval_degen;
     int boundary_rank;
@@ -232,17 +234,15 @@ int worldrank; MPI_Comm_rank(MPI_COMM_WORLD,&worldrank);
     eigvecc=new CPX[ndof*2*bandwidth*ndof];
     sabtime=get_time(d_zer);
     if (injection_method==22) {
-        Injection *k_inj;
-        int neigbeyn; // NUMBER OF RANDOM VECTORS
         if (complexenergypoint) {
-            k_inj = new InjectionBeyn<CPX>(2*bandwidth,1.0/eps_limit);
-            neigbeyn=ndof;
+            InjectionBeyn<CPX> *k_inj = new InjectionBeyn<CPX>(2*bandwidth,1.0/eps_limit);
+            neigval = k_inj->execute(H,ndof,neigbeyn,lambdavec,eigvecc,inj_sign,boundary_comm);
+            delete k_inj;
         } else {
-            k_inj = new InjectionBeyn<double>(2*bandwidth,1.0/eps_limit);
-            neigbeyn=ndof;
+            InjectionBeyn<double> *k_inj = new InjectionBeyn<double>(2*bandwidth,1.0/eps_limit);
+            neigval = k_inj->execute(H,ndof,neigbeyn,lambdavec,eigvecc,inj_sign,boundary_comm);
+            delete k_inj;
         }
-        neigval = k_inj->execute(H,ndof,neigbeyn,lambdavec,eigvecc,inj_sign,boundary_comm);
-        delete k_inj;
     } else {
         CPX* KScpx;
         if (!boundary_rank) {

@@ -11,7 +11,8 @@ int diagscalapack(TCSR<double> *Overlap,TCSR<double> *KohnSham,transport_paramet
     int nocc=parameters_transport->n_occ;
 
     double sabtime;
-    double *OVfull, *KSfull;
+    double *OVfull=NULL;
+    double *KSfull=NULL;
 
     int nvec=KohnSham->size_tot;
     if (nvec!=Overlap->size_tot) return (LOGCERR, EXIT_FAILURE);
@@ -31,7 +32,7 @@ int diagscalapack(TCSR<double> *Overlap,TCSR<double> *KohnSham,transport_paramet
 
     double *eigval = new double [nvec];
 
-if (!iam) sabtime=get_time(0.0);
+sabtime=get_time(0.0);
     if (p_eig(KSfull,OVfull,eigval,nvec,MPI_COMM_WORLD)) return (LOGCERR, EXIT_FAILURE);
 if (!iam) cout << "Time for p_eig " << get_time(sabtime) << endl;
 

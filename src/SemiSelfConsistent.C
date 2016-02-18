@@ -203,7 +203,7 @@ rhofile.close();
         density_new=c_dasum(FEM->NAtom,rho_atom,1);
         if (abs(density_new-density_old)<density_criterion && residual<parameter->poisson_inner_criterion) {
             if (!iam) cout << "DENSITY CONVERGED" << endl;
-            return 0;
+            break;
         }
         density_old=density_new;
 
@@ -254,4 +254,6 @@ rhofile.close();
     delete[] atom_of_bf;
     delete[] Overlap_nnz;
     delete[] KohnSham_nnz;
+
+    return 0;
 }

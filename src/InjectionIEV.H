@@ -36,7 +36,6 @@ if (!boundary_rank) {
     double d_zer=0.0;
     CPX z_one=CPX(d_one,d_zer);
     CPX z_zer=CPX(d_zer,d_zer);
-    double sabtime;
     int iinfo=0;
 // set parameters
     int ndofsq=ndof*ndof;
@@ -58,16 +57,15 @@ if (!boundary_rank) {
 // now do the inversion
     int *pivarrayn=new int[ndof];
     double workyytest;
+    double sabtime=get_time(d_zer);
     if (complexenergypoint) {
 // the matrix mats is not hermitian for complex energy point i think
-        sabtime=get_time(d_zer);
         c_zgetrf(ndof,ndof,mats,ndof,pivarrayn,&iinfo);
         if (iinfo) return (LOGCERR, EXIT_FAILURE);
         c_zgetrs('N',ndof,ndof*2*bandwidth,mats,ndof,pivarrayn,matb,ndof,&iinfo);
         if (iinfo) return (LOGCERR, EXIT_FAILURE);
 //        cout << "TIME FOR CPX INVERSION " << get_time(sabtime) << endl;
     } else {
-        sabtime=get_time(d_zer);
         double *matsreal=new double[ndofsq];
         double *matbreal=new double[2*bandwidth*ndofsq];
         c_dcopy(ndofsq,(double*)mats,2,matsreal,1);
