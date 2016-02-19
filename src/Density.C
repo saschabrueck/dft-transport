@@ -21,21 +21,21 @@ using namespace std;
 
 int density(TCSR<double> *KohnSham,TCSR<double> *Overlap,TCSR<double> *Ps,CPX energy,CPX weight,transport_methods::transport_method method,std::vector<double> muvec,std::vector<contact_type> contactvec,double &current,double &transm,double &dos,std::vector<int> propnum,transport_parameters *parameter_sab,int evecpos,MPI_Comm matrix_comm)
 {
-    double d_one=1.0;
-    double d_zer=0.0;
+    double d_one = 1.0;
+    double d_zer = 0.0;
     CPX z_one=CPX(d_one,d_zer);
     double sabtime;
     TCSR<CPX> *HamSig;
     CPX* inj = NULL;
-    int nprol, npror;
-    CPX *lambda;
-    int *dist_sol;
-    int *displc_sol;
+    int nprol = 0;
+    int npror = 0;
+    CPX *lambda = NULL;
+    int *dist_sol = NULL;
+    int *displc_sol = NULL;
     int matrix_procs,matrix_rank;
     MPI_Comm_size(matrix_comm,&matrix_procs);
     MPI_Comm_rank(matrix_comm,&matrix_rank);
 int worldrank; MPI_Comm_rank(MPI_COMM_WORLD,&worldrank);
-// get parameters always at the beginning of a subroutine (or maybe even better in the constructor) to make it independent of the structure containing the parameters
     int n_mu=muvec.size();
     int solver_method=parameter_sab->linear_solver;
     int cutout=parameter_sab->cutout;

@@ -57,7 +57,7 @@ if (!boundary_rank) {
 // now do the inversion
     int *pivarrayn=new int[ndof];
     double workyytest;
-    double sabtime=get_time(d_zer);
+//    double sabtime=get_time(d_zer);
     if (complexenergypoint) {
 // the matrix mats is not hermitian for complex energy point i think
         c_zgetrf(ndof,ndof,mats,ndof,pivarrayn,&iinfo);
@@ -157,7 +157,7 @@ if (!boundary_rank) {
         double *eigvec=new double[nindnzcoln*nindnzcoln];
         double dddummy;
         double *matmnreal=new double[nindnzcoln*nindnzcoln];
-        sabtime=get_time(d_zer);
+//        sabtime=get_time(d_zer);
         c_dcopy(nindnzcoln*nindnzcoln,(double*)matmn,2,matmnreal,1);
         c_dgeev('N','V',nindnzcoln,matmnreal,nindnzcoln,eigvalreal,eigvalimag,&dddummy,1,eigvec,nindnzcoln,&workyytest,-1,&iinfo);
         int lworky=int(workyytest);
@@ -195,7 +195,7 @@ if (!boundary_rank) {
         c_zlacpy('A',ndof,nindnzcoln,&eigveccfull[blockbwpos],nindnzcoln,eigvecc,ndof);
     } else {
 // RECONSTRUCT
-        sabtime=get_time(d_zer);
+//        sabtime=get_time(d_zer);
         CPX *eigveccrec=new CPX[nindnzcoln*nindrzcoln];
         c_zgemm('N','N',nindrzcoln,nindnzcoln,nindnzcoln,z_one,matmr,nindrzcoln,eigveccfull,nindnzcoln,z_zer,eigveccrec,nindrzcoln);
         for (int iind=0;iind<nindnzcoln;iind++)

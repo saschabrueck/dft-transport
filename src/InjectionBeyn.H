@@ -26,6 +26,7 @@ class InjectionBeyn : public Injection<T>{
 public:
     
     InjectionBeyn(int,double);
+    InjectionBeyn(int,double,double,int,int);
 
     virtual ~InjectionBeyn();
 
@@ -78,13 +79,33 @@ private:
 template<class T>
 InjectionBeyn<T>::InjectionBeyn(int pslab_per_bc,double pcontour_radius)
 {
-    imag_limit      = 5.0e-5; //eps_decay for OMEN part
-    mult_factor     = 1.2;
-    svd_fac         = 1.0;
-    NQDR            = 32;
-    NCRC            = 2;
-    parallel_svd    = 1;
+    imag_limit     = 5.0e-5; //eps_decay for OMEN part
+    mult_factor    = 1.2;
+    svd_fac        = 1.0;
+    NQDR           = 32;
+    NCRC           = 2;
+    parallel_svd   = 1;
 
+    slab_per_bc    = pslab_per_bc;
+    contour_radius = pcontour_radius;
+    imag_limit     = slab_per_bc*imag_limit;
+
+    MPI_Comm_size(MPI_COMM_WORLD,&mpi_size);
+    MPI_Comm_rank(MPI_COMM_WORLD,&mpi_rank);
+}
+
+/************************************************************************************************/
+
+template<class T>
+InjectionBeyn<T>::InjectionBeyn(int pslab_per_bc,double pcontour_radius,double psv,int pNQ,int pNC)
+{
+    imag_limit     = 5.0e-5; //eps_decay for OMEN part
+    mult_factor    = 1.2;
+    parallel_svd   = 1;
+
+    svd_fac        = psv;
+    NQDR           = pNQ;
+    NCRC           = pNC;
     slab_per_bc    = pslab_per_bc;
     contour_radius = pcontour_radius;
     imag_limit     = slab_per_bc*imag_limit;
