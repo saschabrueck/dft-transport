@@ -433,22 +433,30 @@ struct transport_parameters
     int    method;
     int    injection_method;
     int    linear_solver;
+    int    rlaxis_integration_method;
     int    n_abscissae;
     int    n_kpoint;
     int    num_interval;
     int    num_contacts;
     int    tasks_per_point;
+    int    NCRC_beyn;
+    int    n_points_beyn;
     int    extra_scf;
     int    cutout;
     double colzero_threshold;
     double eps_limit;
+    double eps_limit_cc;
     double eps_decay;
     double eps_singularity_curvatures;
     double eps_mu;
     double eps_eigval_degen;
+    double eps_fermi;
     double energy_interval;
     double min_interval;
     double temperature;
+    double fac_neigbeyn;
+    double fac_neigbeyn_cc;
+    double svd_cutoff;
 };
 
 struct contact_type

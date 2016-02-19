@@ -281,10 +281,10 @@ void Singularities::follow_band(int i_mu)
     }
 }
 
-void Singularities::write_bandstructure(int i_mu)
+void Singularities::write_bandstructure(int i_mu,int do_follow_band)
 {
     if (!iam) {
-        follow_band(i_mu);
+        if (do_follow_band) follow_band(i_mu);
         int ndof=contactvec[i_mu].ndof;
         ofstream myfile;
         stringstream mysstream;

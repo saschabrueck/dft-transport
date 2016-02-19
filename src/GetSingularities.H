@@ -13,7 +13,7 @@ public:
 Singularities(transport_parameters*,std::vector<contact_type>);
 int Execute(TCSR<double>*,TCSR<double>*);
 double determine_fermi(double,int);
-void write_bandstructure(int);
+void write_bandstructure(int,int);
 std::vector< std::vector< std::vector<double> > > get_propagating(const std::vector<CPX>&);
 ~Singularities();
 

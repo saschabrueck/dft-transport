@@ -201,50 +201,53 @@ int BoundarySelfEnergy::GetSigma(MPI_Comm boundary_comm,int evecpos,transport_pa
     int injection_method=parameter_sab->injection_method;
     double colzerothr=parameter_sab->colzero_threshold;
     double eps_limit=parameter_sab->eps_limit;
-//if (complexenergypoint) eps_limit=1.0E-6;
-    int neigbeyn=ndof; // NUMBER OF RANDOM VECTORS
-//if (complexenergypoint) neigbeyn=ndof;
+    if (complexenergypoint) eps_limit=parameter_sab->eps_limit_cc;
+    int neigbeyn=max(1,int(parameter_sab->fac_neigbeyn*ndof));
+    if (complexenergypoint) neigbeyn=max(1,int(parameter_sab->fac_neigbeyn_cc*ndof));
     double eps_decay=parameter_sab->eps_decay;
     double eps_eigval_degen=parameter_sab->eps_eigval_degen;
+    double svd_fac=parameter_sab->svd_cutoff;
+    double NCRC_beyn=parameter_sab->NCRC_beyn;
+    double NQ_beyn=parameter_sab->n_points_beyn;
     int boundary_rank;
     MPI_Comm_rank(boundary_comm,&boundary_rank);
 int worldrank; MPI_Comm_rank(MPI_COMM_WORLD,&worldrank);
-    CPX *Vtra;
-    CPX *Vref;
-    CPX *lambdatra;
-    CPX *lambdaref;
-    double *veltra;
-    double *velref;
-    CPX *lambdavec;
-    CPX *eigvecc;
+    CPX *Vtra=NULL;
+    CPX *Vref=NULL;
+    CPX *lambdatra=NULL;
+    CPX *lambdaref=NULL;
+    double *veltra=NULL;
+    double *velref=NULL;
+    CPX *lambdavec=NULL;
+    CPX *eigvecc=NULL;
     int neigval=0;
     int ndectra=0;
     int ndecref=0;
     int nprotra=0;
     int nproref=0;
-    if (boundary_rank==0) {
+    if (!boundary_rank) {
         Vtra=new CPX[ntriblock*ntriblock];
         Vref=new CPX[ntriblock*ntriblock];
         lambdatra=new CPX[ntriblock];
         lambdaref=new CPX[ntriblock];
         veltra=new double[ntriblock];
         velref=new double[ntriblock];
+        lambdavec=new CPX[2*bandwidth*ndof];
+        eigvecc=new CPX[ndof*2*bandwidth*ndof];
     }
-    lambdavec=new CPX[2*bandwidth*ndof];
-    eigvecc=new CPX[ndof*2*bandwidth*ndof];
     sabtime=get_time(d_zer);
     if (injection_method==22) {
         if (complexenergypoint) {
-            InjectionBeyn<CPX> *k_inj = new InjectionBeyn<CPX>(2*bandwidth,1.0/eps_limit);
+            InjectionBeyn<CPX> *k_inj = new InjectionBeyn<CPX>(2*bandwidth,1.0/eps_limit,svd_fac,NQ_beyn,NCRC_beyn);
             neigval = k_inj->execute(H,ndof,neigbeyn,lambdavec,eigvecc,inj_sign,boundary_comm);
             delete k_inj;
         } else {
-            InjectionBeyn<double> *k_inj = new InjectionBeyn<double>(2*bandwidth,1.0/eps_limit);
+            InjectionBeyn<double> *k_inj = new InjectionBeyn<double>(2*bandwidth,1.0/eps_limit,svd_fac,NQ_beyn,NCRC_beyn);
             neigval = k_inj->execute(H,ndof,neigbeyn,lambdavec,eigvecc,inj_sign,boundary_comm);
             delete k_inj;
         }
     } else {
-        CPX* KScpx;
+        CPX* KScpx=NULL;
         if (!boundary_rank) {
             KScpx = new CPX[ndofsq*nblocksband];
             for (int ibw=0;ibw<nblocksband;ibw++) {

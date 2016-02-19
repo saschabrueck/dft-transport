@@ -109,6 +109,7 @@ public:
     void psipsidagger(CPX*,int,CPX);
     void psipsidagger(double*,int,double);
     void psipsidagger_transpose(CPX*,int,CPX);
+    void psipsidagger_transpose(TCSR<double>*,CPX*,int,CPX);
     void psipsidagger_transpose(double*,int,double);
     double psipsidagger(TCSR<double>*,CPX*,CPX*,CPX*,int,int,int,CPX);
     double psipsidagger_transpose(TCSR<double>*,CPX*,CPX*,CPX*,int,int,int,CPX);
@@ -1994,6 +1995,21 @@ inline void TCSR<double>::psipsidagger_transpose(CPX* psi,int nkval,CPX factor)
     for(i=0;i<size;i++){
         for(e=edge_i[i]-findx;e<edge_i[i+1]-findx;e++){
             nnz[e]+=real(factor*c_zdotc(nkval,&psi[(index_j[e]-findx)*nkval],1,&psi[(first_row+i)*nkval],1));
+        }
+    }
+}
+
+/************************************************************************************************/
+
+template <>
+inline void TCSR<double>::psipsidagger_transpose(TCSR<double>* mat,CPX* psi,int nkval,CPX factor)
+{
+    int i,e;
+    for(i=0;i<size;i++){
+        for(e=edge_i[i]-findx;e<edge_i[i+1]-findx;e++){
+            CPX res=factor*c_zdotc(nkval,&psi[(index_j[e]-findx)*nkval],1,&psi[(first_row+i)*nkval],1);
+            nnz[e]+=real(res);
+            mat->nnz[e]+=imag(res);
         }
     }
 }
