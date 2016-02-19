@@ -342,13 +342,11 @@ int worldrank; MPI_Comm_rank(MPI_COMM_WORLD,&worldrank);
         delete[] decrefvec;
         delete[] protravec;
         delete[] prorefvec;
-    }
-    delete[] lambdavec;
-    delete[] eigvecc;
+        delete[] lambdavec;
+        delete[] eigvecc;
 if (!worldrank) cout << "TIME FOR EIGENVALUE SOLVER " << get_time(sabtime) << endl;
  /*
-if (!boundary_rank) cout<<worldrank<<" AT "<<real(energy)<<" NPROTRA "<<nprotra<<" NPROREF "<<nproref<<" NDECTRA "<<ndectra<<" NDECREF "<<ndecref<<" SIGN "<<inj_sign<<endl;
-if (!boundary_rank) {
+cout<<worldrank<<" AT "<<real(energy)<<" NPROTRA "<<nprotra<<" NPROREF "<<nproref<<" NDECTRA "<<ndectra<<" NDECREF "<<ndecref<<" SIGN "<<inj_sign<<endl;
 stringstream mysstream;
 mysstream << "AllEigvals" << evecpos << "_" << inj_sign;
 ofstream myfile(mysstream.str().c_str());
@@ -358,199 +356,197 @@ for (int iele=0;iele<nproref+ndecref;iele++) {
     myfile << real(k_eigval) << " " << imag(k_eigval) << endl;
 }
 myfile.close();
-}
  */
-if (!boundary_rank) {
-    for (int ibw=0;ibw<nblocksband;ibw++) {
-        delete H[ibw];
-    }
-    delete[] H;
-    if (nprotra!=nproref) return (LOGCERR, EXIT_FAILURE);
-    int neigbas=nproref+ndecref;
-    CPX *VT=new CPX[neigbas*ntriblock];
-    CPX *matcpx=new CPX[ntriblock*neigbas];
-    CPX *invgrs=new CPX[neigbas*neigbas];
-    sabtime=get_time(d_zer);
-    if (eps_limit<1.0E-4) {
-        full_transpose(neigbas,ntriblock,Vref,VT);
-        H1t->trans_mat_vec_mult(VT,matcpx,neigbas,1);
-        c_zgemm('T','N',neigbas,neigbas,ntriblock,z_one,Vref,ntriblock,matcpx,ntriblock,z_zer,invgrs,neigbas);
-        for (int ieigbas=0;ieigbas<neigbas;ieigbas++)
-            c_zscal(neigbas,pow(lambdaref[ieigbas],+inj_sign*bandwidth),&invgrs[ieigbas*neigbas],1);
-        H0->trans_mat_vec_mult(VT,matcpx,neigbas,1);
-        c_zgemm('T','N',neigbas,neigbas,ntriblock,z_one,Vref,ntriblock,matcpx,ntriblock,z_one,invgrs,neigbas);
-    } else {
-        full_transpose(neigbas,ntriblock,Vref,VT);
-        H1->trans_mat_vec_mult(VT,matcpx,neigbas,1);
-        c_zgemm('T','N',neigbas,neigbas,ntriblock,-z_one,Vref,ntriblock,matcpx,ntriblock,z_zer,invgrs,neigbas);
-        for (int ieigbas=0;ieigbas<neigbas;ieigbas++)
-            c_zscal(neigbas,pow(lambdaref[ieigbas],-inj_sign*bandwidth),&invgrs[ieigbas*neigbas],1);
-    }
-    delete[] VT;
-    delete[] matcpx;
+        for (int ibw=0;ibw<nblocksband;ibw++) {
+            delete H[ibw];
+        }
+        delete[] H;
+        if (nprotra!=nproref) return (LOGCERR, EXIT_FAILURE);
+        int neigbas=nproref+ndecref;
+        CPX *VT=new CPX[neigbas*ntriblock];
+        CPX *matcpx=new CPX[ntriblock*neigbas];
+        CPX *invgrs=new CPX[neigbas*neigbas];
+        sabtime=get_time(d_zer);
+        if (eps_limit<1.0E-4) {
+            full_transpose(neigbas,ntriblock,Vref,VT);
+            H1t->trans_mat_vec_mult(VT,matcpx,neigbas,1);
+            c_zgemm('T','N',neigbas,neigbas,ntriblock,z_one,Vref,ntriblock,matcpx,ntriblock,z_zer,invgrs,neigbas);
+            for (int ieigbas=0;ieigbas<neigbas;ieigbas++)
+                c_zscal(neigbas,pow(lambdaref[ieigbas],+inj_sign*bandwidth),&invgrs[ieigbas*neigbas],1);
+            H0->trans_mat_vec_mult(VT,matcpx,neigbas,1);
+            c_zgemm('T','N',neigbas,neigbas,ntriblock,z_one,Vref,ntriblock,matcpx,ntriblock,z_one,invgrs,neigbas);
+        } else {
+            full_transpose(neigbas,ntriblock,Vref,VT);
+            H1->trans_mat_vec_mult(VT,matcpx,neigbas,1);
+            c_zgemm('T','N',neigbas,neigbas,ntriblock,-z_one,Vref,ntriblock,matcpx,ntriblock,z_zer,invgrs,neigbas);
+            for (int ieigbas=0;ieigbas<neigbas;ieigbas++)
+                c_zscal(neigbas,pow(lambdaref[ieigbas],-inj_sign*bandwidth),&invgrs[ieigbas*neigbas],1);
+        }
+        delete[] VT;
+        delete[] matcpx;
 if (!worldrank) cout << "TIME FOR MATRIX MATRIX MULTIPLICATIONS FOR INVERSE OF G " << get_time(sabtime) << endl;
-    sabtime=get_time(d_zer);
-    double *worknorm=new double[neigbas];
-    double anorm=c_zlange('1',neigbas,neigbas,invgrs,neigbas,worknorm);
-    delete[] worknorm;
-    int *pivarrayg=new int[neigbas];
-    c_zgetrf(neigbas,neigbas,invgrs,neigbas,pivarrayg,&iinfo);
-    if (iinfo) return (LOGCERR, EXIT_FAILURE);
-    double rcond;
-    CPX *cworkcond=new CPX[2*neigbas];
-    double *dworkcond=new double[2*neigbas];
-    c_zgecon('1',neigbas,invgrs,neigbas,anorm,&rcond,cworkcond,dworkcond,&iinfo);
-    if (iinfo) return (LOGCERR, EXIT_FAILURE);
-    delete[] cworkcond;
-    delete[] dworkcond;
-if (!boundary_rank) cout<<evecpos<<" HAS CONDITION NUMBER "<<rcond<<" SIGN "<<inj_sign<<endl;
-    if (rcond<numeric_limits<double>::epsilon()) return (LOGCERR, EXIT_FAILURE);
-    sigma = new CPX[triblocksize];
-    CPX* RCOR = new CPX[ntriblock*neigbas];
-    int inversion_small_multmult = 0;
-    if (inversion_small_multmult) {
-        full_transpose(neigbas,ntriblock,Vref,RCOR);
-        c_zgetrs('N',neigbas,ntriblock,invgrs,neigbas,pivarrayg,RCOR,neigbas,&iinfo);
+        sabtime=get_time(d_zer);
+        double *worknorm=new double[neigbas];
+        double anorm=c_zlange('1',neigbas,neigbas,invgrs,neigbas,worknorm);
+        delete[] worknorm;
+        int *pivarrayg=new int[neigbas];
+        c_zgetrf(neigbas,neigbas,invgrs,neigbas,pivarrayg,&iinfo);
         if (iinfo) return (LOGCERR, EXIT_FAILURE);
-        c_zgemm('N','N',ntriblock,ntriblock,neigbas,z_one,Vref,ntriblock,RCOR,neigbas,z_zer,sigma,ntriblock);
+        double rcond;
+        CPX *cworkcond=new CPX[2*neigbas];
+        double *dworkcond=new double[2*neigbas];
+        c_zgecon('1',neigbas,invgrs,neigbas,anorm,&rcond,cworkcond,dworkcond,&iinfo);
+        if (iinfo) return (LOGCERR, EXIT_FAILURE);
+        delete[] cworkcond;
+        delete[] dworkcond;
+cout<<evecpos<<" HAS CONDITION NUMBER "<<rcond<<" SIGN "<<inj_sign<<endl;
+        if (rcond<numeric_limits<double>::epsilon()) return (LOGCERR, EXIT_FAILURE);
+        sigma = new CPX[triblocksize];
+        CPX* RCOR = new CPX[ntriblock*neigbas];
+        int inversion_small_multmult = 0;
+        if (inversion_small_multmult) {
+            full_transpose(neigbas,ntriblock,Vref,RCOR);
+            c_zgetrs('N',neigbas,ntriblock,invgrs,neigbas,pivarrayg,RCOR,neigbas,&iinfo);
+            if (iinfo) return (LOGCERR, EXIT_FAILURE);
+            c_zgemm('N','N',ntriblock,ntriblock,neigbas,z_one,Vref,ntriblock,RCOR,neigbas,z_zer,sigma,ntriblock);
 // i wouldnt need all the transpose if g00R, which is contained in sigma, was symmetric
-        CPX *matctri  = new CPX[triblocksize];
-        full_transpose(ntriblock,ntriblock,sigma,matctri);
-        H1t->trans_mat_vec_mult(matctri,sigma,ntriblock,1);
-        H1t->trans_mat_vec_mult(sigma,matctri,ntriblock,1);
-        full_transpose(ntriblock,ntriblock,matctri,sigma);
-        delete[] matctri;
-    } else {
-        CPX* LCOR = new CPX[ntriblock*neigbas];
-        H1t->mat_vec_mult(Vref,LCOR,neigbas);
-        full_transpose(neigbas,ntriblock,LCOR,RCOR);
-        c_zgetrs('N',neigbas,ntriblock,invgrs,neigbas,pivarrayg,RCOR,neigbas,&iinfo);
-        if (iinfo) return (LOGCERR, EXIT_FAILURE);
-        c_zgemm('N','N',ntriblock,ntriblock,neigbas,z_one,LCOR,ntriblock,RCOR,neigbas,z_zer,sigma,ntriblock);
-        delete[] LCOR;
-    }
-    delete[] pivarrayg;
-    delete[] RCOR;
-    delete[] invgrs;
+            CPX *matctri  = new CPX[triblocksize];
+            full_transpose(ntriblock,ntriblock,sigma,matctri);
+            H1t->trans_mat_vec_mult(matctri,sigma,ntriblock,1);
+            H1t->trans_mat_vec_mult(sigma,matctri,ntriblock,1);
+            full_transpose(ntriblock,ntriblock,matctri,sigma);
+            delete[] matctri;
+        } else {
+            CPX* LCOR = new CPX[ntriblock*neigbas];
+            H1t->mat_vec_mult(Vref,LCOR,neigbas);
+            full_transpose(neigbas,ntriblock,LCOR,RCOR);
+            c_zgetrs('N',neigbas,ntriblock,invgrs,neigbas,pivarrayg,RCOR,neigbas,&iinfo);
+            if (iinfo) return (LOGCERR, EXIT_FAILURE);
+            c_zgemm('N','N',ntriblock,ntriblock,neigbas,z_one,LCOR,ntriblock,RCOR,neigbas,z_zer,sigma,ntriblock);
+            delete[] LCOR;
+        }
+        delete[] pivarrayg;
+        delete[] RCOR;
+        delete[] invgrs;
 if (!worldrank) cout << "TIME FOR INVERSION AND MATRIX MATRIX MULTIPLICATIONS FOR SIGMA " << get_time(sabtime) << endl;
 
 // /*
-    sabtime=get_time(d_zer);
-    int inversion_with_sparse_mult_symm=0;
-    int linear_system_with_dense_mult_symm=0;
-    if (inversion_with_sparse_mult_symm) {
-        CPX *matctri  = new CPX[triblocksize];
-        CPX *presigma  = new CPX[triblocksize];
-        H0->sparse_to_full(matctri,ntriblock,ntriblock);
-        c_zaxpy(triblocksize,-z_one,sigma,1,matctri,1);
-        int *pivarrays=new int[ntriblock];
-        c_zgetrf(ntriblock,ntriblock,matctri,ntriblock,pivarrays,&iinfo);
-        if (iinfo) return (LOGCERR, EXIT_FAILURE);
-        CPX nworks;
-        c_zgetri(ntriblock,matctri,ntriblock,pivarrays,&nworks,-1,&iinfo);
-        int lworks=int(real(nworks));
-        CPX* works=new CPX[lworks];
-        c_zgetri(ntriblock,matctri,ntriblock,pivarrays,works,lworks,&iinfo);
-        if (iinfo) return (LOGCERR, EXIT_FAILURE);
-        delete[] works;
-        delete[] pivarrays;
-        full_transpose(ntriblock,ntriblock,matctri,sigma);
-        H1t->trans_mat_vec_mult(sigma,presigma,ntriblock,1);
-        H1t->trans_mat_vec_mult(presigma,matctri,ntriblock,1);
-        full_transpose(ntriblock,ntriblock,matctri,sigma);
-        int do_extra_symm=0;
-        if (do_extra_symm) {
-            c_zaxpy(ntriblock*ntriblock,z_one,matctri,1,sigma,1);
-            c_zscal(ntriblock*ntriblock,z_one*0.5,sigma,1);
+        sabtime=get_time(d_zer);
+        int inversion_with_sparse_mult_symm=0;
+        int linear_system_with_dense_mult_symm=0;
+        if (inversion_with_sparse_mult_symm) {
+            CPX *matctri  = new CPX[triblocksize];
+            CPX *presigma  = new CPX[triblocksize];
+            H0->sparse_to_full(matctri,ntriblock,ntriblock);
+            c_zaxpy(triblocksize,-z_one,sigma,1,matctri,1);
+            int *pivarrays=new int[ntriblock];
+            c_zgetrf(ntriblock,ntriblock,matctri,ntriblock,pivarrays,&iinfo);
+            if (iinfo) return (LOGCERR, EXIT_FAILURE);
+            CPX nworks;
+            c_zgetri(ntriblock,matctri,ntriblock,pivarrays,&nworks,-1,&iinfo);
+            int lworks=int(real(nworks));
+            CPX* works=new CPX[lworks];
+            c_zgetri(ntriblock,matctri,ntriblock,pivarrays,works,lworks,&iinfo);
+            if (iinfo) return (LOGCERR, EXIT_FAILURE);
+            delete[] works;
+            delete[] pivarrays;
+            full_transpose(ntriblock,ntriblock,matctri,sigma);
+            H1t->trans_mat_vec_mult(sigma,presigma,ntriblock,1);
+            H1t->trans_mat_vec_mult(presigma,matctri,ntriblock,1);
+            full_transpose(ntriblock,ntriblock,matctri,sigma);
+            int do_extra_symm=0;
+            if (do_extra_symm) {
+                c_zaxpy(ntriblock*ntriblock,z_one,matctri,1,sigma,1);
+                c_zscal(ntriblock*ntriblock,z_one*0.5,sigma,1);
+            }
+            delete[] matctri;
+            delete[] presigma;
+        } else if (linear_system_with_dense_mult_symm) {
+            CPX *matctri  = new CPX[triblocksize];
+            CPX *presigma  = new CPX[triblocksize];
+            H0->sparse_to_full(matctri,ntriblock,ntriblock);
+            c_zaxpy(triblocksize,-z_one,sigma,1,matctri,1);
+            int *pivarrays=new int[ntriblock];
+            c_zgetrf(ntriblock,ntriblock,matctri,ntriblock,pivarrays,&iinfo);
+            if (iinfo) return (LOGCERR, EXIT_FAILURE);
+            H1->sparse_to_full(sigma,ntriblock,ntriblock);
+            c_zgetrs('T',ntriblock,ntriblock,matctri,ntriblock,pivarrays,sigma,ntriblock,&iinfo);
+            if (iinfo) return (LOGCERR, EXIT_FAILURE);
+            delete[] pivarrays;
+            full_transpose(ntriblock,ntriblock,sigma,presigma);
+            H1t->trans_mat_vec_mult(presigma,matctri,ntriblock,1);
+            full_transpose(ntriblock,ntriblock,matctri,sigma);
+            int do_extra_symm=0;
+            if (do_extra_symm) {
+                c_zaxpy(ntriblock*ntriblock,z_one,matctri,1,sigma,1);
+                c_zscal(ntriblock*ntriblock,z_one*0.5,sigma,1);
+            }
+            delete[] matctri;
+            delete[] presigma;
         }
-        delete[] matctri;
-        delete[] presigma;
-    } else if (linear_system_with_dense_mult_symm) {
-        CPX *matctri  = new CPX[triblocksize];
-        CPX *presigma  = new CPX[triblocksize];
-        H0->sparse_to_full(matctri,ntriblock,ntriblock);
-        c_zaxpy(triblocksize,-z_one,sigma,1,matctri,1);
-        int *pivarrays=new int[ntriblock];
-        c_zgetrf(ntriblock,ntriblock,matctri,ntriblock,pivarrays,&iinfo);
-        if (iinfo) return (LOGCERR, EXIT_FAILURE);
-        H1->sparse_to_full(sigma,ntriblock,ntriblock);
-        c_zgetrs('T',ntriblock,ntriblock,matctri,ntriblock,pivarrays,sigma,ntriblock,&iinfo);
-        if (iinfo) return (LOGCERR, EXIT_FAILURE);
-        delete[] pivarrays;
-        full_transpose(ntriblock,ntriblock,sigma,presigma);
-        H1t->trans_mat_vec_mult(presigma,matctri,ntriblock,1);
-        full_transpose(ntriblock,ntriblock,matctri,sigma);
-        int do_extra_symm=0;
-        if (do_extra_symm) {
-            c_zaxpy(ntriblock*ntriblock,z_one,matctri,1,sigma,1);
-            c_zscal(ntriblock*ntriblock,z_one*0.5,sigma,1);
-        }
-        delete[] matctri;
-        delete[] presigma;
-    }
 if (!worldrank) cout << "TIME FOR SYMMETRIZATION " << get_time(sabtime) << endl;
 // */
 
 // ONLY CHANGES THE RESULT SLIGHTLY BUT IS IMPORTANT FOR PEXSI
 // /*
-    if (complexenergypoint) {
-        for (int i=0;i<ntriblock;i++) for (int j=0;j<i;j++) {
-            sigma[i+ntriblock*j]+=sigma[j+ntriblock*i];
-            sigma[i+ntriblock*j]*=0.5;
+        if (complexenergypoint) {
+            for (int i=0;i<ntriblock;i++) for (int j=0;j<i;j++) {
+                sigma[i+ntriblock*j]+=sigma[j+ntriblock*i];
+                sigma[i+ntriblock*j]*=0.5;
+            }
+            for (int i=0;i<ntriblock;i++) for (int j=0;j<i;j++) {
+                sigma[j+ntriblock*i]=sigma[i+ntriblock*j];
+            }
         }
-        for (int i=0;i<ntriblock;i++) for (int j=0;j<i;j++) {
-            sigma[j+ntriblock*i]=sigma[i+ntriblock*j];
-        }
-    }
 // */
 
-    if (compute_inj) {
-        sabtime=get_time(d_zer);
-        n_propagating=nprotra;
-        c_dscal(nprotra*ntriblock,-d_one,((double*)Vref)+1,2);
-//swap(Vref,Vtra);
-//swap(lambdaref,lambdatra);
-//c_dscal(nprotra,-d_one,((double*)lambdaref)+1,2);
-        for (int i=0;i<nprotra;i++) {
-            int degeneracy=1;
-            for (int j=0;j<i;j++) {
-                if (abs(lambdaref[i]-lambdaref[j])<eps_eigval_degen && abs(velref[i]-velref[j])<eps_eigval_degen) {
-                    degeneracy++;
+        if (compute_inj) {
+            sabtime=get_time(d_zer);
+            n_propagating=nprotra;
+            c_dscal(nprotra*ntriblock,-d_one,((double*)Vref)+1,2);
+//          swap(Vref,Vtra);
+//          swap(lambdaref,lambdatra);
+//          c_dscal(nprotra,-d_one,((double*)lambdaref)+1,2);
+            for (int i=0;i<nprotra;i++) {
+                int degeneracy=1;
+                for (int j=0;j<i;j++) {
+                    if (abs(lambdaref[i]-lambdaref[j])<eps_eigval_degen && abs(velref[i]-velref[j])<eps_eigval_degen) {
+                        degeneracy++;
 /*
-                    CPX prod=c_zdotc(ntriblock,&Vref[i*ntriblock],1,&Vref[j*ntriblock],1);
-                    c_zaxpy(ntriblock,-prod,&Vref[i*ntriblock],1,&Vref[j*ntriblock],1);
-                    CPX norm=CPX(d_one/c_dznrm2(ntriblock,&Vref[j*ntriblock],1),d_zer);
-                    c_zscal(ntriblock,norm,&Vref[j*ntriblock],1);
+                        CPX prod=c_zdotc(ntriblock,&Vref[i*ntriblock],1,&Vref[j*ntriblock],1);
+                        c_zaxpy(ntriblock,-prod,&Vref[i*ntriblock],1,&Vref[j*ntriblock],1);
+                        CPX norm=CPX(d_one/c_dznrm2(ntriblock,&Vref[j*ntriblock],1),d_zer);
+                        c_zscal(ntriblock,norm,&Vref[j*ntriblock],1);
 */
+                    }
                 }
-            }
 if (degeneracy>1) cout << "DEGENERACY " << degeneracy << " ON " << evecpos << endl;
-//            if (degeneracy>2) return (LOGCERR, EXIT_FAILURE);
-        }
-        inj = new CPX[ntriblock*nprotra];
-        lambdapro = new CPX[nprotra];
-        for (int ipro=0;ipro<nprotra;ipro++) {
-            lambdapro[ipro]=pow(lambdaref[ipro],+inj_sign);
-        }
-        H1t->mat_vec_mult(Vref,inj,nprotra);
-        for (int ipro=0;ipro<nprotra;ipro++) {
-            c_zscal(ntriblock,pow(lambdaref[ipro],+inj_sign*bandwidth),&Vref[ipro*ntriblock],1);
-        }
-        c_zgemm('N','N',ntriblock,nprotra,ntriblock,z_one,sigma,ntriblock,Vref,ntriblock,z_one,inj,ntriblock);
-        for (int ipro=0;ipro<nprotra;ipro++) {
-            c_zscal(ntriblock,CPX(d_one/sqrt(2*M_PI*velref[ipro]),d_zer),&inj[ipro*ntriblock],1);
-        }
+//              if (degeneracy>2) return (LOGCERR, EXIT_FAILURE);
+            }
+            inj = new CPX[ntriblock*nprotra];
+            lambdapro = new CPX[nprotra];
+            for (int ipro=0;ipro<nprotra;ipro++) {
+                lambdapro[ipro]=pow(lambdaref[ipro],+inj_sign);
+            }
+            H1t->mat_vec_mult(Vref,inj,nprotra);
+            for (int ipro=0;ipro<nprotra;ipro++) {
+                c_zscal(ntriblock,pow(lambdaref[ipro],+inj_sign*bandwidth),&Vref[ipro*ntriblock],1);
+            }
+            c_zgemm('N','N',ntriblock,nprotra,ntriblock,z_one,sigma,ntriblock,Vref,ntriblock,z_one,inj,ntriblock);
+            for (int ipro=0;ipro<nprotra;ipro++) {
+                c_zscal(ntriblock,CPX(d_one/sqrt(2*M_PI*velref[ipro]),d_zer),&inj[ipro*ntriblock],1);
+            }
 if (!worldrank) cout << "MATRIX MATRIX MULTIPLICATIONS FOR INJECTION " << get_time(sabtime) << endl;
-    }
-    delete[] Vtra;
-    delete[] Vref;
-    delete[] lambdatra;
-    delete[] lambdaref;
-    delete[] veltra;
-    delete[] velref;
-    delete H0;
-    delete H1;
-    delete H1t;
-}//end if !boundary_rank
+        }
+        delete[] Vtra;
+        delete[] Vref;
+        delete[] lambdatra;
+        delete[] lambdaref;
+        delete[] veltra;
+        delete[] velref;
+        delete H0;
+        delete H1;
+        delete H1t;
+    }//end if !boundary_rank
     return 0;
 }
