@@ -196,7 +196,7 @@ if (!iam) cout << "TIME FOR PROPAGATING MODES " << get_time(sabtime) << endl;
 
 int Energyvector::read_real_axis_energies(std::vector<CPX> &energyvector,std::vector<CPX> &stepvector,std::vector<transport_methods::transport_method> &methodvector)
 {
-    ifstream evecfile("OMEN_E");
+    ifstream evecfile("E.dat");
     if (evecfile.fail()) return (LOGCERR, EXIT_FAILURE);
     energyvector.clear();
     stepvector.clear();

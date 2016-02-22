@@ -24,7 +24,7 @@ extern "C" {
            int     num_contacts;
            int     tasks_per_point;
            int     n_points_beyn;
-           int     one_circle;
+           int     ncrc_beyn;
            int     cutout[2];
            double  colzero_threshold;
            double  eps_limit;
