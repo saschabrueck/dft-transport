@@ -48,15 +48,11 @@ void c_scf_method(cp2k_transport_parameters cp2k_transport_params, cp2k_csr_inte
     transport_params->n_points_beyn              = cp2k_transport_params.n_points_beyn;
     transport_params->extra_scf                  = cp2k_transport_params.extra_scf;
     transport_params->cutout                     = cp2k_transport_params.cutout[0] || cp2k_transport_params.cutout[1];
+    transport_params->NCRC_beyn                  = cp2k_transport_params.ncrc_beyn;
     if (cp2k_transport_params.eps_fermi<=(numeric_limits<double>::epsilon)()) {
         transport_params->eps_fermi              = (numeric_limits<double>::epsilon)();
     } else {
         transport_params->eps_fermi              = cp2k_transport_params.eps_fermi;
-    }
-    if (cp2k_transport_params.one_circle) {
-        transport_params->NCRC_beyn              = 1;
-    } else {
-        transport_params->NCRC_beyn              = 2;
     }
     if (cp2k_transport_params.n_rand_beyn>1.0 || cp2k_transport_params.n_rand_beyn<=0.0) {
         transport_params->fac_neigbeyn           = 1.0;
