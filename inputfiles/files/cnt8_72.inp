@@ -1,0 +1,174 @@
+&FORCE_EVAL
+  METHOD QS
+  &DFT
+    &POISSON
+      POISSON_SOLVER IMPLICIT
+      &IMPLICIT
+        BOUNDARY_CONDITIONS MIXED_PERIODIC
+        MAX_ITER     300
+        TOL          1.0E-6
+        OR_PARAMETER 1.0E-00
+        &DIELECTRIC
+          DIELECTRIC_CONSTANT 3.9
+          RHO_MIN    1.0E-4
+          RHO_MAX    1.0E-3
+          DERIVATIVE_METHOD cd7
+        &END DIELECTRIC
+        &DIRICHLET_BC
+          &XAA_CYLINDRICAL
+            v_D             XXXPOTXXX
+            BASE_CENTER     15.0  15.0
+            BASE_RADIUS     13.5
+            X_xtnt          102.24 204.48
+            N_SIDES         8
+            N_PRTN          12 1
+          &END XAA_CYLINDRICAL
+          &XAA_CYLINDRICAL
+            v_D             0.0
+            BASE_CENTER     15.0  15.0
+            BASE_RADIUS     13.5
+            X_xtnt          0.01 51.12
+            N_SIDES         8
+            N_PRTN          6 1
+          &END XAA_CYLINDRICAL
+          &XAA_CYLINDRICAL
+            v_D             0.0
+            BASE_CENTER     15.0  15.0
+            BASE_RADIUS     13.5
+            X_xtnt          255.6 306.71
+            N_SIDES         8
+            N_PRTN          6 1
+          &END XAA_CYLINDRICAL
+        &END DIRICHLET_BC
+      &END IMPLICIT
+    &END POISSON
+    &TRANSPORT
+      TRANSPORT_METHOD TRANSMISSION
+      N_KPOINTS 128
+      N_ABSCISSAE 64
+      TASKS_PER_POINT 8
+      INJECTION_METHOD EVP
+      EPS_DECAY 1.0E-6
+      EPS_LIMIT 1.0E-3
+      &CONTACT
+       N_ATOMS 32
+       BANDWIDTH 2
+       INJECTION_SIGN POSITIVE
+      &END
+      &CONTACT
+       N_ATOMS 32
+       BANDWIDTH 2
+       INJECTION_SIGN NEGATIVE
+      &END
+      &CONTACT
+       INJECTING_CONTACT .false.
+       N_ATOMS 32
+       BANDWIDTH 2
+       INJECTION_SIGN POSITIVE
+      &END
+      LINEAR_SOLVER MUMPS
+      MIN_INTERVAL 2.0E-5
+    &END
+    &PRINT
+!    &DIRICHLET_BC_CUBE
+!     STRIDE 1 1 1
+!    &END
+!    &DIRICHLET_CSTR_CHARGE_CUBE
+!     STRIDE 1 1 1
+!    &END
+     &V_HARTREE_CUBE
+      STRIDE 1 1 1
+     &END
+!    &V_XC_CUBE
+!     STRIDE 1 1 1
+!    &END
+!    &E_DENSITY_CUBE
+!     STRIDE 1 1 1
+!    &END
+!    &TOT_DENSITY_CUBE
+!     STRIDE 1 1 1
+!    &END
+    &END
+    BASIS_SET_FILE_NAME ../../BASIS_ZIJLSTRA
+    POTENTIAL_FILE_NAME ../../POTENTIAL 
+    &MGRID
+      CUTOFF 200
+      &RS_GRID
+         MAX_DISTRIBUTED_LEVEL 5
+      &END
+      SKIP_LOAD_BALANCE_DISTRIBUTED
+    &END MGRID
+    &QS
+      EPS_DEFAULT 1.0E-12
+      LS_SCF
+      &DISTRIBUTION
+        BASIC_OPTIMIZATION .FALSE.
+        BASIC_SPATIAL_OPTIMIZATION .TRUE.
+      &END
+    &END QS
+    &LS_SCF
+      MAX_SCF    1000
+      EPS_FILTER 1.0E-6
+      EPS_SCF    1.0E-6
+      MU        -0.05
+      REPORT_ALL_SPARSITIES OFF
+      PERFORM_MU_SCAN OFF
+      S_PRECONDITIONER NONE
+      PURIFICATION_METHOD TRS4
+      MIXING_FRACTION 0.01
+!     RESTART_READ
+      RESTART_WRITE
+    &END
+    &XC
+      &XC_FUNCTIONAL PADE
+      &END XC_FUNCTIONAL
+    &END XC
+  &END DFT
+  &SUBSYS
+    &CELL
+      ABC 306.72 30 30
+      MULTIPLE_UNIT_CELL 1 1 1
+    &END CELL
+    &TOPOLOGY
+      MULTIPLE_UNIT_CELL 1 1 1
+      COORD_FILE_NAME ../cnt8_72.xyz
+      COORDINATE XYZ
+      CONNECTIVITY off
+    &END
+    &KIND H
+      BASIS_SET 3SP-GTH
+      POTENTIAL GTH-PADE-q1
+    &END KIND
+    &KIND C
+      BASIS_SET 3SP-GTH
+      POTENTIAL GTH-PADE-q4
+    &END KIND
+    &KIND N
+      BASIS_SET 3SP-GTH
+      POTENTIAL GTH-PADE-q5
+    &END KIND
+    &PRINT
+      &ATOMIC_COORDINATES OFF
+      &END
+      &MOLECULES OFF
+      &END
+    &END
+  &END SUBSYS
+&END FORCE_EVAL
+&MOTION
+ &GEO_OPT
+ &END
+&END
+&GLOBAL
+  PROJECT cnt8_72_XXXPOTXXX
+  RUN_TYPE ENERGY
+  PRINT_LEVEL MEDIUM
+  &TIMINGS
+     THRESHOLD 0.000001
+  &END
+  EXTENDED_FFT_LENGTHS
+!TRACE
+!TRACE_MASTER .FALSE.
+!TRACE_MAX 1000
+&END GLOBAL
+
