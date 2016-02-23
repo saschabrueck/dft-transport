@@ -7,6 +7,7 @@
 #include <complex>
 #include "Blas.H"
 #include "array_tools.H"
+#include "libcp2k.H"
 
 #define LOGCERR std::cerr << "ERROR IN LINE " << __LINE__ << " OF FILE " << __FILE__ << std::endl
 
@@ -43,6 +44,7 @@ public:
 // sab begin
 //create new matrix by cutting out from old one
     TCSR(TCSR<T>*,int,int,int,int);
+    TCSR(cp2k_csr_interop_type&,int,int,int,int);
 // this constructs a matrix by summing of a vector of matrices
     TCSR(int,T*,TCSR<T>**,int=-1);
 // and this is the gather
@@ -99,7 +101,7 @@ public:
     int additionalentries(TCSR<T>*);
     void add(TCSR<T>*,T);
     void add_real(TCSR<CPX>*,CPX);
-    void copy_shifted(TCSR<T>*,int,int,int,int);
+    void copy_shifted(cp2k_csr_interop_type&,int,int,int,int);
     void copy_pbc_cell(contact_type,int,int,MPI_Comm);
     void add_pot(TCSR<T>*,T*);
     void Bcast(int,MPI_Comm);
@@ -239,6 +241,64 @@ inline TCSR<T>::TCSR(TCSR<T> *mat,int istart, int ilength, int jstart, int jleng
                 index_i[i-loc_istart]++;
                 index_j[n_nonzeros]=mat->index_j[e]-jstart;
                 nnz[n_nonzeros]=mat->nnz[e];
+                n_nonzeros++;
+            }
+        }
+    }
+
+    get_row_edge();
+    get_diag_pos();
+
+    if (n_nonzeros!=edge_i[size]-findx) throw CSR_Exception(__LINE__,__FILE__);
+}
+
+/******************** written by SAB ********************/
+
+template <class T>
+inline TCSR<T>::TCSR(cp2k_csr_interop_type& cp2kCSRmat,int istart, int ilength, int jstart, int jlength)
+{
+    if (istart<0)                              throw CSR_Exception(__LINE__,__FILE__);
+    if (jstart<0)                              throw CSR_Exception(__LINE__,__FILE__);
+    if (ilength<0)                             throw CSR_Exception(__LINE__,__FILE__);
+    if (jlength<0)                             throw CSR_Exception(__LINE__,__FILE__);
+    if (istart+ilength>cp2kCSRmat.nrows_total) throw CSR_Exception(__LINE__,__FILE__);
+
+    int iend       = istart+ilength;
+    int jend       = jstart+jlength;
+    int loc_istart = max(0,min(cp2kCSRmat.nrows_local,istart-cp2kCSRmat.first_row));
+    int loc_iend   = max(0,min(cp2kCSRmat.nrows_local,iend-cp2kCSRmat.first_row));
+
+    size       = loc_iend-loc_istart;
+    size_tot   = ilength;
+    type       = 0;
+    findx      = 1;
+    first_row  = min(ilength,max(0,cp2kCSRmat.first_row-istart));
+
+    n_nonzeros = 0;
+
+    for (int i=loc_istart;i<loc_iend;i++) {
+        for(int e=cp2kCSRmat.rowptr_local[i]-1;e<cp2kCSRmat.rowptr_local[i+1]-1;e++){
+            if(cp2kCSRmat.colind_local[e]-1>=jstart && cp2kCSRmat.colind_local[e]-1<jend){
+                n_nonzeros++;
+            }
+        }
+    }
+
+    nnz        = new T[max(n_nonzeros,1)];
+    index_i    = new int[max(size,1)];
+    index_j    = new int[max(n_nonzeros,1)];
+    edge_i     = new int[size+1];
+    diag_pos   = new int[max(size,1)];
+
+    n_nonzeros = 0;
+    init_variable(index_i,size);
+
+    for (int i=loc_istart;i<loc_iend;i++) {
+        for(int e=cp2kCSRmat.rowptr_local[i]-1;e<cp2kCSRmat.rowptr_local[i+1]-1;e++){
+            if(cp2kCSRmat.colind_local[e]-1>=jstart && cp2kCSRmat.colind_local[e]-1<jend){
+                index_i[i-loc_istart]++;
+                index_j[n_nonzeros]=cp2kCSRmat.colind_local[e]-jstart;
+                nnz[n_nonzeros]=cp2kCSRmat.nzvals_local[e];
                 n_nonzeros++;
             }
         }
@@ -1762,19 +1822,19 @@ inline void TCSR<double>::add_real(TCSR<CPX> *A,CPX factor)
 /************************************************************************************************/
 
 template <class T>
-void TCSR<T>::copy_shifted(TCSR<T> *A,int istart, int ilength, int jstart, int jlength)
+void TCSR<T>::copy_shifted(cp2k_csr_interop_type& cp2kCSRmat,int istart, int ilength, int jstart, int jlength)
 {
     int i,e;
-    T *linefull=new T[A->size_tot];
+    T *linefull=new T[size_tot];
 
-    for (i=0;i<A->size;i++) {
-        init_variable(linefull,A->size_tot);
-        for (e=A->edge_i[i]-A->findx;e<A->edge_i[i+1]-A->findx;e++) {
-            linefull[A->index_j[e]-A->findx]=A->nnz[e];
+    for (i=0;i<size;i++) {
+        init_variable(linefull,size_tot);
+        for (e=edge_i[i]-findx;e<edge_i[i+1]-findx;e++) {
+            linefull[index_j[e]-findx]=nnz[e];
         }
-        for (e=edge_i[i+istart+A->first_row-first_row]-findx;e<edge_i[i+istart+A->first_row-first_row+1]-findx;e++) {
-            if (index_j[e]-findx>=jstart && index_j[e]-findx<jstart+jlength) {
-                nnz[e]=linefull[index_j[e]-findx-jstart];
+        for (e=cp2kCSRmat.rowptr_local[i+istart+first_row-cp2kCSRmat.first_row]-1;e<cp2kCSRmat.rowptr_local[i+istart+first_row-cp2kCSRmat.first_row+1]-1;e++) {
+            if (cp2kCSRmat.colind_local[e]-1>=jstart && cp2kCSRmat.colind_local[e]-1<jstart+jlength) {
+                cp2kCSRmat.nzvals_local[e]=linefull[cp2kCSRmat.colind_local[e]-1-jstart];
             }
         }
     }

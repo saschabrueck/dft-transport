@@ -11,17 +11,6 @@ void c_scf_method(cp2k_transport_parameters cp2k_transport_params, cp2k_csr_inte
     Comm = MPI::COMM_WORLD;
     int rank = Comm.Get_rank();
  
-    TCSR<double> *Overlap, *KohnSham;
-    TCSR<double> *OverlapCut, *KohnShamCut;
-    Overlap = new TCSR<double>(S.nrows_local, S.nze_local, 1);
-    KohnSham = new TCSR<double>(KS.nrows_local, KS.nze_local, 1);
-    cp2kCSR_to_CSR(S, Overlap);
-    cp2kCSR_to_CSR(KS, KohnSham);
- 
-    if (cp2k_transport_params.extra_scf) c_dscal(P->nze_local,0.5,P->nzvals_local,1);
- 
-    c_dscal(KohnSham->n_nonzeros,cp2k_transport_params.evoltfactor,KohnSham->nnz,1);
- 
     transport_parameters* transport_params = new transport_parameters();
     transport_params->n_occ                      = cp2k_transport_params.n_occ;
     transport_params->n_atoms                    = cp2k_transport_params.n_atoms;
@@ -102,14 +91,18 @@ void c_scf_method(cp2k_transport_parameters cp2k_transport_params, cp2k_csr_inte
     int cut_l = std::accumulate(&cp2k_transport_params.nsgf[0],&cp2k_transport_params.nsgf[cp2k_transport_params.cutout[0]],0);
     int cut_r = std::accumulate(&cp2k_transport_params.nsgf[cp2k_transport_params.n_atoms-cp2k_transport_params.cutout[1]],&cp2k_transport_params.nsgf[cp2k_transport_params.n_atoms],0);
 
+    TCSR<double> *Overlap, *KohnSham;
     if (transport_params->cutout) {
-        OverlapCut  = new TCSR<double>(Overlap, cut_l,Overlap->size_tot-cut_l-cut_r,cut_l,Overlap->size_tot-cut_l-cut_r);
-        KohnShamCut = new TCSR<double>(KohnSham,cut_l,Overlap->size_tot-cut_l-cut_r,cut_l,Overlap->size_tot-cut_l-cut_r);
+        Overlap  = new TCSR<double>( S,cut_l,S.nrows_total-cut_l-cut_r,cut_l,S.nrows_total-cut_l-cut_r);
+        KohnSham = new TCSR<double>(KS,cut_l,S.nrows_total-cut_l-cut_r,cut_l,S.nrows_total-cut_l-cut_r);
     } else {
-        OverlapCut  = Overlap;
-        KohnShamCut = KohnSham;
+        Overlap  = new TCSR<double>( S.nrows_local, S.nze_local,1);
+        KohnSham = new TCSR<double>(KS.nrows_local,KS.nze_local,1);
+        cp2kCSR_to_CSR( S, Overlap);
+        cp2kCSR_to_CSR(KS,KohnSham);
     }
- 
+    c_dscal(KohnSham->n_nonzeros,cp2k_transport_params.evoltfactor,KohnSham->nnz,1);
+
     int wr_cutblocksize = 0;
     int wr_bw           = 0;
     int wr_ndof         = 0;
@@ -120,34 +113,35 @@ void c_scf_method(cp2k_transport_parameters cp2k_transport_params, cp2k_csr_inte
     switch (transport_params->method) {
         case 0:
             if (!rank) cout << "Writing Matrices" << endl;
-            write_matrix(OverlapCut,KohnShamCut,wr_cutblocksize,wr_bw,wr_ndof);
+            write_matrix(Overlap,KohnSham,wr_cutblocksize,wr_bw,wr_ndof);
             break;
         case 1:
             if (!rank) cout << "Starting ScaLaPackDiag" << endl;
-            if (diagscalapack(OverlapCut,KohnShamCut,transport_params)) throw SCF_Exception(__LINE__,__FILE__);
+            if (diagscalapack(Overlap,KohnSham,transport_params)) throw SCF_Exception(__LINE__,__FILE__);
             break;
         case 2:
             if (!rank) cout << "Starting CP2K core/valence Hamiltonian + OMEN Poisson local self consistent code" << endl;
-            if (semiselfconsistent(OverlapCut,KohnShamCut,muvec,contactvec,transport_params)) throw SCF_Exception(__LINE__,__FILE__);
+            if (semiselfconsistent(Overlap,KohnSham,muvec,contactvec,transport_params)) throw SCF_Exception(__LINE__,__FILE__);
             break;
         case 3:
         case 4:
         default:
             if (!rank) cout << "Starting Transport " << transport_params->method << endl;
             Energyvector energyvector;
-            if (energyvector.Execute(OverlapCut,KohnShamCut,muvec,contactvec,transport_params)) throw SCF_Exception(__LINE__,__FILE__);
+            if (energyvector.Execute(Overlap,KohnSham,muvec,contactvec,transport_params)) throw SCF_Exception(__LINE__,__FILE__);
     }
  
-    if (transport_params->cutout) {
-        cp2kCSR_to_CSR(*P, Overlap);
-        c_dscal(Overlap->n_nonzeros,0.5,Overlap->nnz,1);
-        Overlap->copy_shifted(OverlapCut,cut_l,Overlap->size_tot-cut_l-cut_r,cut_l,Overlap->size_tot-cut_l-cut_r);
-        delete OverlapCut;
-        delete KohnShamCut;
+    if (cp2k_transport_params.extra_scf) {
+        c_dscal(P->nze_local,0.5,P->nzvals_local,1);
+    } else {
+        if (transport_params->cutout) {
+            c_dscal(P->nze_local,0.5,P->nzvals_local,1);
+            Overlap->copy_shifted(*P,cut_l,S.nrows_total-cut_l-cut_r,cut_l,S.nrows_total-cut_l-cut_r);
+        } else {
+            CSR_to_cp2kCSR(Overlap,*P);
+        }
     }
- 
-    if (!transport_params->extra_scf) CSR_to_cp2kCSR(Overlap, *P);
- 
+
     delete Overlap;
     delete KohnSham;
     delete transport_params;
