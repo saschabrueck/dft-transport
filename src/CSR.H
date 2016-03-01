@@ -6,14 +6,70 @@
 #include <algorithm>
 #include <complex>
 #include "Blas.H"
-#include "array_tools.H"
 #include "libcp2k.H"
 
 #define LOGCERR std::cerr << "ERROR IN LINE " << __LINE__ << " OF FILE " << __FILE__ << std::endl
 
+/************************************************************************************************/
+
 struct CSR_Exception{
     CSR_Exception(const int line,const char* file) {std::cerr<<"Error in line "<<line<<" of file "<<file<<std::endl;}
 };
+
+/************************************************************************************************/
+
+template <class T>
+void full_transpose(int ncol, int nrow, T *B, T* A)
+{
+    for(int i=0;i<ncol;i++) c_tcopy(nrow,&B[i*nrow],1,&A[i],ncol);
+}
+
+/************************************************************************************************/
+
+template <class T>
+void set_to_zero(int length, T *array)
+{
+    for (int i=0; i < length; ++i) {
+        array[i] = (T)0;
+    }
+}
+
+/************************************************************************************************/
+
+template <typename T>
+T fermi(T E,T mu,double temp,int mode)
+{
+    double k_b=K_BOLTZMANN;
+    if (mode==0) {
+        if (temp<=0.0) {
+            temp=1.0E-8;
+        }
+        return 1.0/(1.0+exp((E-mu)/(k_b*temp)));
+    } else if (mode==1) {
+        if (temp<=0.0) {
+            return 0.0;
+        } else {
+            return log(1.0+exp(-(E-mu)/(k_b*temp)));
+        }
+    } else if (mode==2) {
+        if (temp<=0.0) {
+            return 0.0;
+        } else {
+//            return exp((E-mu)/(k_b*temp))/(k_b*temp)/pow(1.0+exp((E-mu)/(k_b*temp)),2); // FOR abs(E-mu)>10.0 inf/inf^2
+            return 1.0/(k_b*temp)/(2.0+exp((E-mu)/(k_b*temp))+1.0/exp((E-mu)/(k_b*temp)));
+        }
+    } else if (mode==3) {
+        if (temp<=0.0) {
+            return 0.0;
+        } else {
+            return exp((E-mu)/(k_b*temp))/(k_b*temp)/(1.0+exp(-(E-mu)/(k_b*temp)));
+        }
+    } else {
+        return 0.0;
+    }
+}
+
+/************************************************************************************************/
 
 class CSR{
 public:

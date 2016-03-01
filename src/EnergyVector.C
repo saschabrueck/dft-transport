@@ -29,7 +29,7 @@ sabtime=get_time(0.0);
     TCSR<double> *KohnShamCollect = new TCSR<double>(eq_rank_matrix_comm,KohnSham);
     TCSR<double> *OverlapCollect  = new TCSR<double>(eq_rank_matrix_comm,Overlap);
     TCSR<double> *Ps = new TCSR<double>(OverlapCollect);
-    Ps->init_variable(Ps->nnz,Ps->n_nonzeros);
+    c_dscal(Ps->n_nonzeros,0.0,Ps->nnz,1);
 if (!iam) cout << "TIME FOR DISTRIBUTING MATRICES " << get_time(sabtime) << endl;
     std::vector<CPX> energyvector;
     std::vector<CPX> stepvector;
