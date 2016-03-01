@@ -13,6 +13,12 @@ template <typename T>
 void MPI_Isend_Full(T *M,int count,int dest,int message,MPI_Comm comm);
 template <typename T>
 void MPI_Recv_Full(T *M,int source,int message,MPI_Comm comm);
+template <typename T>
+void MPI_Recv_Full(T *M,int count,int source,int message,MPI_Comm comm);
+template <typename T>
+void MPI_Dist_Sparse(TCSR<T> *M,int source,MPI_Comm comm);
+template <typename T>
+void MPI_Bcast_SpInd(TCSR<T> **M,int **M_index,int with_index,int trans_mpi_rank,MPI_Comm trans_comm);
 void MPI_Send_Res(CPX *M,int N,int Ntot,int no_rhs,int dest,MPI_Comm comm);
 void MPI_Recv_Res(CPX *M,int source,MPI_Comm comm);
 void MPI_Bcast_Sparse(TCSR<CPX> *M,int source,MPI_Comm comm);
@@ -78,7 +84,6 @@ void MPI_Send_Full(double *M,int count,int dest,int message,MPI_Comm comm)
 {
     MPI_Send(&count,1,MPI_INT,dest,2*message,comm);
     MPI_Send(M,count,MPI_DOUBLE,dest,2*message+1,comm);
-        
 }
 
 /************************************************************************************************/
@@ -120,7 +125,7 @@ void MPI_Recv_Full(double *M,int source,int message,MPI_Comm comm)
 {
     int count;
     MPI_Status status;
-
+    
     MPI_Recv(&count,1,MPI_INT,source,2*message,comm,&status);
     MPI_Recv(M,count,MPI_DOUBLE,source,2*message+1,comm,&status);
 }
@@ -134,6 +139,30 @@ void MPI_Recv_Full(CPX *M,int source,int message,MPI_Comm comm)
     MPI_Status status;
     
     MPI_Recv(&count,1,MPI_INT,source,2*message,comm,&status);
+    MPI_Recv(M,count,MPI_DOUBLE_COMPLEX,source,2*message+1,comm,&status);
+}
+
+/************************************************************************************************/
+
+template <>
+void MPI_Recv_Full(double *M,int count,int source,int message,MPI_Comm comm)
+{
+    int var;
+    MPI_Status status;
+    
+    MPI_Recv(&var,1,MPI_INT,source,2*message,comm,&status);
+    MPI_Recv(M,count,MPI_DOUBLE,source,2*message+1,comm,&status);
+}
+
+/************************************************************************************************/
+
+template <>
+void MPI_Recv_Full(CPX *M,int count,int source,int message,MPI_Comm comm)
+{
+    int var;
+    MPI_Status status;
+    
+    MPI_Recv(&var,1,MPI_INT,source,2*message,comm,&status);
     MPI_Recv(M,count,MPI_DOUBLE_COMPLEX,source,2*message+1,comm,&status);
 }
 
@@ -180,6 +209,72 @@ inline void MPI_Bcast_Sparse(TCSR<CPX> *M,int source,MPI_Comm comm)
     MPI_Bcast(M->index_j,M->n_nonzeros,MPI_INT,source,comm);
     MPI_Bcast(M->diag_pos,M->size,MPI_INT,source,comm);
     MPI_Bcast(M->nnz,M->n_nonzeros,MPI_DOUBLE_COMPLEX,source,comm);
+}
+
+/************************************************************************************************/
+
+template <>
+void MPI_Dist_Sparse(TCSR<double> *M,int source,MPI_Comm comm)
+{
+    if(M->n_nonzeros>1){
+        MPI_Bcast(M->index_i,M->size,MPI_INT,source,comm);
+	MPI_Bcast(M->edge_i,M->size+1,MPI_INT,source,comm);
+	MPI_Bcast(M->index_j,M->n_nonzeros,MPI_INT,source,comm);
+	MPI_Bcast(M->diag_pos,M->size,MPI_INT,source,comm);
+	MPI_Bcast(M->nnz,M->n_nonzeros,MPI_DOUBLE,source,comm);
+    }
+}
+
+/************************************************************************************************/
+
+template <>
+void MPI_Dist_Sparse(TCSR<CPX> *M,int source,MPI_Comm comm)
+{
+    if(M->n_nonzeros>1){
+        MPI_Bcast(M->index_i,M->size,MPI_INT,source,comm);
+	MPI_Bcast(M->edge_i,M->size+1,MPI_INT,source,comm);
+	MPI_Bcast(M->index_j,M->n_nonzeros,MPI_INT,source,comm);
+	MPI_Bcast(M->diag_pos,M->size,MPI_INT,source,comm);
+	MPI_Bcast(M->nnz,M->n_nonzeros,MPI_DOUBLE_COMPLEX,source,comm);
+    }
+}
+
+/************************************************************************************************/
+
+template <typename T>
+void MPI_Bcast_SpInd(TCSR<T> **M,int **M_index,int with_index,int trans_mpi_rank,\
+		     MPI_Comm trans_comm)
+{
+
+    int m_data[5];
+
+    if(!trans_mpi_rank){
+        m_data[0] = M[0]->size;
+	m_data[1] = M[0]->n_nonzeros;
+	m_data[2] = M[0]->findx;
+	m_data[3] = M[0]->size_tot;
+	m_data[4] = M[0]->first_row;
+    }    
+    MPI_Bcast(m_data,5,MPI_INT,0,trans_comm);
+
+    if(trans_mpi_rank){
+        *M       = new TCSR<T>(max(m_data[0],1),m_data[1],m_data[2]);
+	*M_index = new int[max(m_data[1]*with_index,1)];
+    }
+
+    MPI_Dist_Sparse(*M,0,trans_comm);
+
+    M[0]->size_tot  = m_data[3];
+    M[0]->first_row = m_data[4];
+
+    if(with_index){
+	if(M[0]->n_nonzeros>1){
+	    MPI_Bcast(M_index[0],M[0]->n_nonzeros,MPI_INT,0,trans_comm);
+	}else{
+	    M[0]->edge_i[0] = 0;
+	    M[0]->edge_i[1] = 0;
+	}
+    }
 }
 
 /************************************************************************************************/

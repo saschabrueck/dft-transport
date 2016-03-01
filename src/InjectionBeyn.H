@@ -335,7 +335,7 @@ int InjectionBeyn<T>::execute(TCSR<CPX> **A,int NR,int NM,CPX *lambdaR,CPX *YF, 
 
     if(!loc_rank){
     
-        if(NM==NR) printf("Too many eigenvalues found.");
+        if(NM==NR) printf("Too many eigenvalues found.\n");
 
         eig(QF2,NM,lambdaR);
 
