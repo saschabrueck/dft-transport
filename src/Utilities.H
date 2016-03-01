@@ -1,8 +1,6 @@
 #ifndef __UTILITIES
 #define __UTILITIES
 
-using namespace std;
-
 #include <mpi.h>
 #include <sys/time.h>
 #include <sys/stat.h>
@@ -11,6 +9,13 @@ using namespace std;
 #include <math.h>
 #include <cmath>
 #include "LinkedList.H"
+
+#ifdef CUDA
+//#include <cuda.h>
+//#include <cuda_runtime_api.h>
+//#include <cublas.h>
+//#include <cblas.h>
+#endif
 
 bool sortx(const XYZPOS&, const XYZPOS&);
 
@@ -56,7 +61,9 @@ double get_time(double);
 
 double randn();
 
-void domain_decomposition(int,int,int,int,int*,int*,int);
+void domain_decomposition(int,int,int,int,int*,int*,int,int,int,int);
+
+int get_cpu_color(int,int,int,int);
 
 int get_number_of_blocks(int,int,int,int*);
 
@@ -70,38 +77,9 @@ int min_active_vec(int,int*,int*);
 
 int max_active_vec(int,int*,int*);
 
-template <typename T>
-void set_to_zero(int length, T *array) {
-  for (int i=0; i < length; ++i) {
-    array[i] = (T)0;
-  }
-}
+void cuda_initialize();
 
-void set_random(int, int, CPX*);
-
-void write_matrix_to_file(const char*, CPX*, int, int);
-
-int get_csr_rows(const char*);
-
-void read_csr(const char*, int, int, CPX*);
-
-void print_mat(TCSR<CPX>*, int, int);
-
-void print_mat(CPX*, int, int, int);
-
-void print_mat(CPX*, int, int, int, int, int);
- 
-void print_mat_spy(CPX *, int , int , int );
-
-void print_mat_spy(TCSR<CPX> *, int , int );
-
-void write_mat_c(CPX*, int, int, const char*);
-
-void write_mat_c(CPX*, int, int, std::basic_string<char>);
-
-void write_mat_f(CPX*, int, int, const char*);
-
-void write_mat_f(CPX*, int, int, std::basic_string<char>);
+void cuda_finalize();
 
 /************************************************************************************************/
 
@@ -195,34 +173,6 @@ T max_vec(T *vec,int *ind,int N)
 template <typename T,typename W>
 T convert(W val);
 
-#ifdef _AIX
-
-template<>
-inline double convert<double,CPX>(CPX val)
-{
-    return real(val);
-}
-
-template<>
-inline CPX convert<CPX,CPX>(CPX val)
-{
-    return val;
-}
-
-template<>
-inline double convert<double,double>(double val)
-{
-    return val;
-}
-
-template<>
-inline CPX convert<CPX,double>(double val)
-{
-    return CPX(val,0.0);
-}
-
-#else
-
 template<>
 inline double convert(CPX val)
 {
@@ -245,42 +195,6 @@ template<>
 inline CPX convert(double val)
 {
     return CPX(val,0.0);
-}
-
-#endif
-/************************************************************************************************/
-
-template <typename T>
-T fermi(T E,T mu,double temp,int mode)
-{
-    double k_b=K_BOLTZMANN;
-    if (mode==0) {
-        if (temp<=0.0) {
-            temp=1.0E-8;
-        }
-        return 1.0/(1.0+exp((E-mu)/(k_b*temp)));
-    } else if (mode==1) {
-        if (temp<=0.0) {
-            return 0.0;
-        } else {
-            return log(1.0+exp(-(E-mu)/(k_b*temp)));
-        }
-    } else if (mode==2) {
-        if (temp<=0.0) {
-            return 0.0;
-        } else {
-//            return exp((E-mu)/(k_b*temp))/(k_b*temp)/pow(1.0+exp((E-mu)/(k_b*temp)),2); // FOR abs(E-mu)>10.0 inf/inf^2
-            return 1.0/(k_b*temp)/(2.0+exp((E-mu)/(k_b*temp))+1.0/exp((E-mu)/(k_b*temp)));
-        }
-    } else if (mode==3) {
-        if (temp<=0.0) {
-            return 0.0;
-        } else {
-            return exp((E-mu)/(k_b*temp))/(k_b*temp)/(1.0+exp(-(E-mu)/(k_b*temp)));
-        }
-    } else {
-        return 0.0;
-    }
 }
 
 /************************************************************************************************/
