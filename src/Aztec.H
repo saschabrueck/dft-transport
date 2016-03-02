@@ -1,5 +1,5 @@
-#ifndef _AZTEC
-#define _AZTEC
+#ifndef __AZTEC
+#define __AZTEC
 
 #include "CSR.H"
 #include "Types.H"
@@ -16,6 +16,7 @@ public:
     virtual ~Aztec();
     virtual void prepare();
     virtual void prepare(int*,int*,int,int,int*,int);
+    virtual void prepare_corner(CPX*,CPX*,int*,int*,int*,int,int,int*,int);
     virtual void solve_equation(T* res, T* rhs, int no_rhs);
 				
 private:
@@ -108,6 +109,14 @@ void Aztec<T>::prepare()
 
 template <class T>
 void Aztec<T>::prepare(int *Bmin,int *Bmax,int NBlock,int Bsize,int *n_of_el,int tb)
+{
+}
+
+/************************************************************************************************/
+
+template <class T>
+void Aztec<T>::prepare_corner(CPX *ML_ref,CPX *MR_ref,int *NBC,int *Bmin,int *Bmax,int NBlock,\
+			      int Bsize,int *orb_per_at,int tb)
 {
 }
 
