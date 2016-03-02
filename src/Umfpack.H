@@ -24,6 +24,7 @@ public:
     virtual ~Umfpack();
     virtual void prepare();
     virtual void prepare(int*,int*,int,int,int*,int);
+    virtual void prepare_corner(CPX*,CPX*,int*,int*,int*,int,int,int*,int);
     virtual void solve_equation(T* res, T* rhs, int no_rhs);    
 				
 private:
@@ -53,7 +54,7 @@ Umfpack<T>::Umfpack(TCSR<T>* mat,MPI_Comm solver_comm)
     Control[UMFPACK_STRATEGY]            = 0;       //0 for automatic choice
     Control[UMFPACK_ALLOC_INIT]          = 0.7;
     Control[UMFPACK_IRSTEP]              = 0;       //No iterative refinement
-//    Control[UMFPACK_2BY2_TOLERANCE]      = 0.01;   //There is no UMFPACK_2BY2_TOLERANCE in new versions of Umfpack
+    Control[UMFPACK_2BY2_TOLERANCE]      = 0.01;
     Control[UMFPACK_FIXQ]                = 0;
     Control[UMFPACK_AMD_DENSE]           = 10;
     Control[UMFPACK_SYM_PIVOT_TOLERANCE] = 0.001;
@@ -171,6 +172,14 @@ template <class T>
 void Umfpack<T>::prepare(int *Bmin,int *Bmax,int NBlock,int Bsize,int *orb_per_at,int tb)
 {
     prepare();
+}
+
+/************************************************************************************************/
+
+template <class T>
+void Umfpack<T>::prepare_corner(CPX *ML_ref,CPX *MR_ref,int *NBC,int *Bmin,int *Bmax,int NBlock,\
+				int Bsize,int *orb_per_at,int tb)
+{
 }
 
 /************************************************************************************************/

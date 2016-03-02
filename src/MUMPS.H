@@ -17,7 +17,7 @@ public:
     virtual ~MUMPS();
     virtual void prepare();
     virtual void prepare(int*,int*,int,int,int*,int);
-    virtual void prepare_corner(CPX*,CPX*,int*,int*,int,int,int*,int);
+    virtual void prepare_corner(CPX*,CPX*,int*,int*,int*,int,int,int*,int);
     virtual void solve_equation(T* res, T* rhs, int no_rhs);    
 				
 private:
@@ -76,6 +76,10 @@ MUMPS<T>::MUMPS(TCSR<T>* mat,MPI_Comm solver_comm,int pord)
     id.comm_fortran           = slu_comm;
 
     id.job                    = -1;
+
+    id.icntl[6]               = 7;
+    id.icntl[27]              = 2;
+    id.icntl[28]              = 1;
     
     zmumps_c(&id);
 
@@ -111,7 +115,7 @@ void MUMPS<CPX>::prepare()
     id.icntl[1]               = -1;
     id.icntl[2]               = -1;
     id.icntl[3]               = -1;
-    id.icntl[6]               = 5;
+    //id.icntl[6]               = 4; //PORD reordering algorithm
     id.icntl[17]              = 3;
     id.icntl[20]              = 0;
     
@@ -131,8 +135,8 @@ void MUMPS<T>::prepare(int *Bmin,int *Bmax,int NBlock,int Bsize,int *orb_per_at,
 /************************************************************************************************/
 
 template <class T>
-void MUMPS<T>::prepare_corner(CPX *ML_ref,CPX *MR_ref,int *Bmin,int *Bmax,int NBlock,int Bsize,\
-			      int *orb_per_at,int tb)
+void MUMPS<T>::prepare_corner(CPX *ML_ref,CPX *MR_ref,int *NBC,int *Bmin,int *Bmax,int NBlock,\
+			      int Bsize,int *orb_per_at,int tb)
 {
 }
 

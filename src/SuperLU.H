@@ -16,7 +16,7 @@ public:
     virtual ~SuperLU();
     virtual void prepare();
     virtual void prepare(int*,int*,int,int,int*,int);
-    virtual void prepare_corner(CPX*,CPX*,int*,int*,int,int,int*,int);
+    virtual void prepare_corner(CPX*,CPX*,int*,int*,int*,int,int,int*,int);
     virtual void solve_equation(T* res, T* rhs, int no_rhs);    
 				
 private:
@@ -135,8 +135,8 @@ void SuperLU<T>::prepare(int *Bmin,int *Bmax,int NBlock,int Bsize,int *orb_per_a
 /************************************************************************************************/
 
 template <class T>
-void SuperLU<T>::prepare_corner(CPX *ML_ref,CPX *MR_ref,int *Bmin,int *Bmax,int NBlock,int Bsize,\
-				int *orb_per_at,int tb)
+void SuperLU<T>::prepare_corner(CPX *ML_ref,CPX *MR_ref,int *NBC,int *Bmin,int *Bmax,int NBlock,\
+				int Bsize,int *orb_per_at,int tb)
 {
 }
 
