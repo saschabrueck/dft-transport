@@ -463,29 +463,29 @@ inline TCSR<T>::TCSR(TCSR<T> *matlocal,MPI_Comm my_comm)
     MPI_Comm_size(my_comm,&nprocs);
     MPI_Comm_rank(my_comm,&iam);
 
-    int loc_n_nonzeros=matlocal->n_nonzeros;
+    MPI_Allreduce(&matlocal->first_row,&first_row,1,MPI_INT,MPI_MIN,my_comm);
+
     int* dist_loc_n_nonzeros=new int[nprocs];
-    MPI_Allgather(&loc_n_nonzeros,1,MPI_INT,dist_loc_n_nonzeros,1,MPI_INT,my_comm);
+    MPI_Allgather(&matlocal->n_nonzeros,1,MPI_INT,dist_loc_n_nonzeros,1,MPI_INT,my_comm);
     int* displc_n_nonzeros=new int[nprocs+1];
     displc_n_nonzeros[0]=0;
     for (int iii=1;iii<nprocs+1;iii++)
         displc_n_nonzeros[iii]=displc_n_nonzeros[iii-1]+dist_loc_n_nonzeros[iii-1];
 
-    int loc_size=matlocal->size;
     int* dist_loc_size=new int[nprocs];
-    MPI_Allgather(&loc_size,1,MPI_INT,dist_loc_size,1,MPI_INT,my_comm);
+    MPI_Allgather(&matlocal->size,1,MPI_INT,dist_loc_size,1,MPI_INT,my_comm);
     int* displc_size=new int[nprocs+1];
     displc_size[0]=0;
     for (int iii=1;iii<nprocs+1;iii++)
         displc_size[iii]=displc_size[iii-1]+dist_loc_size[iii-1];
     if (displc_size[iam]!=matlocal->first_row) throw CSR_Exception(__LINE__,__FILE__);
+    if (displc_size[nprocs]+first_row!=matlocal->size_tot) throw CSR_Exception(__LINE__,__FILE__);
 
     n_nonzeros = displc_n_nonzeros[nprocs];
+    size       = displc_size[nprocs];
     size_tot   = matlocal->size_tot;
-    size       = size_tot;
     findx      = matlocal->findx;
-    first_row  = 0;
-    type       = 0;
+    type       = matlocal->type;
     nnz        = new T[max(n_nonzeros,1)];
     index_i    = new int[max(size,1)];
     index_j    = new int[max(n_nonzeros,1)];
@@ -514,32 +514,34 @@ inline TCSR<T>::TCSR(TCSR<T> *matlocal,int rootint,MPI_Comm my_comm)
     MPI_Comm_size(my_comm,&nprocs);
     MPI_Comm_rank(my_comm,&iam);
 
-    int loc_n_nonzeros=matlocal->n_nonzeros;
+    MPI_Allreduce(&matlocal->first_row,&first_row,1,MPI_INT,MPI_MIN,my_comm);
+
     int* dist_loc_n_nonzeros=new int[nprocs];
-    MPI_Allgather(&loc_n_nonzeros,1,MPI_INT,dist_loc_n_nonzeros,1,MPI_INT,my_comm);
+    MPI_Allgather(&matlocal->n_nonzeros,1,MPI_INT,dist_loc_n_nonzeros,1,MPI_INT,my_comm);
     int* displc_n_nonzeros=new int[nprocs+1]();
     for (int iii=1;iii<nprocs+1;iii++)
         displc_n_nonzeros[iii]=displc_n_nonzeros[iii-1]+dist_loc_n_nonzeros[iii-1];
 
-    int loc_size=matlocal->size;
     int* dist_loc_size=new int[nprocs];
-    MPI_Allgather(&loc_size,1,MPI_INT,dist_loc_size,1,MPI_INT,my_comm);
+    MPI_Allgather(&matlocal->size,1,MPI_INT,dist_loc_size,1,MPI_INT,my_comm);
     int* displc_size=new int[nprocs+1]();
     for (int iii=1;iii<nprocs+1;iii++)
         displc_size[iii]=displc_size[iii-1]+dist_loc_size[iii-1];
     if (displc_size[iam]!=matlocal->first_row) throw CSR_Exception(__LINE__,__FILE__);
+    if (displc_size[nprocs]+first_row!=matlocal->size_tot) throw CSR_Exception(__LINE__,__FILE__);
 
     if (iam==rootint) {
         n_nonzeros = displc_n_nonzeros[nprocs];
+        size       = displc_size[nprocs];
         size_tot   = matlocal->size_tot;
     } else {
+        first_row  = 0;
         n_nonzeros = 0;
+        size       = 0;
         size_tot   = 0;
     }
-    size       = size_tot;
     findx      = matlocal->findx;
-    first_row  = 0;
-    type       = 0;
+    type       = matlocal->type;
     nnz        = new T[max(n_nonzeros,1)];
     index_i    = new int[max(size,1)];
     index_j    = new int[max(n_nonzeros,1)];
@@ -568,33 +570,41 @@ inline TCSR<T>::TCSR(TCSR<T> *matlocal,int *rootvec,int rootnum,MPI_Comm my_comm
     MPI_Comm_size(my_comm,&nprocs);
     MPI_Comm_rank(my_comm,&iam);
 
-    int loc_n_nonzeros=matlocal->n_nonzeros;
+    MPI_Allreduce(&matlocal->first_row,&first_row,1,MPI_INT,MPI_MIN,my_comm);
+
     int* dist_loc_n_nonzeros=new int[nprocs];
-    MPI_Allgather(&loc_n_nonzeros,1,MPI_INT,dist_loc_n_nonzeros,1,MPI_INT,my_comm);
+    MPI_Allgather(&matlocal->n_nonzeros,1,MPI_INT,dist_loc_n_nonzeros,1,MPI_INT,my_comm);
     int* displc_n_nonzeros=new int[nprocs+1]();
     for (int iii=1;iii<nprocs+1;iii++)
         displc_n_nonzeros[iii]=displc_n_nonzeros[iii-1]+dist_loc_n_nonzeros[iii-1];
 
-    int loc_size=matlocal->size;
     int* dist_loc_size=new int[nprocs];
-    MPI_Allgather(&loc_size,1,MPI_INT,dist_loc_size,1,MPI_INT,my_comm);
+    MPI_Allgather(&matlocal->size,1,MPI_INT,dist_loc_size,1,MPI_INT,my_comm);
     int* displc_size=new int[nprocs+1]();
     for (int iii=1;iii<nprocs+1;iii++)
         displc_size[iii]=displc_size[iii-1]+dist_loc_size[iii-1];
     if (displc_size[iam]!=matlocal->first_row) throw CSR_Exception(__LINE__,__FILE__);
+    if (displc_size[nprocs]+first_row!=matlocal->size_tot) throw CSR_Exception(__LINE__,__FILE__);
 
-    n_nonzeros = 0;
-    size_tot   = 0;
+    int is_root = 0;
     for (int iroot=0;iroot<rootnum;iroot++){
         if (iam==rootvec[iroot]){
-            n_nonzeros = displc_n_nonzeros[nprocs];
-            size_tot   = matlocal->size_tot;
+            is_root += 1;
         }
     }
-    size       = size_tot;
+    if (is_root>1) throw CSR_Exception(__LINE__,__FILE__);
+    if (is_root) {
+        n_nonzeros = displc_n_nonzeros[nprocs];
+        size       = displc_size[nprocs];
+        size_tot   = matlocal->size_tot;
+    } else {
+        first_row  = 0;
+        n_nonzeros = 0;
+        size       = 0;
+        size_tot   = 0;
+    }
     findx      = matlocal->findx;
-    first_row  = 0;
-    type       = 0;
+    type       = matlocal->type;
     nnz        = new T[max(n_nonzeros,1)];
     index_i    = new int[max(size,1)];
     index_j    = new int[max(n_nonzeros,1)];
