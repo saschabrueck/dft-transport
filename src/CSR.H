@@ -535,7 +535,7 @@ inline TCSR<T>::TCSR(TCSR<T> *matlocal,int rootint,MPI_Comm my_comm)
         n_nonzeros = 0;
         size       = 0;
         if (iam>rootint) {
-            first_row+=size;
+            first_row+=displc_size[nprocs];
         }
     }
     size_tot   = matlocal->size_tot;
