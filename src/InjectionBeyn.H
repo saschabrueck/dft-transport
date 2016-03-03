@@ -15,7 +15,6 @@
 #include "Types.H"
 #include "Utilities.H"
 #include "Blas.H"
-#include "Connection.H"
 #include "LinearSolver.H"
 #include "Umfpack.H"
 #include "Injection.H"
@@ -436,7 +435,7 @@ void InjectionBeyn<T>::allocate_bcast_H(TCSR<CPX> **&H,int broot_rank,MPI_Comm b
     }
     delete[] nonzH;
     for(int ibw=0;ibw<slab_per_bc+1;ibw++){
-        MPI_Bcast_Sparse(H[ibw],broot_rank,bcast_comm);
+        H[ibw]->Bcast(broot_rank,bcast_comm);
     }
 }
 

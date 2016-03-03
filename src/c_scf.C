@@ -1,4 +1,9 @@
+#include "Types.H"
 #include "c_scf.H"
+#include "DiagScaLapack.H"
+#include "SemiSelfConsistent.H"
+#include "EnergyVector.H"
+#include "WriteMatrix.H"
 
 /**  
  *   \brief Takes the overlap (S) and Kohn-Sham (KS) matrices as input and returns a density matrix (P).
@@ -117,18 +122,18 @@ void c_scf_method(cp2k_transport_parameters cp2k_transport_params, cp2k_csr_inte
             break;
         case 1:
             if (!rank) cout << "Starting ScaLaPackDiag" << endl;
-            if (diagscalapack(Overlap,KohnSham,transport_params)) throw SCF_Exception(__LINE__,__FILE__);
+            if (diagscalapack(Overlap,KohnSham,transport_params)) throw std::exception();
             break;
         case 2:
             if (!rank) cout << "Starting CP2K core/valence Hamiltonian + OMEN Poisson local self consistent code" << endl;
-            if (semiselfconsistent(Overlap,KohnSham,muvec,contactvec,transport_params)) throw SCF_Exception(__LINE__,__FILE__);
+            if (semiselfconsistent(Overlap,KohnSham,muvec,contactvec,transport_params)) throw std::exception();
             break;
         case 3:
         case 4:
         default:
             if (!rank) cout << "Starting Transport " << transport_params->method << endl;
             Energyvector energyvector;
-            if (energyvector.Execute(Overlap,KohnSham,muvec,contactvec,transport_params)) throw SCF_Exception(__LINE__,__FILE__);
+            if (energyvector.Execute(Overlap,KohnSham,muvec,contactvec,transport_params)) throw std::exception();
     }
  
     if (cp2k_transport_params.extra_scf) {

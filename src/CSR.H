@@ -182,6 +182,7 @@ public:
     void sparse_to_full(T*,int,int,int,int);
     void set_to_id();
     void remove_thr(double);
+    double get_blocksize(MPI_Comm);
 // sab end
     void set_nnz(int,T*);
     void set_index_i(int,int*);
@@ -2459,6 +2460,93 @@ void TCSR<T>::remove_thr(double thr)
     get_diag_pos();
 
     if (n_nonzeros!=edge_i[size]-findx) throw CSR_Exception(__LINE__,__FILE__);
+}
+
+/************************************************************************************************/
+
+template <class T>
+double TCSR<T>::get_blocksize(MPI_Comm comm)
+{
+    int IB,IR;
+    int iteration;
+    int width;
+    int loc_ham_bs;
+    int findx;
+    int n_block;
+    int l_boundary;
+    int r_boundary;
+    int ICmin,ICmax;
+
+    loc_ham_bs = 0;
+    width      = 0;
+
+    if(n_nonzeros>size){
+
+        for(IR=0;IR<size;IR++){
+
+            if(index_i[IR]>1){
+                width = (index_j[edge_i[IR+1]-1-findx]-\
+                         index_j[edge_i[IR]-findx]+1);
+            }
+
+            if(width>loc_ham_bs){
+                loc_ham_bs = width;
+            }
+        }
+
+        loc_ham_bs = ceil((double)loc_ham_bs/2.0);
+    }
+
+    MPI_Allreduce(&loc_ham_bs,&width,1,MPI_INT,MPI_MAX,comm);
+
+    l_boundary = -INF;
+    r_boundary = -INF;
+
+    if(n_nonzeros>size){
+
+        for(iteration=0;iteration<2;iteration++){
+
+            l_boundary = -INF;
+            r_boundary = -INF;
+
+            n_block    = ceil((double)size/width);
+
+            for(IB=0;IB<n_block;IB++){
+
+                for(IR=IB*width;IR<min((IB+1)*width,size);IR++){
+
+                    if(index_i[IR]>1){
+
+                        ICmin = index_j[edge_i[IR]-findx]-findx-first_row;
+                        ICmax = index_j[edge_i[IR+1]-1-findx]-findx-first_row;
+
+                        if(((IB-1)*width-ICmin)>l_boundary){
+                            l_boundary = (IB-1)*width-ICmin;
+                        }
+
+                        if((ICmax-(IB+2)*width)>r_boundary){
+                            r_boundary = ICmax-(IB+2)*width;
+                        }
+                    }
+                }
+            }
+
+            if(!iteration){
+                if((l_boundary+r_boundary)>0){
+                    width = width+l_boundary+r_boundary;
+                }
+            }else{
+                if((l_boundary>0)||(r_boundary>0)){
+                    printf("Problem with the block size reduction. Keeping the original size!\n");
+                    width = loc_ham_bs;
+                }
+            }
+        }
+    }
+
+    MPI_Allreduce(&width,&loc_ham_bs,1,MPI_INT,MPI_MAX,comm);
+
+    return loc_ham_bs;
 }
 
 /*SAB*END****************************************************************************************/

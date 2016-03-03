@@ -9,20 +9,6 @@
 #include <mpi.h>
 #include "CSR.H"
 #include "libcp2k.H"
-#include "Types.H"
-
-/* here include header files of OMEN source files that evaluate a density matrix    *
- * the density matrix will be passed to CP2K ...                                    */
-#include "DiagScaLapack.H"
-#include "SemiSelfConsistent.H"
-#include "EnergyVector.H"
-#include "WriteMatrix.H"
-
-
-/* types -------------------------------------------------------------------------- */
-struct SCF_Exception{
-    SCF_Exception(const int line,const char* file) {std::cerr<<"Error in line "<<line<<" of file "<<file<<std::endl;}
-};
 
 /* functions ---------------------------------------------------------------------- */
 /**  
