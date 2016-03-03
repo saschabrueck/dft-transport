@@ -479,7 +479,6 @@ inline TCSR<T>::TCSR(TCSR<T> *matlocal,MPI_Comm my_comm)
     for (int iii=1;iii<nprocs+1;iii++)
         displc_size[iii]=displc_size[iii-1]+dist_loc_size[iii-1];
     if (displc_size[iam]!=matlocal->first_row) throw CSR_Exception(__LINE__,__FILE__);
-    if (displc_size[nprocs]+first_row!=matlocal->size_tot) throw CSR_Exception(__LINE__,__FILE__);
 
     n_nonzeros = displc_n_nonzeros[nprocs];
     size       = displc_size[nprocs];
@@ -528,18 +527,18 @@ inline TCSR<T>::TCSR(TCSR<T> *matlocal,int rootint,MPI_Comm my_comm)
     for (int iii=1;iii<nprocs+1;iii++)
         displc_size[iii]=displc_size[iii-1]+dist_loc_size[iii-1];
     if (displc_size[iam]!=matlocal->first_row) throw CSR_Exception(__LINE__,__FILE__);
-    if (displc_size[nprocs]+first_row!=matlocal->size_tot) throw CSR_Exception(__LINE__,__FILE__);
 
     if (iam==rootint) {
         n_nonzeros = displc_n_nonzeros[nprocs];
         size       = displc_size[nprocs];
-        size_tot   = matlocal->size_tot;
     } else {
-        first_row  = 0;
         n_nonzeros = 0;
         size       = 0;
-        size_tot   = 0;
+        if (iam>rootint) {
+            first_row+=size;
+        }
     }
+    size_tot   = matlocal->size_tot;
     findx      = matlocal->findx;
     type       = matlocal->type;
     nnz        = new T[max(n_nonzeros,1)];
@@ -584,7 +583,6 @@ inline TCSR<T>::TCSR(TCSR<T> *matlocal,int *rootvec,int rootnum,MPI_Comm my_comm
     for (int iii=1;iii<nprocs+1;iii++)
         displc_size[iii]=displc_size[iii-1]+dist_loc_size[iii-1];
     if (displc_size[iam]!=matlocal->first_row) throw CSR_Exception(__LINE__,__FILE__);
-    if (displc_size[nprocs]+first_row!=matlocal->size_tot) throw CSR_Exception(__LINE__,__FILE__);
 
     int is_root = 0;
     for (int iroot=0;iroot<rootnum;iroot++){
