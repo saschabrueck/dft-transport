@@ -182,7 +182,8 @@ public:
     void sparse_to_full(T*,int,int,int,int);
     void set_to_id();
     void remove_thr(double);
-    double get_blocksize(MPI_Comm);
+    int get_bandwidth(MPI_Comm);
+    void sparse_to_narrow_band(T*,int,int);
 // sab end
     void set_nnz(int,T*);
     void set_index_i(int,int*);
@@ -478,7 +479,6 @@ inline TCSR<T>::TCSR(TCSR<T> *matlocal,MPI_Comm my_comm)
     displc_size[0]=0;
     for (int iii=1;iii<nprocs+1;iii++)
         displc_size[iii]=displc_size[iii-1]+dist_loc_size[iii-1];
-    if (displc_size[iam]!=matlocal->first_row) throw CSR_Exception(__LINE__,__FILE__);
 
     n_nonzeros = displc_n_nonzeros[nprocs];
     size       = displc_size[nprocs];
@@ -526,7 +526,6 @@ inline TCSR<T>::TCSR(TCSR<T> *matlocal,int rootint,MPI_Comm my_comm)
     int* displc_size=new int[nprocs+1]();
     for (int iii=1;iii<nprocs+1;iii++)
         displc_size[iii]=displc_size[iii-1]+dist_loc_size[iii-1];
-    if (displc_size[iam]!=matlocal->first_row) throw CSR_Exception(__LINE__,__FILE__);
 
     if (iam==rootint) {
         n_nonzeros = displc_n_nonzeros[nprocs];
@@ -582,7 +581,6 @@ inline TCSR<T>::TCSR(TCSR<T> *matlocal,int *rootvec,int rootnum,MPI_Comm my_comm
     int* displc_size=new int[nprocs+1]();
     for (int iii=1;iii<nprocs+1;iii++)
         displc_size[iii]=displc_size[iii-1]+dist_loc_size[iii-1];
-    if (displc_size[iam]!=matlocal->first_row) throw CSR_Exception(__LINE__,__FILE__);
 
     int is_root = 0;
     for (int iroot=0;iroot<rootnum;iroot++){
@@ -2473,88 +2471,48 @@ void TCSR<T>::remove_thr(double thr)
 /************************************************************************************************/
 
 template <class T>
-double TCSR<T>::get_blocksize(MPI_Comm comm)
+int TCSR<T>::get_bandwidth(MPI_Comm comm)
 {
-    int IB,IR;
-    int iteration;
+    int IR;
     int width;
     int loc_ham_bs;
-    int findx;
-    int n_block;
-    int l_boundary;
-    int r_boundary;
-    int ICmin,ICmax;
 
     loc_ham_bs = 0;
     width      = 0;
 
-    if(n_nonzeros>size){
-
-        for(IR=0;IR<size;IR++){
-
-            if(index_i[IR]>1){
-                width = (index_j[edge_i[IR+1]-1-findx]-\
-                         index_j[edge_i[IR]-findx]+1);
-            }
-
-            if(width>loc_ham_bs){
-                loc_ham_bs = width;
-            }
+    for(IR=0;IR<size;IR++){
+        if(edge_i[IR+1]>edge_i[IR]){
+            width = (index_j[edge_i[IR+1]-1-findx]-index_j[edge_i[IR]-findx]+1);
         }
-
-        loc_ham_bs = ceil((double)loc_ham_bs/2.0);
+        if(width>loc_ham_bs){
+            loc_ham_bs = width;
+        }
     }
+
+    loc_ham_bs = ceil((double)loc_ham_bs/2.0);
 
     MPI_Allreduce(&loc_ham_bs,&width,1,MPI_INT,MPI_MAX,comm);
 
-    l_boundary = -INF;
-    r_boundary = -INF;
+    return width;
+}
 
-    if(n_nonzeros>size){
+/************************************************************************************************/
 
-        for(iteration=0;iteration<2;iteration++){
+template <class T>
+void TCSR<T>::sparse_to_narrow_band(T *B,int bw,int pp)
+{
+    int i,j,e,o;
 
-            l_boundary = -INF;
-            r_boundary = -INF;
-
-            n_block    = ceil((double)size/width);
-
-            for(IB=0;IB<n_block;IB++){
-
-                for(IR=IB*width;IR<min((IB+1)*width,size);IR++){
-
-                    if(index_i[IR]>1){
-
-                        ICmin = index_j[edge_i[IR]-findx]-findx-first_row;
-                        ICmax = index_j[edge_i[IR+1]-1-findx]-findx-first_row;
-
-                        if(((IB-1)*width-ICmin)>l_boundary){
-                            l_boundary = (IB-1)*width-ICmin;
-                        }
-
-                        if((ICmax-(IB+2)*width)>r_boundary){
-                            r_boundary = ICmax-(IB+2)*width;
-                        }
-                    }
-                }
-            }
-
-            if(!iteration){
-                if((l_boundary+r_boundary)>0){
-                    width = width+l_boundary+r_boundary;
-                }
-            }else{
-                if((l_boundary>0)||(r_boundary>0)){
-                    printf("Problem with the block size reduction. Keeping the original size!\n");
-                    width = loc_ham_bs;
-                }
+    init_variable(B,(2*bw*pp+2*bw+1)*size);
+    for(i=0;i<size;i++){
+        o=i*(2*bw*pp+2*bw+1)+2*bw*pp;
+        for(e=edge_i[i]-findx;e<edge_i[i+1]-findx;e++){
+            j=index_j[e]-findx+bw-i-first_row;
+            if (j>=0 && j<2*bw+1){
+                B[o+j] = nnz[e];
             }
         }
     }
-
-    MPI_Allreduce(&width,&loc_ham_bs,1,MPI_INT,MPI_MAX,comm);
-
-    return loc_ham_bs;
 }
 
 /*SAB*END****************************************************************************************/
