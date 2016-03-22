@@ -17,7 +17,7 @@ int p_grid_desc_init(int &icontxt,int nprocs,int nvec,int &rloc,int &cloc,int *d
     int col_per_processor    = nvec/npcol;
     int block_per_cprocessor = int(ceil(double(col_per_processor)/nbl_in));
     int nb                   = col_per_processor/block_per_cprocessor;
-    int nbl                  = (mb+nb)/2;//I DO NOT KNOW WHY I DO IT LIKE THAT
+    int nbl                  = (mb+nb)/2;//SOME ROUTINES REQUIRE MB==NB
 
     rloc = max(1,c_numroc(nvec,nbl,myrow,0,nprow));
     cloc = c_numroc(nvec,nbl,mycol,0,npcol);
