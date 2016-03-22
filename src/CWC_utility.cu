@@ -284,7 +284,26 @@ void change_var_type_on_dev(double *var1,CPX *var2,int N,cudaStream_t stream){
     change_variable_type_on_dev<<< i_N/BLOCK_DIM, BLOCK_DIM, 0, stream >>>(var1,(cuDoubleComplex*)var2,N);
 }
 
-__global__ void d_extract_diag(double *D,int *edge_i,int *index_j,cuDoubleComplex *nnz,\
+__global__ void change_sign_imaginary_part_on_dev(cuDoubleComplex *var,int N){
+
+     int idx = blockIdx.x*blockDim.x + threadIdx.x;
+
+     if(idx<N){
+	var[idx].y = -var[idx].y;
+     }	   
+
+     __syncthreads();
+}
+
+extern "C"
+void change_sign_imag_on_dev(CPX *var,int N){
+
+    uint i_N = N + (BLOCK_DIM-(N%BLOCK_DIM));
+
+    change_sign_imaginary_part_on_dev<<< i_N/BLOCK_DIM, BLOCK_DIM >>>((cuDoubleComplex*)var,N);
+}
+
+__global__ void d_extract_diag(double *D,int *edge_i,int *index_j,double *nnz,\
 	   int NR,int imin,int imax,int shift,int findx){
 
      int j;
@@ -295,7 +314,7 @@ __global__ void d_extract_diag(double *D,int *edge_i,int *index_j,cuDoubleComple
 	  for(j=edge_i[idx+imin]-findx;j<edge_i[idx+imin+1]-findx;j++){
 	      ind_j = index_j[j]-findx-shift-imin;
 	      if((ind_j>=0)&&(ind_j<NR)){
-	          D[idx+ind_j*NR] = nnz[j].x;
+	          D[idx+ind_j*NR] = nnz[j];
 	      }
 	  }
      }	   
@@ -304,15 +323,15 @@ __global__ void d_extract_diag(double *D,int *edge_i,int *index_j,cuDoubleComple
 }
 
 extern "C"
-void d_extract_diag_on_dev(double *D,int *edge_i,int *index_j,CPX *nnz,int NR,\
+void d_extract_diag_on_dev(double *D,int *edge_i,int *index_j,double *nnz,int NR,\
      int imin,int imax,int shift,int findx,cudaStream_t stream){
 
     uint i_N = NR + (BLOCK_DIM-(NR%BLOCK_DIM));
 
-    d_extract_diag<<< i_N/BLOCK_DIM, BLOCK_DIM, 0, stream >>>(D,edge_i,index_j,(cuDoubleComplex*)nnz,NR,imin,imax,shift,findx);
+    d_extract_diag<<< i_N/BLOCK_DIM, BLOCK_DIM, 0, stream >>>(D,edge_i,index_j,nnz,NR,imin,imax,shift,findx);
 }
 
-__global__ void d_extract_not_diag(double *D,int *edge_i,int *index_j,cuDoubleComplex *nnz,\
+__global__ void d_extract_not_diag(double *D,int *edge_i,int *index_j,double *nnz,\
 	   int NR,int imin,int imax,int jmin,int side,int shift,int findx){
 
      int j;
@@ -328,7 +347,7 @@ __global__ void d_extract_not_diag(double *D,int *edge_i,int *index_j,cuDoubleCo
 	  for(j=edge_i[idx+imin]-findx;j<edge_i[idx+imin+1]-findx;j++){
 	      ind_j = index_j[j]-findx-jmin;
 	      if(side*ind_j>=limit){
-	          D[idx+ind_j*NR] = nnz[j].x;
+	          D[idx+ind_j*NR] = nnz[j];
 	      }
 	  }
      }	   
@@ -337,12 +356,12 @@ __global__ void d_extract_not_diag(double *D,int *edge_i,int *index_j,cuDoubleCo
 }
 
 extern "C"
-void d_extract_not_diag_on_dev(double *D,int *edge_i,int *index_j,CPX *nnz,int NR,\
+void d_extract_not_diag_on_dev(double *D,int *edge_i,int *index_j,double *nnz,int NR,\
      int imin,int imax,int jmin,int side,int shift,int findx,cudaStream_t stream){
 
     uint i_N = NR + (BLOCK_DIM-(NR%BLOCK_DIM));
 
-    d_extract_not_diag<<< i_N/BLOCK_DIM, BLOCK_DIM, 0, stream >>>(D,edge_i,index_j,(cuDoubleComplex*)nnz,NR,imin,imax,jmin,side,shift,findx);
+    d_extract_not_diag<<< i_N/BLOCK_DIM, BLOCK_DIM, 0, stream >>>(D,edge_i,index_j,nnz,NR,imin,imax,jmin,side,shift,findx);
 }
 
 __global__ void z_extract_diag(cuDoubleComplex *D,int *edge_i,int *index_j,cuDoubleComplex *nnz,\
@@ -459,6 +478,23 @@ void z_csr_mult_f(void *handle,int m,int n,int k,int n_nonzeros,int *Aedge_i,int
     cusparseDestroyMatDescr(descra);
 }
 
+extern "C"
+void z_csr_mult_fo(void *handle,int m,int n,int k,int n_nonzeros,int *Aedge_i,int *Aindex_j,\
+                   CPX *Annz,CPX alpha,CPX *B,CPX beta,CPX *C){
+
+    cusparseMatDescr_t descra;
+
+    cusparseCreateMatDescr(&descra);
+    cusparseSetMatType(descra,CUSPARSE_MATRIX_TYPE_GENERAL);
+    cusparseSetMatIndexBase(descra,CUSPARSE_INDEX_BASE_ZERO);
+
+    cusparseZcsrmm((cusparseHandle_t)handle,CUSPARSE_OPERATION_NON_TRANSPOSE,m,n,k,n_nonzeros,\
+                   (cuDoubleComplex*)&alpha,descra,(cuDoubleComplex*)Annz,Aedge_i,Aindex_j,\
+		   (cuDoubleComplex*)B,k,(cuDoubleComplex*)&beta,(cuDoubleComplex*)C,m);
+
+    cusparseDestroyMatDescr(descra);
+}
+
 // This kernel is optimized to ensure all global reads and writes are coalesced,
 // and to avoid bank conflicts in shared memory.  This kernel is up to 11x faster
 // than the naive kernel below.  Note that the shared memory array is sized to 
@@ -547,20 +583,20 @@ void z_transpose_matrix(CPX *odata,CPX *idata,int size_x,int size_y){
 __global__ void d_symmetrize(double *matrix, int N)
 {
 
-	unsigned int xIndex = blockIdx.x * BLOCK_DIM + threadIdx.x;
-	unsigned int yIndex = blockIdx.y * BLOCK_DIM + threadIdx.y;
+        unsigned int xIndex = blockIdx.x * BLOCK_DIM + threadIdx.x;
+        unsigned int yIndex = blockIdx.y * BLOCK_DIM + threadIdx.y;
 
-	if((xIndex < N) && (yIndex < N) && (yIndex>=xIndex)){
-	    unsigned int index_1  = yIndex * N + xIndex;
-	    unsigned int index_2  = xIndex * N + yIndex;
-	    double val_1    = matrix[index_1];
-	    double val_2    = matrix[index_2];
-	    
-	    matrix[index_1] = (val_1+val_2)/2.0;
-	    matrix[index_2] = (val_1+val_2)/2.0;
-	}
+        if((xIndex < N) && (yIndex < N) && (yIndex>=xIndex)){
+            unsigned int index_1  = yIndex * N + xIndex;
+            unsigned int index_2  = xIndex * N + yIndex;
+            double val_1    = matrix[index_1];
+            double val_2    = matrix[index_2];
 
-	__syncthreads();
+            matrix[index_1] = (val_1+val_2)/2.0;
+            matrix[index_2] = (val_1+val_2)/2.0;
+        }
+
+        __syncthreads();
 }
 
 extern "C"
@@ -604,4 +640,38 @@ void z_symmetrize_matrix(CPX *matrix,int N,cudaStream_t stream){
     dim3 threads(BLOCK_DIM, BLOCK_DIM, 1);
 
     z_symmetrize<<< grid, threads, 0, stream >>>((cuDoubleComplex*)matrix, N);
+}
+
+__global__ void z_symmetrize_2(cuDoubleComplex *matrix, int N)
+{
+
+	unsigned int xIndex = blockIdx.x * BLOCK_DIM + threadIdx.x;
+	unsigned int yIndex = blockIdx.y * BLOCK_DIM + threadIdx.y;
+
+	if((xIndex < N) && (yIndex < N) && (yIndex>=xIndex)){
+	    unsigned int index_1  = yIndex * N + xIndex;
+	    unsigned int index_2  = xIndex * N + yIndex;
+	    cuDoubleComplex val_1 = matrix[index_1];
+
+	    if(yIndex==xIndex){
+	        matrix[index_1].x = 0.0;
+		matrix[index_1].y = val_1.y;
+	    }else{
+	        matrix[index_2].x = -val_1.x;
+		matrix[index_2].y = val_1.y;
+	    }
+	}
+
+	__syncthreads();
+}
+
+extern "C"
+void z_symmetrize_matrix_2(CPX *matrix,int N,cudaStream_t stream){
+
+    uint i_size = N + (BLOCK_DIM-(N%BLOCK_DIM));
+
+    dim3 grid(i_size / BLOCK_DIM, i_size / BLOCK_DIM, 1);
+    dim3 threads(BLOCK_DIM, BLOCK_DIM, 1);
+
+    z_symmetrize_2<<< grid, threads, 0, stream >>>((cuDoubleComplex*)matrix, N);
 }
