@@ -35,9 +35,9 @@ extern "C" {
   void z_init_eye_on_dev(CPX*,int,cudaStream_t);
   void correct_diag_on_dev(CPX*,int,cudaStream_t);
   void change_var_type_on_dev(double*,CPX*,int,cudaStream_t);
-  void d_extract_diag_on_dev(double*,int*,int*,CPX*,int,int,int,int,int,\
+  void d_extract_diag_on_dev(double*,int*,int*,double*,int,int,int,int,int,\
 			     cudaStream_t);
-  void d_extract_not_diag_on_dev(double*,int*,int*,CPX*,int,int,int,int,\
+  void d_extract_not_diag_on_dev(double*,int*,int*,double*,int,int,int,int,\
 				 int,int,int,cudaStream_t);
   void d_symmetrize_matrix(double*,int,cudaStream_t);
   void z_extract_diag_on_dev(CPX*,int*,int*,CPX*,int,int,int,int,int,\

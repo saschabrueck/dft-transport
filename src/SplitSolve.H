@@ -64,16 +64,16 @@ private:
     CPX *M3_dev;
     CPX *y_dev;
     CPX *z_dev;
-    CPX *nnz_dev;
+    T *nnz_dev;
     int *edge_i_dev;
     int *index_j_dev;
     int *b_min,*b_max;
 
-    void extract_diag(int*,int*,CPX*,T*,int*,int*,int,cudaStream_t);
-    void extract_not_diag(int*,int*,CPX*,T*,int*,int*,int,int,cudaStream_t);
+    void extract_diag(int*,int*,T*,T*,int*,int*,int,cudaStream_t);
+    void extract_not_diag(int*,int*,T*,T*,int*,int*,int,int,cudaStream_t);
     void change_var_type(T*,CPX*,int,cudaStream_t);
     void symmetrize_matrix(T*,int,cudaStream_t);
-    void create_blocks(int);
+    void create_blocks(int,int,int*,int*,int*,int);
     void FirstStage();
     void SecondStage();
     void ThirdStage();
@@ -91,7 +91,6 @@ private:
     void write_matrix(char*,double*,int,int);
     void write_matrix(char*,CPX*,int,int);
     void write_matrix(char*,int*,int,int);
-
 };
 
 /************************************************************************************************/
@@ -148,8 +147,8 @@ SplitSolve<T>::SplitSolve(TCSR<CPX>* mat,double *pHostMem,int pCPU_per_bc,int pi
 
 	magma_init();
 	cublas_init(&cublas_handle);
-
     }
+
 }
 
 /************************************************************************************************/
@@ -162,7 +161,7 @@ SplitSolve<T>::~SplitSolve()
         magma_finalize();
         cublas_finalize(cublas_handle);
 
-        cudaStreamDestroy(stream_c);
+	cudaStreamDestroy(stream_c);
         cudaStreamDestroy(stream_m);
 
 	deallocate_data_on_dev(M_dev,matrix->size*b_size*sizeof(T));
@@ -218,7 +217,7 @@ void SplitSolve<CPX>::symmetrize_matrix(CPX *M,int N,cudaStream_t stream)
 /************************************************************************************************/
 
 template <>
-void SplitSolve<double>::extract_diag(int *edge_i,int *index_j,CPX *nnz,double *D,int *Bmin,\
+void SplitSolve<double>::extract_diag(int *edge_i,int *index_j,double *nnz,double *D,int *Bmin,\
 				      int *Bmax,int index,cudaStream_t stream)
 {
 
@@ -258,7 +257,7 @@ void SplitSolve<CPX>::extract_diag(int *edge_i,int *index_j,CPX *nnz,CPX *D,int 
 /************************************************************************************************/
 
 template <>
-void SplitSolve<double>::extract_not_diag(int *edge_i,int *index_j,CPX *nnz,double *D,int *Bmin,\
+void SplitSolve<double>::extract_not_diag(int *edge_i,int *index_j,double *nnz,double *D,int *Bmin,\
 					  int *Bmax,int index,int side,cudaStream_t stream)
 {
 
@@ -324,14 +323,14 @@ void SplitSolve<T>::FirstStage()
 	
         //extract E-H11
         extract_diag(edge_i_dev,index_j_dev,nnz_dev,M1_dev,b_min,b_max,IL_first[mpi_rank],0);
-        //extract -H12
-        extract_not_diag(edge_i_dev,index_j_dev,nnz_dev,M_dev,b_min,b_max,IL_first[mpi_rank],1,0);
-        //compute (E-H11)^{-1}*(-H12)
-        tgesv_dev(NR,NP,M1_dev,NR,ipiv,M_dev,NR,0,&info);
+	//extract -H12
+	extract_not_diag(edge_i_dev,index_j_dev,nnz_dev,M_dev,b_min,b_max,IL_first[mpi_rank],1,0);
+	//compute (E-H11)^{-1}*(-H12)
+	tgesv_dev(NR,NP,M1_dev,NR,ipiv,M_dev,NR,0,&info);
     
-        for(IB=(IL_first[mpi_rank]+1);IB<IL_first[mpi_rank+1];IB++){
+	for(IB=(IL_first[mpi_rank]+1);IB<IL_first[mpi_rank+1];IB++){
 
-            NR  = b_max[IB]-b_min[IB];
+	    NR  = b_max[IB]-b_min[IB];
 	    NM  = b_max[IB-1]-b_min[IB-1];
 	    NP  = b_max[IB+1]-b_min[IB+1];
 	    NS1 = b_min[IB]-matrix->first_row;
@@ -345,7 +344,7 @@ void SplitSolve<T>::FirstStage()
 	    extract_not_diag(edge_i_dev,index_j_dev,nnz_dev,&M_dev[NS1*b_size],b_min,b_max,IB,1,stream_c);
 
 	    //compute E-Hii-Hii-1*gi-1*Hi-1i=M1_dev-M2_dev*M_dev[add2]
-	    tgemm_dev(cublas_handle,'N','N',NR,NR,NM,-ONE,M2_dev,NR,&M_dev[NS2*b_size],NM, \
+	    tgemm_dev(cublas_handle,'N','N',NR,NR,NM,-ONE,M2_dev,NR,&M_dev[NS2*b_size],NM,\
 		      ONE,M1_dev,NR);
 	    symmetrize_matrix(M1_dev,NR,stream_c);
 
@@ -353,40 +352,38 @@ void SplitSolve<T>::FirstStage()
 			    cudaMemcpyDeviceToHost,stream_m);
 
 	    cudaStreamSynchronize(stream_c);
-                      
+	    	    	    
 	    //compute (E-Hii-Hii-1*gi-1*Hi-1i)^{-1}*(-Hii+1)=M1_dev^{-1}*M_dev[add1]
 	    tgesv_dev(NR,NP,M1_dev,NR,ipiv,&M_dev[NS1*b_size],NR,0,&info);
-	    //tgetrf_dev(NR,M1_dev,NR,ipiv,0,&info);
-	    //tgetrs_dev(NR,NP,M1_dev,NR,ipiv,&M_dev[NS1*b_size],NR,0,&info);
-        }
+	}
 	
-        IB  = IL_first[mpi_rank+1]-1;
-        NR  = b_max[IB]-b_min[IB];
-        NP  = b_max[IB+1]-b_min[IB+1];
-        NS1 = b_min[IB]-matrix->first_row;
+	IB  = IL_first[mpi_rank+1]-1;
+	NR  = b_max[IB]-b_min[IB];
+	NP  = b_max[IB+1]-b_min[IB+1];
+	NS1 = b_min[IB]-matrix->first_row;
 
-        cudaMemcpyAsync(&M_host[NS1*b_size],&M_dev[NS1*b_size],NR*NP*sizeof(T), \
+	cudaMemcpyAsync(&M_host[NS1*b_size],&M_dev[NS1*b_size],NR*NP*sizeof(T), \
 			cudaMemcpyDeviceToHost,stream_m);
 	
-        //memcpy_to_host(M_host,M_dev,matrix->size*b_size*sizeof(T));
+	//memcpy_to_host(M_host,M_dev,matrix->size*b_size*sizeof(T));
 
-  } else {
+    }else{
 
         NR  = b_max[IL_first[mpi_rank+1]-1]-b_min[IL_first[mpi_rank+1]-1];
-        NM  = b_max[IL_first[mpi_rank+1]-2]-b_min[IL_first[mpi_rank+1]-2];
-        NS1 = b_min[IL_first[mpi_rank+1]-1]-matrix->first_row;
+	NM  = b_max[IL_first[mpi_rank+1]-2]-b_min[IL_first[mpi_rank+1]-2];
+	NS1 = b_min[IL_first[mpi_rank+1]-1]-matrix->first_row;
 
         //extract E-HNN
         extract_diag(edge_i_dev,index_j_dev,nnz_dev,M1_dev,b_min,b_max,IL_first[mpi_rank+1]-1,0);
-        //extract -HNN-1
-        extract_not_diag(edge_i_dev,index_j_dev,nnz_dev,&M_dev[NS1*b_size],b_min,b_max,\
-             IL_first[mpi_rank+1]-1,-1,0);
-        //compute (E-HNN)^{-1}*(-HNN-1)
-        tgesv_dev(NR,NM,M1_dev,NR,ipiv,&M_dev[NS1*b_size],NR,0,&info);
+	//extract -HNN-1
+	extract_not_diag(edge_i_dev,index_j_dev,nnz_dev,&M_dev[NS1*b_size],b_min,b_max,\
+			 IL_first[mpi_rank+1]-1,-1,0);
+	//compute (E-HNN)^{-1}*(-HNN-1)
+	tgesv_dev(NR,NM,M1_dev,NR,ipiv,&M_dev[NS1*b_size],NR,0,&info);
 
         for(IB=(IL_first[mpi_rank+1]-2);IB>=IL_first[mpi_rank];IB--){
 
-            NR  = b_max[IB]-b_min[IB];
+	    NR  = b_max[IB]-b_min[IB];
 	    NM  = b_max[IB-1]-b_min[IB-1];
 	    NP  = b_max[IB+1]-b_min[IB+1];
 	    NS1 = b_min[IB]-matrix->first_row;
@@ -397,11 +394,11 @@ void SplitSolve<T>::FirstStage()
 	    //extract E-Hii=M1_dev
 	    extract_diag(edge_i_dev,index_j_dev,nnz_dev,M1_dev,b_min,b_max,IB,stream_c);
 	    //extract -Hii-1=M_dev[add1]
-	    extract_not_diag(edge_i_dev,index_j_dev,nnz_dev,&M_dev[NS1*b_size],b_min, \
+	    extract_not_diag(edge_i_dev,index_j_dev,nnz_dev,&M_dev[NS1*b_size],b_min,\
 			     b_max,IB,-1,stream_c);
 
 	    //compute E-Hii-Hii+1*gi+1*Hi+1i=M1_dev-M2_dev*M_dev[add2]
-	    tgemm_dev(cublas_handle,'N','N',NR,NR,NP,-ONE,M2_dev,NR,&M_dev[NS2*b_size],NP, \
+	    tgemm_dev(cublas_handle,'N','N',NR,NR,NP,-ONE,M2_dev,NR,&M_dev[NS2*b_size],NP,\
 		      ONE,M1_dev,NR);
 	    symmetrize_matrix(M1_dev,NR,stream_c);
 
@@ -412,9 +409,7 @@ void SplitSolve<T>::FirstStage()
 
 	    //compute (E-Hii-Hii+1*gi+1*Hi+1i)^{-1}*(-Hii-1)=M1_dev^{-1}*M_dev[add1]
 	    tgesv_dev(NR,NM,M1_dev,NR,ipiv,&M_dev[NS1*b_size],NR,0,&info);
-	    //tgetrf_dev(NR,M1_dev,NR,ipiv,0,&info);
-	    //tgetrs_dev(NR,NM,M1_dev,NR,ipiv,&M_dev[NS1*b_size],NR,0,&info);
-        }
+	}
 
 	IB  = IL_first[mpi_rank];
 	NR  = b_max[IB]-b_min[IB];
@@ -425,7 +420,6 @@ void SplitSolve<T>::FirstStage()
 			cudaMemcpyDeviceToHost,stream_m);
 
 	//memcpy_to_host(M_host,M_dev,matrix->size*b_size*sizeof(T));
-	
     }
 
     cudaStreamSynchronize(stream_c);
@@ -441,6 +435,7 @@ void SplitSolve<T>::FirstStage()
 template <class T>
 void SplitSolve<T>::SecondStage()
 {
+
     int info;
     int IB;
     int NR,NM,NP;
@@ -465,14 +460,14 @@ void SplitSolve<T>::SecondStage()
 
 	//memcpy_to_device(M1_host,M_dev,NP*NR*sizeof(T));
 	cudaMemcpy(M_dev,M1_host,NP*NR*sizeof(T),cudaMemcpyHostToDevice);
-    
+
         for(IB=(IL_first[mpi_rank+1]-1);IB>=IL_first[mpi_rank];IB--){
 
 	    NR  = b_max[IB]-b_min[IB];
 	    NP  = b_max[IB+1]-b_min[IB+1];
 	    NS1 = b_min[IB]-matrix->first_row;
 	    NS2 = b_min[IB+1]-matrix->first_row;
- 
+
 	    //extract -Hii+1=M2_dev
 	    extract_not_diag(edge_i_dev,index_j_dev,nnz_dev,M2_dev,b_min,b_max,IB,1,0);
 	    //extract E-Hii=M1_dev
@@ -513,7 +508,6 @@ void SplitSolve<T>::SecondStage()
 		    N1 = NR;
 		    init_eye_on_dev(&M_dev[NS1*b_size],NR,0);
 		}
-
 		tgesv_dev(NR,N1,M1_dev,NR,ipiv,&M_dev[NS1*b_size],NR,0,&info);
 
 		cudaMemcpyAsync(C_dev,&M_dev[NS1*b_size],NR*N1*sizeof(T),cudaMemcpyDeviceToDevice,NULL);
@@ -522,8 +516,8 @@ void SplitSolve<T>::SecondStage()
 
     }else{
 
-        NR  = b_max[IL_first[mpi_rank]]-b_min[IL_first[mpi_rank]];
-	NM  = b_max[IL_first[mpi_rank]-1]-b_min[IL_first[mpi_rank]-1];
+        NR = b_max[IL_first[mpi_rank]]-b_min[IL_first[mpi_rank]];
+	NM = b_max[IL_first[mpi_rank]-1]-b_min[IL_first[mpi_rank]-1];
 
 	//MPI_Recv_Full(M1_host,NR*NM,mpi_rank-1,0,wco_comm);
 
@@ -537,7 +531,7 @@ void SplitSolve<T>::SecondStage()
 	cudaMemcpy(M_dev,M1_host,NM*NR*sizeof(T),cudaMemcpyHostToDevice);
 
         for(IB=IL_first[mpi_rank];IB<IL_first[mpi_rank+1];IB++){
-
+	  
 	    NR  = b_max[IB]-b_min[IB];
 	    NM  = b_max[IB-1]-b_min[IB-1];
 	    NS1 = b_min[IB]-matrix->first_row;
@@ -593,7 +587,7 @@ void SplitSolve<T>::SecondStage()
 
     deallocate_data_on_dev(edge_i_dev,(matrix->size+1)*sizeof(int));
     deallocate_data_on_dev(index_j_dev,matrix->n_nonzeros*sizeof(int));
-    deallocate_data_on_dev(nnz_dev,matrix->n_nonzeros*sizeof(CPX));
+    deallocate_data_on_dev(nnz_dev,matrix->n_nonzeros*sizeof(T));
 
     delete[] ipiv;
 }
@@ -603,6 +597,7 @@ void SplitSolve<T>::SecondStage()
 template <class T>
 void SplitSolve<T>::ThirdStage()
 {
+
     int IB;
     int N1,NN;
     int NM,NR,NP;
@@ -641,7 +636,7 @@ void SplitSolve<T>::ThirdStage()
 	        cudaMemcpyAsync(M1_host,&M_dev[NS1*b_size],NR*N1*sizeof(T),cudaMemcpyDeviceToHost,stream_m);
 		cudaMemcpyAsync(&M_dev[NS1*b_size],&M_host[NS1*b_size],NR*NP*sizeof(T),cudaMemcpyHostToDevice, \
 				stream_m);
- 
+
 		cudaStreamSynchronize(stream_m);
 
 		c_tcopy(NR*N1,M1_host,1,&M_host[NS1*b_size],1);
@@ -753,7 +748,6 @@ void SplitSolve<T>::ThirdStage()
 
     cudaStreamSynchronize(stream_c);
     cudaStreamSynchronize(stream_m);
-
 }
 
 /************************************************************************************************/
@@ -761,6 +755,7 @@ void SplitSolve<T>::ThirdStage()
 template <class T>
 void SplitSolve<T>::FourthStage()
 {
+
     int IB;
     int N1,NN;
     int NR,NP,NM;
@@ -866,6 +861,7 @@ void SplitSolve<T>::FourthStage()
 template <class T>
 void SplitSolve<T>::RecursiveStage()
 {
+
     int IS;
     int ind;
     int group_index;
@@ -931,7 +927,6 @@ void SplitSolve<T>::RecursiveStage()
 
     deallocate_data_on_dev(M1_dev,2*b_size*b_size*sizeof(T));
     deallocate_data_on_dev(M2_dev,b_size*b_size*sizeof(T));
-
 }
 
 /************************************************************************************************/
@@ -939,6 +934,7 @@ void SplitSolve<T>::RecursiveStage()
 template <class T>
 void SplitSolve<T>::FifthStage(int group_index,int group_size,int N1,int NN)
 {
+
     int info;
     int IB,IP;
     int NR,NM,NP;
@@ -957,10 +953,10 @@ void SplitSolve<T>::FifthStage(int group_index,int group_size,int N1,int NN)
 	    ind = IL_first[neigh_pivot];
 	    NP  = b_max[ind]-b_min[ind];
 
-	    //receiving xL
+	    //receiving xL                                                                                                                     
 	    MPI_Recv_Full(M2_host,NP*(N1+NN),neigh_pivot,200+mpi_rank,wco_comm);
 	    //memcpy_to_device(M2_host,xLU_dev,NP*(N1+NN)*sizeof(T));
-	    cudaMemcpy(xLU_dev, M2_host, NP*(N1+NN)*sizeof(T),cudaMemcpyHostToDevice);
+	    cudaMemcpy(xLU_dev,M2_host,NP*(N1+NN)*sizeof(T),cudaMemcpyHostToDevice);
 
 	}else{
 
@@ -1050,7 +1046,7 @@ void SplitSolve<T>::FifthStage(int group_index,int group_size,int N1,int NN)
 				cudaMemcpyHostToDevice,NULL);
 		cudaMemcpyAsync(&M_host[NS1*b_size],&M_dev[NS1*b_size],NR*N1*sizeof(T),\
 				cudaMemcpyDeviceToHost,NULL);
-		cudaMemcpyAsync(&M_dev[NS1*b_size],M1_dev,NR*NP*sizeof(T), \
+		cudaMemcpyAsync(&M_dev[NS1*b_size],M1_dev,NR*NP*sizeof(T),\
 				cudaMemcpyDeviceToDevice,NULL);
 
 		//memcpy_to_host(M1_host,&M_dev[NS1*b_size],NR*N1*sizeof(T));
@@ -1066,7 +1062,7 @@ void SplitSolve<T>::FifthStage(int group_index,int group_size,int N1,int NN)
 	    ind = IL_first[pivot]-1;
 	    NM  = b_max[ind]-b_min[ind];
 
-	    //receiving xU
+	    //receiving xU                                                                                
 	    MPI_Recv_Full(M2_host,NM*(N1+NN),neigh_pivot,100+mpi_rank,wco_comm);
 	    //memcpy_to_device(M2_host,xLU_dev,NM*(N1+NN)*sizeof(T));
 	    cudaMemcpy(xLU_dev,M2_host,NM*(N1+NN)*sizeof(T),cudaMemcpyHostToDevice);
@@ -1081,7 +1077,7 @@ void SplitSolve<T>::FifthStage(int group_index,int group_size,int N1,int NN)
 
 	    //receiving W^U_N
 	    //MPI_Recv_Full(M1_host,NR*NM,mpi_rank-1,0,wco_comm);
-	    	    
+
 	    //sending W^L_1 and receiving W^U_N1
 	    MPI_Sendrecv((double*)M_host,NR*NM*sizeof(T)/sizeof(double),MPI_DOUBLE,
 			 mpi_rank-1,1,(double*)M1_host,NR*NM*sizeof(T)/sizeof(double),MPI_DOUBLE,
@@ -1124,14 +1120,12 @@ void SplitSolve<T>::FifthStage(int group_index,int group_size,int N1,int NN)
 	    init_eye_on_dev(M2_dev,NR,0);
 	    //add -W^L_1*W^U_N
 	    tgemm_dev(cublas_handle,'N','N',NR,NR,NM,-ONE,C_dev,NR,M1_dev,NM,ONE,M2_dev,NR);
-
 	    //calc xLU = inv(I-W^L_1*W^U_N)*[-WL_1*G^U_{N1} G^L_{1N}]
 	    tgesv_dev(NR,N1+NN,M2_dev,NR,ipiv,xLU_dev,NR,1,&info);
 
 	    //sending xL
 	    //memcpy_to_host(M2_host,xLU_dev,NR*(N1+NN)*sizeof(T));
 	    cudaMemcpy(M2_host,xLU_dev,NR*(N1+NN)*sizeof(T),cudaMemcpyDeviceToHost);
-
 	    for(IP=neigh_pivot;IP>(neigh_pivot-group_size);IP--){
 	        MPI_Send_Full(M2_host,NR*(N1+NN),IP,200+IP,wco_comm);
 	    }
@@ -1169,7 +1163,6 @@ void SplitSolve<T>::FifthStage(int group_index,int group_size,int N1,int NN)
 
     delete[] ipiv;
     //delete[] M2_host;
-
 }
 
 /************************************************************************************************/
@@ -1251,7 +1244,7 @@ void SplitSolve<T>::SixthStage(int group_index,int group_size,int N1,int NN)
     if((!(mpi_rank%2))&&(mpi_rank==min_rank)){
         NR = b_max[IL_first[mpi_rank]]-b_min[IL_first[mpi_rank]];
 	//memcpy_to_device(M_host,C_dev,NR*N1*sizeof(T));
-        cudaMemcpyAsync(C_dev,M_host,NR*N1*sizeof(T),cudaMemcpyHostToDevice,NULL);
+	cudaMemcpyAsync(C_dev,M_host,NR*N1*sizeof(T),cudaMemcpyHostToDevice,NULL);
     }
 
     //copy GNN to device
@@ -1260,7 +1253,7 @@ void SplitSolve<T>::SixthStage(int group_index,int group_size,int N1,int NN)
         NR  = b_max[ind]-b_min[ind];
 	NS1 = b_min[ind]-matrix->first_row;
 	//memcpy_to_device(&M_host[NS1*b_size],C_dev,NR*NN*sizeof(T));
-        cudaMemcpyAsync(C_dev,&M_host[NS1*b_size],NR*NN*sizeof(T),cudaMemcpyHostToDevice,NULL);
+	cudaMemcpyAsync(C_dev,&M_host[NS1*b_size],NR*NN*sizeof(T),cudaMemcpyHostToDevice,NULL);
     }
 }
 
@@ -1285,18 +1278,17 @@ void SplitSolve<T>::prepare(int *Bmin,int *Bmax,int NBlock,int Bsize,int *orb_pe
 	T0 = get_time(0.0);
 
 	t0 = get_time(0.0);
-	create_blocks(Bsize);
+	create_blocks(Bsize,NBlock,Bmin,Bmax,orb_per_at,tb);
 
 	allocate_data_on_device((void**)&edge_i_dev,(matrix->size+1)*sizeof(int));
 	allocate_data_on_device((void**)&index_j_dev,matrix->n_nonzeros*sizeof(int));
-	allocate_data_on_device((void**)&nnz_dev,matrix->n_nonzeros*sizeof(CPX));
+	allocate_data_on_device((void**)&nnz_dev,matrix->n_nonzeros*sizeof(T));
 
 	memcpy_to_device(matrix->edge_i,edge_i_dev,(matrix->size+1)*sizeof(int));
-	//cudaMemcpy(edge_i_dev, matrix->edge_i, (matrix->size+1)*sizeof(int),cudaMemcpyHostToDevice);
 	memcpy_to_device(matrix->index_j,index_j_dev,matrix->n_nonzeros*sizeof(int));
-	//cudaMemcpy(index_j_dev, matrix->index_j, matrix->n_nonzeros*sizeof(int),cudaMemcpyHostToDevice);
-	memcpy_to_device(matrix->nnz,nnz_dev,matrix->n_nonzeros*sizeof(CPX));
-	//cudaMemcpy(nnz_dev, matrix->nnz, matrix->n_nonzeros*sizeof(CPX),cudaMemcpyHostToDevice);
+	//memcpy_to_device(matrix->nnz,nnz_dev,matrix->n_nonzeros*sizeof(CPX));
+	cudaMemcpy2DAsync(nnz_dev,sizeof(T),matrix->nnz,sizeof(CPX),sizeof(T),matrix->n_nonzeros,cudaMemcpyHostToDevice,NULL);
+
 
 	M_host  = HostMem;
 	M1_host = &HostMem[b_size*matrix->size];
@@ -1331,7 +1323,7 @@ void SplitSolve<T>::prepare(int *Bmin,int *Bmax,int NBlock,int Bsize,int *orb_pe
 /************************************************************************************************/
 
 template <class T>
-void SplitSolve<T>::create_blocks(int Bsize)
+void SplitSolve<T>::create_blocks(int Bsize,int NBlock,int *Bmin,int *Bmax,int *orb_per_at,int tb)
 {
     int IB,IR;
     int my_nb;
@@ -1364,19 +1356,43 @@ void SplitSolve<T>::create_blocks(int Bsize)
     MPI_Allreduce(&b_size_loc,&b_size,1,MPI_INT,MPI_MAX,wco_comm);
     MPI_Allreduce(loc_frow,glob_frow,mpi_size,MPI_INT,MPI_SUM,wco_comm);
 
-    b_min       = new int[n_block];
-    b_max       = new int[n_block];
+    b_min       = new int[max(n_block,NBlock)];
+    b_max       = new int[max(n_block,NBlock)];
 
     IL_first[0] = 0;
 
-    for(IR=0;IR<mpi_size;IR++){
+    if(n_block>=NBlock){
 
-        IL_first[IR+1] = IL_first[IR]+glob_part[IR]; 
+        for(IR=0;IR<mpi_size;IR++){
 
-	for(IB=IL_first[IR];IB<IL_first[IR+1];IB++){
-	    b_min[IB] = glob_frow[IR]+(IB-IL_first[IR])*b_size;
-	    b_max[IB] = min(glob_frow[IR]+(IB-IL_first[IR]+1)*b_size,glob_frow[IR+1]);
+	    IL_first[IR+1] = IL_first[IR]+glob_part[IR]; 
+
+	    for(IB=IL_first[IR];IB<IL_first[IR+1];IB++){
+	        b_min[IB] = glob_frow[IR]+(IB-IL_first[IR])*b_size;
+		b_max[IB] = min(glob_frow[IR]+(IB-IL_first[IR]+1)*b_size,glob_frow[IR+1]);
+	    }
 	}
+
+    }else{
+
+        b_size  = Bsize;
+        n_block = NBlock;
+	IR      = 0;
+
+	for(IB=0;IB<NBlock;IB++){
+
+	    b_min[IB] = get_msize(0,Bmin[IB]-1,tb,orb_per_at);
+	    b_max[IB] = get_msize(0,Bmax[IB],tb,orb_per_at);
+
+	    if(IR<(mpi_size-1)){
+	        if(glob_frow[IR+1]==b_max[IB]){
+		    IL_first[IR+1] = IB+1;
+		    IR++;
+		}
+	    }
+	}
+
+	IL_first[mpi_size] = NBlock;
     }
 
     delete[] loc_part;
@@ -1532,7 +1548,7 @@ void SplitSolve<T>::InitSolve(CPX *arg_rhs,int no_rhs)
     if(!mpi_rank){
 
         //b = new CPX[b_size*no_rhs];
-	b = (CPX*)&HostMem[b_size*(matrix->size+b_size)];
+        b = (CPX*)&HostMem[b_size*(matrix->size+b_size)];
 
 	init_var(b,b_size*no_rhs);
 
@@ -1549,12 +1565,13 @@ void SplitSolve<T>::InitSolve(CPX *arg_rhs,int no_rhs)
 	cudaMemcpy(bR_dev,b,bR_size,cudaMemcpyHostToDevice);
 
 	//delete[] b;
+
     }
 
     if(mpi_rank==(mpi_size-1)){
 
         //b = new CPX[2*b_size*no_rhs];
-	b = (CPX*)&HostMem[b_size*(matrix->size+b_size)];
+        b = (CPX*)&HostMem[b_size*(matrix->size+b_size)];
 
 	init_var(b,b_size*no_rhs);
 
@@ -1579,6 +1596,7 @@ void SplitSolve<T>::InitSolve(CPX *arg_rhs,int no_rhs)
 template <class T>
 void SplitSolve<T>::FirstSolve(int no_rhs)
 {
+
     int N1,NN;
     int NS;
 
@@ -1603,6 +1621,7 @@ void SplitSolve<T>::FirstSolve(int no_rhs)
 	//y1=y1+G1N*bN
 	zgemm_on_dev(cublas_handle,'N','N',N1,no_rhs,NN,CPX(1.0,0.0),&M3_dev[b_size*b_size],\
 		     N1,bR_dev,NN,CPX(1.0,0.0),y_dev,N1);
+
     }
 
     if(mpi_rank==(mpi_size-1)){
@@ -1628,6 +1647,7 @@ void SplitSolve<T>::FirstSolve(int no_rhs)
 template <class T>
 void SplitSolve<T>::SecondSolve(int no_rhs)
 {
+
     int N1,NN;
     int NS;
 
@@ -1690,6 +1710,7 @@ void SplitSolve<T>::SecondSolve(int no_rhs)
 template <class T>
 void SplitSolve<T>::ThirdSolve(int no_rhs)
 {
+
     MPI_Status status;
     int info;
     int IC;
@@ -1812,6 +1833,7 @@ void SplitSolve<T>::ThirdSolve(int no_rhs)
 
 	cudaMemcpyAsync(z_dev,z_host,(NBCL+NBCR)*no_rhs*sizeof(CPX),cudaMemcpyHostToDevice,NULL);
 	MPI_Send(z_host,(NBCL+NBCR)*no_rhs,MPI_DOUBLE_COMPLEX,mpi_size-1,5,wco_comm);
+
     }
 
     if(mpi_rank==(mpi_size-1)){
@@ -1857,7 +1879,7 @@ void SplitSolve<T>::ThirdSolve(int no_rhs)
 	MPI_Send(&T_host[2*b_size*b_size],NBCR*NBCL,MPI_DOUBLE_COMPLEX,0,2,wco_comm);
 	MPI_Send(&z_host[b_size*no_rhs],NBCR*no_rhs,MPI_DOUBLE_COMPLEX,0,3,wco_comm);
 	*/
-	
+
 	MPI_Sendrecv(&T_host[2*b_size*b_size],NBCR*NBCL,MPI_DOUBLE_COMPLEX,0,1,\
 		     &T_host[3*b_size*b_size],NBCL*NBCR,MPI_DOUBLE_COMPLEX,0,0,\
 		     wco_comm,MPI_STATUS_IGNORE);
@@ -1893,7 +1915,6 @@ void SplitSolve<T>::ThirdSolve(int no_rhs)
 
 	MPI_Recv(z_host,(NBCL+NBCR)*no_rhs,MPI_DOUBLE_COMPLEX,0,5,wco_comm,&status);
 	cudaMemcpyAsync(z_dev,z_host,(NBCL+NBCR)*no_rhs*sizeof(CPX),cudaMemcpyHostToDevice,NULL);
-
     }
 
     delete[] ipiv;
@@ -1915,12 +1936,11 @@ void SplitSolve<T>::FourthSolve(CPX *res,int no_rhs)
     N1   = b_max[0]-b_min[0];
     NN   = b_max[n_block-1]-b_min[n_block-1];
 
-    cond = (matrix->size*no_rhs)<(5*b_size*b_size); 
+    cond = (matrix->size*no_rhs)<(5*b_size*b_size);
 
     if(cond){
         Sol = (CPX*)&HostMem[b_size*(matrix->size+b_size)];
     }else{
-        //Sol = new CPX[matrix->size*no_rhs];
         cudaMallocHost((void **)&Sol,matrix->size*no_rhs*sizeof(CPX));
     }
 
@@ -1940,7 +1960,7 @@ void SplitSolve<T>::FourthSolve(CPX *res,int no_rhs)
 
 	    if(mpi_size>2){
 	        //memcpy_to_host(Sol,bL_dev,N1*no_rhs*sizeof(CPX));
-	        cudaMemcpy(Sol,bL_dev,N1*no_rhs*sizeof(CPX),cudaMemcpyDeviceToHost);
+		cudaMemcpy(Sol,bL_dev,N1*no_rhs*sizeof(CPX),cudaMemcpyDeviceToHost);
 		//memcpy_to_host(&Sol[N1*no_rhs],bR_dev,NN*no_rhs*sizeof(CPX));
 		cudaMemcpy(&Sol[N1*no_rhs],bR_dev,NN*no_rhs*sizeof(CPX),cudaMemcpyDeviceToHost);
 	    }
@@ -1952,9 +1972,7 @@ void SplitSolve<T>::FourthSolve(CPX *res,int no_rhs)
 	}else{
 	    MPI_Recv_Full(Sol,(N1+NN)*no_rhs,0,10+mpi_rank,wco_comm);
 	    memcpy_to_device(Sol,bL_dev,N1*no_rhs*sizeof(CPX));
-	    //cudaMemcpy(bL_dev,Sol,N1*no_rhs*sizeof(CPX),cudaMemcpyHostToDevice);
 	    memcpy_to_device(&Sol[N1*no_rhs],bR_dev,NN*no_rhs*sizeof(CPX));
-	    //cudaMemcpy(bR_dev,&Sol[N1*no_rhs],NN*no_rhs*sizeof(CPX),cudaMemcpyHostToDevice);
 	}
 
         for(IB=IL_first[mpi_rank];IB<IL_first[mpi_rank+1];IB++){
@@ -1964,7 +1982,6 @@ void SplitSolve<T>::FourthSolve(CPX *res,int no_rhs)
 
 	    //get GnN(IB,:)
 	    change_var_type(&M_dev[NS*b_size],M3_dev,NB*NN,stream_c);
- 
 	    zgemm_on_dev(cublas_handle,'N','N',NB,no_rhs,NN,CPX(1.0,0.0),M3_dev,NB,bR_dev,NN,\
 			 CPX(0.0,0.0),&y_dev[NS*no_rhs],NB);
 
@@ -1973,10 +1990,9 @@ void SplitSolve<T>::FourthSolve(CPX *res,int no_rhs)
 	        NS = b_min[IB-1]-matrix->first_row;
 		NB = b_max[IB-1]-b_min[IB-1];
 
-	        cudaMemcpyAsync(&M_dev[NS*b_size],&M_host[NS*b_size],NB*NN*sizeof(T),\
+	        cudaMemcpyAsync(&M_dev[NS*b_size],&M_host[NS*b_size],NB*N1*sizeof(T),\
 			    cudaMemcpyHostToDevice,stream_m);
 	    }
- 
 	    cudaStreamSynchronize(stream_c);
 	    cudaStreamSynchronize(stream_m);
 	}
@@ -1985,8 +2001,7 @@ void SplitSolve<T>::FourthSolve(CPX *res,int no_rhs)
 	NS = b_min[IB]-matrix->first_row;
 	NB = b_max[IB]-b_min[IB];
 
-	memcpy_to_device(&M_host[NS*b_size],&M_dev[NS*b_size],NB*NN*sizeof(T));
-	//cudaMemcpy(&M_dev[NS*b_size],&M_host[NS*b_size],NB*NN*sizeof(T),cudaMemcpyHostToDevice);
+	memcpy_to_device(&M_host[NS*b_size],&M_dev[NS*b_size],NB*N1*sizeof(T));
 
 	//memcpy_to_device(M_host,M_dev,matrix->size*b_size*sizeof(T));
 
@@ -2008,7 +2023,6 @@ void SplitSolve<T>::FourthSolve(CPX *res,int no_rhs)
 	        cudaMemcpyAsync(&Sol[NS*no_rhs],&y_dev[NS*no_rhs],NB*no_rhs*sizeof(CPX),\
 				cudaMemcpyDeviceToHost,stream_m);
 	    }
-
 	    cudaStreamSynchronize(stream_c);
 	    cudaStreamSynchronize(stream_m);
 	}
@@ -2039,7 +2053,7 @@ void SplitSolve<T>::FourthSolve(CPX *res,int no_rhs)
 
 	    if(mpi_size>2){
 	        //memcpy_to_host(Sol,bL_dev,N1*no_rhs*sizeof(CPX));
-	        cudaMemcpy(Sol,bL_dev,N1*no_rhs*sizeof(CPX),cudaMemcpyDeviceToHost);
+		cudaMemcpy(Sol,bL_dev,N1*no_rhs*sizeof(CPX),cudaMemcpyDeviceToHost);
 		//memcpy_to_host(&Sol[N1*no_rhs],bR_dev,NN*no_rhs*sizeof(CPX));
 		cudaMemcpy(&Sol[N1*no_rhs],bR_dev,NN*no_rhs*sizeof(CPX),cudaMemcpyDeviceToHost);
 	    }
@@ -2051,9 +2065,7 @@ void SplitSolve<T>::FourthSolve(CPX *res,int no_rhs)
 	}else{
 	    MPI_Recv_Full(Sol,(N1+NN)*no_rhs,mpi_size-1,20+mpi_rank,wco_comm);
 	    memcpy_to_device(Sol,bL_dev,N1*no_rhs*sizeof(CPX));
-	    //cudaMemcpy(bL_dev,Sol,N1*no_rhs*sizeof(CPX),cudaMemcpyHostToDevice);
 	    memcpy_to_device(&Sol[N1*no_rhs],bR_dev,NN*no_rhs*sizeof(CPX));
-	    //cudaMemcpy(bR_dev,&Sol[N1*no_rhs],NN*no_rhs*sizeof(CPX),cudaMemcpyHostToDevice);
 	}
 
         for(IB=IL_first[mpi_rank];IB<IL_first[mpi_rank+1];IB++){
@@ -2071,10 +2083,9 @@ void SplitSolve<T>::FourthSolve(CPX *res,int no_rhs)
 	        NS = b_min[IB-1]-matrix->first_row;
 		NB = b_max[IB-1]-b_min[IB-1];
 
-	        cudaMemcpyAsync(&M_dev[NS*b_size],&M_host[NS*b_size],NB*N1*sizeof(T),\
+	        cudaMemcpyAsync(&M_dev[NS*b_size],&M_host[NS*b_size],NB*NN*sizeof(T),\
 			    cudaMemcpyHostToDevice,stream_m);
 	    }
-
 	    cudaStreamSynchronize(stream_c);
 	    cudaStreamSynchronize(stream_m);
 	}
@@ -2083,8 +2094,7 @@ void SplitSolve<T>::FourthSolve(CPX *res,int no_rhs)
 	NS = b_min[IB]-matrix->first_row;
 	NB = b_max[IB]-b_min[IB];
 
-	memcpy_to_device(&M_host[NS*b_size],&M_dev[NS*b_size],NB*N1*sizeof(T));
-	//cudaMemcpy(&M_dev[NS*b_size],&M_host[NS*b_size],NB*N1*sizeof(T),cudaMemcpyHostToDevice);
+	memcpy_to_device(&M_host[NS*b_size],&M_dev[NS*b_size],NB*NN*sizeof(T));
 
 	//memcpy_to_device(M_host,M_dev,matrix->size*b_size*sizeof(T));
 
@@ -2106,7 +2116,6 @@ void SplitSolve<T>::FourthSolve(CPX *res,int no_rhs)
 	        cudaMemcpyAsync(&Sol[NS*no_rhs],&y_dev[NS*no_rhs],NB*no_rhs*sizeof(CPX),\
 				cudaMemcpyDeviceToHost,stream_m);
 	    }
-
 	    cudaStreamSynchronize(stream_c);
 	    cudaStreamSynchronize(stream_m);
 	}
@@ -2138,7 +2147,6 @@ void SplitSolve<T>::FourthSolve(CPX *res,int no_rhs)
     cudaStreamSynchronize(stream_m);
 
     if(!cond){
-        //delete[] Sol;
         cudaFreeHost(Sol);
     }
 }
