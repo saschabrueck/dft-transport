@@ -100,6 +100,7 @@ public:
 // sab begin
 //create new matrix by cutting out from old one
     TCSR(TCSR<T>*,int,int,int,int);
+    TCSR(cp2k_csr_interop_type&,MPI_Comm,int*,int,int,int,MPI_Comm*,MPI_Comm*);
     TCSR(cp2k_csr_interop_type&,int,int,int,int);
 // this constructs a matrix by summing of a vector of matrices
     TCSR(int,T*,TCSR<T>**,int=-1);
@@ -167,6 +168,7 @@ public:
     void psipsidagger(CPX*,int,CPX);
     void psipsidagger(double*,int,double);
     void psipsidagger_transpose(CPX*,int,CPX);
+    void psipsidagger_transpose(CPX*,CPX*,int,CPX);
     void psipsidagger_transpose(TCSR<double>*,CPX*,int,CPX);
     void psipsidagger_transpose(double*,int,double);
     double psipsidagger(TCSR<double>*,CPX*,CPX*,CPX*,int,int,int,CPX);
@@ -308,6 +310,107 @@ inline TCSR<T>::TCSR(TCSR<T> *mat,int istart, int ilength, int jstart, int jleng
     get_diag_pos();
 
     if (n_nonzeros!=edge_i[size]-findx) throw CSR_Exception(__LINE__,__FILE__);
+}
+
+/******************** written by SAB ********************/
+
+template <class T>
+inline TCSR<T>::TCSR(cp2k_csr_interop_type& cp2kCSRmat,MPI_Comm my_comm_in,int *sizes,int outsize,int cutoutl,int cutoutr,MPI_Comm *my_comm_out,MPI_Comm *equal_rank_comm)
+{
+    findx=1;
+    type=0;
+    int *frows_out = new int[outsize+1];
+    frows_out[0]=0;
+    for (int i=0;i<outsize;i++) frows_out[i+1]=frows_out[i]+sizes[i];
+    size_tot=frows_out[outsize];
+    if (size_tot+cutoutl+cutoutr!=cp2kCSRmat.nrows_total) throw CSR_Exception(__LINE__,__FILE__);
+    int iam,insize;
+    MPI_Comm_size(my_comm_in,&insize);
+    MPI_Comm_rank(my_comm_in,&iam);
+    if (insize%outsize) throw CSR_Exception(__LINE__,__FILE__);
+    int *first_rows  = new int[insize+1];
+    int *displc_size = new int[insize+1];
+    int *dist_size   = new int[insize];
+    int *displc_nnz  = new int[insize+1];
+    int *dist_nnz    = new int[insize];
+    MPI_Allgather(&cp2kCSRmat.first_row,1,MPI_INT,first_rows,1,MPI_INT,my_comm_in);
+    first_rows[insize]=cp2kCSRmat.nrows_total;
+    index_i=NULL;
+    index_j=NULL;
+    nnz=NULL;
+    if (iam<outsize) {
+        size      = sizes[iam];
+        first_row = frows_out[iam];
+        index_i   = new int[max(size,1)];
+        edge_i    = new int[size+1];
+        diag_pos  = new int[max(size,1)];
+    }
+    for (int ir=0;ir<outsize;ir++) {
+        for (int i=0;i<insize+1;i++) {
+            displc_size[i]=first_rows[i]-cutoutl-frows_out[ir];
+            if (displc_size[i]<0)         displc_size[i]=0;
+            if (displc_size[i]>sizes[ir]) displc_size[i]=sizes[ir];
+        }
+        for (int i=0;i<insize;i++) {
+            dist_size[i]=displc_size[i+1]-displc_size[i];
+        }
+        int start_size=0;
+        int end_size=cp2kCSRmat.nrows_local;
+        if (displc_size[iam]==0 && dist_size[iam]>0) start_size=cutoutl+frows_out[ir]-first_rows[iam];
+        if (displc_size[iam]==sizes[ir]-dist_size[iam] && dist_size[iam]>0) end_size=start_size+dist_size[iam];
+        int dist_nnz_local=0;
+        if (dist_size[iam]>0) dist_nnz_local=cp2kCSRmat.rowptr_local[end_size]-cp2kCSRmat.rowptr_local[start_size];
+        int start_nnz=cp2kCSRmat.rowptr_local[start_size]-1;
+        MPI_Allgather(&dist_nnz_local,1,MPI_INT,dist_nnz,1,MPI_INT,my_comm_in);
+        displc_nnz[0]=0;
+        for (int i=0;i<insize;i++) {
+            displc_nnz[i+1]=displc_nnz[i]+dist_nnz[i];
+        }
+        if (iam==ir) {
+            n_nonzeros=displc_nnz[insize];
+            index_j = new int[max(n_nonzeros,1)];
+            nnz     = new T[max(n_nonzeros,1)];
+        }
+        MPI_Gatherv(&cp2kCSRmat.nzerow_local[start_size],dist_size[iam],MPI_INT,index_i,dist_size,displc_size,MPI_INT,ir,my_comm_in);
+        MPI_Gatherv(&cp2kCSRmat.colind_local[start_nnz],dist_nnz[iam],MPI_INT,index_j,dist_nnz,displc_nnz,MPI_INT,ir,my_comm_in);
+        MPI_Gatherv(&cp2kCSRmat.nzvals_local[start_nnz],dist_nnz[iam],give_me_MPI_datatype(nnz),nnz,dist_nnz,displc_nnz,give_me_MPI_datatype(nnz),ir,my_comm_in);
+        if (iam==ir) {
+            get_row_edge();
+            get_diag_pos();
+        }
+    }
+    delete[] frows_out;
+    delete[] first_rows;
+    delete[] displc_size;
+    delete[] dist_size;
+    delete[] displc_nnz;
+    delete[] dist_nnz;
+
+    MPI_Comm_split(my_comm_in,iam/outsize,iam,my_comm_out);
+    int rank_my_comm_out;
+    MPI_Comm_rank(*my_comm_out,&rank_my_comm_out);
+    MPI_Comm_split(my_comm_in,rank_my_comm_out,iam,equal_rank_comm);
+
+    MPI_Bcast(&size      ,1,MPI_INT,0,*equal_rank_comm);
+    MPI_Bcast(&size_tot  ,1,MPI_INT,0,*equal_rank_comm);
+    MPI_Bcast(&type      ,1,MPI_INT,0,*equal_rank_comm);
+    MPI_Bcast(&n_nonzeros,1,MPI_INT,0,*equal_rank_comm);
+    MPI_Bcast(&findx     ,1,MPI_INT,0,*equal_rank_comm);
+    MPI_Bcast(&first_row ,1,MPI_INT,0,*equal_rank_comm);
+
+    if (iam>=outsize) {
+        nnz      = new T[n_nonzeros];
+        index_i  = new int[size];
+        index_j  = new int[n_nonzeros];
+        edge_i   = new int[size+1];
+        diag_pos = new int[size];
+    }
+
+    MPI_Bcast(nnz,     n_nonzeros,give_me_MPI_datatype(nnz),0,*equal_rank_comm);
+    MPI_Bcast(index_i, size      ,MPI_INT                  ,0,*equal_rank_comm);
+    MPI_Bcast(index_j, n_nonzeros,MPI_INT                  ,0,*equal_rank_comm);
+    MPI_Bcast(edge_i,  size+1    ,MPI_INT                  ,0,*equal_rank_comm);
+    MPI_Bcast(diag_pos,size      ,MPI_INT                  ,0,*equal_rank_comm);
 }
 
 /******************** written by SAB ********************/
@@ -2118,6 +2221,19 @@ inline void TCSR<double>::psipsidagger_transpose(CPX* psi,int nkval,CPX factor)
     for(i=0;i<size;i++){
         for(e=edge_i[i]-findx;e<edge_i[i+1]-findx;e++){
             nnz[e]+=real(factor*c_zdotc(nkval,&psi[(index_j[e]-findx)*nkval],1,&psi[(first_row+i)*nkval],1));
+        }
+    }
+}
+
+/************************************************************************************************/
+
+template <>
+inline void TCSR<double>::psipsidagger_transpose(CPX* psi_loc,CPX* psi,int nkval,CPX factor)
+{
+    int i,e;
+    for(i=0;i<size;i++){
+        for(e=edge_i[i]-findx;e<edge_i[i+1]-findx;e++){
+            nnz[e]+=real(factor*c_zdotc(nkval,&psi[(index_j[e]-findx)*nkval],1,&psi_loc[i*nkval],1));
         }
     }
 }
