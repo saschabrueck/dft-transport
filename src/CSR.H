@@ -100,8 +100,8 @@ public:
 // sab begin
 //create new matrix by cutting out from old one
     TCSR(TCSR<T>*,int,int,int,int);
-    TCSR(cp2k_csr_interop_type&,MPI_Comm,int*,int,int,int,MPI_Comm*,MPI_Comm*);
     TCSR(cp2k_csr_interop_type&,int,int,int,int);
+    TCSR(cp2k_csr_interop_type&,MPI_Comm,int*,int,int,int,MPI_Comm*);
 // this constructs a matrix by summing of a vector of matrices
     TCSR(int,T*,TCSR<T>**,int=-1);
 // and this is the gather
@@ -165,6 +165,7 @@ public:
     void scatter(TCSR<T>*,int,MPI_Comm);
     void reduce(int,MPI_Comm);
     void reducescatter(TCSR<T>*,MPI_Comm);
+    void write_back(cp2k_csr_interop_type&,MPI_Comm,int*,int,int,int,MPI_Comm);
     void psipsidagger(CPX*,int,CPX);
     void psipsidagger(double*,int,double);
     void psipsidagger_transpose(CPX*,int,CPX);
@@ -315,7 +316,65 @@ inline TCSR<T>::TCSR(TCSR<T> *mat,int istart, int ilength, int jstart, int jleng
 /******************** written by SAB ********************/
 
 template <class T>
-inline TCSR<T>::TCSR(cp2k_csr_interop_type& cp2kCSRmat,MPI_Comm my_comm_in,int *sizes,int outsize,int cutoutl,int cutoutr,MPI_Comm *my_comm_out,MPI_Comm *equal_rank_comm)
+inline TCSR<T>::TCSR(cp2k_csr_interop_type& cp2kCSRmat,int istart, int ilength, int jstart, int jlength)
+{
+    if (istart<0)                              throw CSR_Exception(__LINE__,__FILE__);
+    if (jstart<0)                              throw CSR_Exception(__LINE__,__FILE__);
+    if (ilength<0)                             throw CSR_Exception(__LINE__,__FILE__);
+    if (jlength<0)                             throw CSR_Exception(__LINE__,__FILE__);
+    if (istart+ilength>cp2kCSRmat.nrows_total) throw CSR_Exception(__LINE__,__FILE__);
+
+    int iend       = istart+ilength;
+    int jend       = jstart+jlength;
+    int loc_istart = max(0,min(cp2kCSRmat.nrows_local,istart-cp2kCSRmat.first_row));
+    int loc_iend   = max(0,min(cp2kCSRmat.nrows_local,iend-cp2kCSRmat.first_row));
+
+    size       = loc_iend-loc_istart;
+    size_tot   = ilength;
+    type       = 0;
+    findx      = 1;
+    first_row  = min(ilength,max(0,cp2kCSRmat.first_row-istart));
+
+    n_nonzeros = 0;
+
+    for (int i=loc_istart;i<loc_iend;i++) {
+        for(int e=cp2kCSRmat.rowptr_local[i]-1;e<cp2kCSRmat.rowptr_local[i+1]-1;e++){
+            if(cp2kCSRmat.colind_local[e]-1>=jstart && cp2kCSRmat.colind_local[e]-1<jend){
+                n_nonzeros++;
+            }
+        }
+    }
+
+    nnz        = new T[max(n_nonzeros,1)];
+    index_i    = new int[max(size,1)];
+    index_j    = new int[max(n_nonzeros,1)];
+    edge_i     = new int[size+1];
+    diag_pos   = new int[max(size,1)];
+
+    n_nonzeros = 0;
+    init_variable(index_i,size);
+
+    for (int i=loc_istart;i<loc_iend;i++) {
+        for(int e=cp2kCSRmat.rowptr_local[i]-1;e<cp2kCSRmat.rowptr_local[i+1]-1;e++){
+            if(cp2kCSRmat.colind_local[e]-1>=jstart && cp2kCSRmat.colind_local[e]-1<jend){
+                index_i[i-loc_istart]++;
+                index_j[n_nonzeros]=cp2kCSRmat.colind_local[e]-jstart;
+                nnz[n_nonzeros]=cp2kCSRmat.nzvals_local[e];
+                n_nonzeros++;
+            }
+        }
+    }
+
+    get_row_edge();
+    get_diag_pos();
+
+    if (n_nonzeros!=edge_i[size]-findx) throw CSR_Exception(__LINE__,__FILE__);
+}
+
+/******************** written by SAB ********************/
+
+template <class T>
+inline TCSR<T>::TCSR(cp2k_csr_interop_type& cp2kCSRmat,MPI_Comm my_comm_in,int *sizes,int outsize,int cutoutl,int cutoutr,MPI_Comm *my_comm_out)
 {
     findx=1;
     type=0;
@@ -389,14 +448,15 @@ inline TCSR<T>::TCSR(cp2k_csr_interop_type& cp2kCSRmat,MPI_Comm my_comm_in,int *
     MPI_Comm_split(my_comm_in,iam/outsize,iam,my_comm_out);
     int rank_my_comm_out;
     MPI_Comm_rank(*my_comm_out,&rank_my_comm_out);
-    MPI_Comm_split(my_comm_in,rank_my_comm_out,iam,equal_rank_comm);
+    MPI_Comm equal_rank_comm;
+    MPI_Comm_split(my_comm_in,rank_my_comm_out,iam,&equal_rank_comm);
 
-    MPI_Bcast(&size      ,1,MPI_INT,0,*equal_rank_comm);
-    MPI_Bcast(&size_tot  ,1,MPI_INT,0,*equal_rank_comm);
-    MPI_Bcast(&type      ,1,MPI_INT,0,*equal_rank_comm);
-    MPI_Bcast(&n_nonzeros,1,MPI_INT,0,*equal_rank_comm);
-    MPI_Bcast(&findx     ,1,MPI_INT,0,*equal_rank_comm);
-    MPI_Bcast(&first_row ,1,MPI_INT,0,*equal_rank_comm);
+    MPI_Bcast(&size      ,1,MPI_INT,0,equal_rank_comm);
+    MPI_Bcast(&size_tot  ,1,MPI_INT,0,equal_rank_comm);
+    MPI_Bcast(&type      ,1,MPI_INT,0,equal_rank_comm);
+    MPI_Bcast(&n_nonzeros,1,MPI_INT,0,equal_rank_comm);
+    MPI_Bcast(&findx     ,1,MPI_INT,0,equal_rank_comm);
+    MPI_Bcast(&first_row ,1,MPI_INT,0,equal_rank_comm);
 
     if (iam>=outsize) {
         nnz      = new T[n_nonzeros];
@@ -406,69 +466,13 @@ inline TCSR<T>::TCSR(cp2k_csr_interop_type& cp2kCSRmat,MPI_Comm my_comm_in,int *
         diag_pos = new int[size];
     }
 
-    MPI_Bcast(nnz,     n_nonzeros,give_me_MPI_datatype(nnz),0,*equal_rank_comm);
-    MPI_Bcast(index_i, size      ,MPI_INT                  ,0,*equal_rank_comm);
-    MPI_Bcast(index_j, n_nonzeros,MPI_INT                  ,0,*equal_rank_comm);
-    MPI_Bcast(edge_i,  size+1    ,MPI_INT                  ,0,*equal_rank_comm);
-    MPI_Bcast(diag_pos,size      ,MPI_INT                  ,0,*equal_rank_comm);
-}
+    MPI_Bcast(nnz,     n_nonzeros,give_me_MPI_datatype(nnz),0,equal_rank_comm);
+    MPI_Bcast(index_i, size      ,MPI_INT                  ,0,equal_rank_comm);
+    MPI_Bcast(index_j, n_nonzeros,MPI_INT                  ,0,equal_rank_comm);
+    MPI_Bcast(edge_i,  size+1    ,MPI_INT                  ,0,equal_rank_comm);
+    MPI_Bcast(diag_pos,size      ,MPI_INT                  ,0,equal_rank_comm);
 
-/******************** written by SAB ********************/
-
-template <class T>
-inline TCSR<T>::TCSR(cp2k_csr_interop_type& cp2kCSRmat,int istart, int ilength, int jstart, int jlength)
-{
-    if (istart<0)                              throw CSR_Exception(__LINE__,__FILE__);
-    if (jstart<0)                              throw CSR_Exception(__LINE__,__FILE__);
-    if (ilength<0)                             throw CSR_Exception(__LINE__,__FILE__);
-    if (jlength<0)                             throw CSR_Exception(__LINE__,__FILE__);
-    if (istart+ilength>cp2kCSRmat.nrows_total) throw CSR_Exception(__LINE__,__FILE__);
-
-    int iend       = istart+ilength;
-    int jend       = jstart+jlength;
-    int loc_istart = max(0,min(cp2kCSRmat.nrows_local,istart-cp2kCSRmat.first_row));
-    int loc_iend   = max(0,min(cp2kCSRmat.nrows_local,iend-cp2kCSRmat.first_row));
-
-    size       = loc_iend-loc_istart;
-    size_tot   = ilength;
-    type       = 0;
-    findx      = 1;
-    first_row  = min(ilength,max(0,cp2kCSRmat.first_row-istart));
-
-    n_nonzeros = 0;
-
-    for (int i=loc_istart;i<loc_iend;i++) {
-        for(int e=cp2kCSRmat.rowptr_local[i]-1;e<cp2kCSRmat.rowptr_local[i+1]-1;e++){
-            if(cp2kCSRmat.colind_local[e]-1>=jstart && cp2kCSRmat.colind_local[e]-1<jend){
-                n_nonzeros++;
-            }
-        }
-    }
-
-    nnz        = new T[max(n_nonzeros,1)];
-    index_i    = new int[max(size,1)];
-    index_j    = new int[max(n_nonzeros,1)];
-    edge_i     = new int[size+1];
-    diag_pos   = new int[max(size,1)];
-
-    n_nonzeros = 0;
-    init_variable(index_i,size);
-
-    for (int i=loc_istart;i<loc_iend;i++) {
-        for(int e=cp2kCSRmat.rowptr_local[i]-1;e<cp2kCSRmat.rowptr_local[i+1]-1;e++){
-            if(cp2kCSRmat.colind_local[e]-1>=jstart && cp2kCSRmat.colind_local[e]-1<jend){
-                index_i[i-loc_istart]++;
-                index_j[n_nonzeros]=cp2kCSRmat.colind_local[e]-jstart;
-                nnz[n_nonzeros]=cp2kCSRmat.nzvals_local[e];
-                n_nonzeros++;
-            }
-        }
-    }
-
-    get_row_edge();
-    get_diag_pos();
-
-    if (n_nonzeros!=edge_i[size]-findx) throw CSR_Exception(__LINE__,__FILE__);
+    MPI_Comm_free(&equal_rank_comm);
 }
 
 /******************** written by SAB ********************/
@@ -2184,6 +2188,55 @@ void TCSR<T>::reducescatter(TCSR<T>*matdist,MPI_Comm my_comm)
     MPI_Reduce_scatter(nnz,matdist->nnz,recvcounts,give_me_MPI_datatype(nnz),MPI_SUM,my_comm);
 
     delete[] recvcounts;
+}
+
+/************************************************************************************************/
+
+template <class T>
+void TCSR<T>::write_back(cp2k_csr_interop_type& cp2kCSRmat,MPI_Comm my_comm_in,int *sizes,int outsize,int cutoutl,int cutoutr,MPI_Comm my_comm_out)
+{
+    int iam,insize;
+    MPI_Comm_size(my_comm_in,&insize);
+    MPI_Comm_rank(my_comm_in,&iam);
+    int rank_my_comm_out;
+    MPI_Comm_rank(my_comm_out,&rank_my_comm_out);
+    MPI_Comm equal_rank_comm;
+    MPI_Comm_split(my_comm_in,rank_my_comm_out,iam,&equal_rank_comm);
+    MPI_Allreduce(MPI_IN_PLACE,nnz,n_nonzeros,give_me_MPI_datatype(nnz),MPI_SUM,equal_rank_comm);
+    MPI_Comm_free(&equal_rank_comm);
+
+    int *frows_out = new int[outsize+1];
+    frows_out[0]=0;
+    for (int i=0;i<outsize;i++) frows_out[i+1]=frows_out[i]+sizes[i];
+    int *displc_nnz  = new int[insize+1];
+    int *dist_nnz    = new int[insize];
+
+    for (int ir=0;ir<outsize;ir++) {
+        int displc_size=cp2kCSRmat.first_row-cutoutl-frows_out[ir];
+        if (displc_size<0)         displc_size=0;
+        if (displc_size>sizes[ir]) displc_size=sizes[ir];
+        int displc_size_next=cp2kCSRmat.first_row+cp2kCSRmat.nrows_local-cutoutl-frows_out[ir];
+        if (displc_size_next<0)         displc_size_next=0;
+        if (displc_size_next>sizes[ir]) displc_size_next=sizes[ir];
+        int dist_size=displc_size_next-displc_size;
+        int start_size=0;
+        int end_size=cp2kCSRmat.nrows_local;
+        if (displc_size==0 && dist_size>0) start_size=cutoutl+frows_out[ir]-cp2kCSRmat.first_row;
+        if (displc_size==sizes[ir]-dist_size && dist_size>0) end_size=start_size+dist_size;
+        int dist_nnz_local=0;
+        if (dist_size>0) dist_nnz_local=cp2kCSRmat.rowptr_local[end_size]-cp2kCSRmat.rowptr_local[start_size];
+        int start_nnz=cp2kCSRmat.rowptr_local[start_size]-1;
+        MPI_Allgather(&dist_nnz_local,1,MPI_INT,dist_nnz,1,MPI_INT,my_comm_in);
+        displc_nnz[0]=0;
+        for (int i=0;i<insize;i++) {
+            displc_nnz[i+1]=displc_nnz[i]+dist_nnz[i];
+        }
+        MPI_Scatterv(nnz,dist_nnz,displc_nnz,give_me_MPI_datatype(nnz),&cp2kCSRmat.nzvals_local[start_nnz],dist_nnz[iam],give_me_MPI_datatype(nnz),ir,my_comm_in);
+    }
+
+    delete[] frows_out;
+    delete[] displc_nnz;
+    delete[] dist_nnz;
 }
 
 /************************************************************************************************/
