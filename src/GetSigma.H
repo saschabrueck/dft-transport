@@ -12,6 +12,10 @@ public:
 BoundarySelfEnergy();
 ~BoundarySelfEnergy();
 
+void Deallocate_Sigma();
+void Deallocate_Gamma();
+void Deallocate_Injection();
+void Finalize();
 int Set_master(MPI_Comm,MPI_Comm);
 int Cutout(TCSR<CPX>*,contact_type,CPX,transport_methods::transport_method,MPI_Comm);
 void Distribute(TCSR<CPX>*,MPI_Comm);
@@ -19,6 +23,8 @@ int GetSigma(MPI_Comm,int,transport_parameters*);
 
 /// Self Energy
 CPX *sigma;
+/// Gamma
+CPX *gamma;
 /// Distributed Self Energy
 TCSR<CPX> *spsigmadist;
 /// Injection
@@ -36,6 +42,7 @@ int master_rank;
 CPX energy;
 
 int compute_inj;
+int compute_gamma;
 
 contact_type contact;
 

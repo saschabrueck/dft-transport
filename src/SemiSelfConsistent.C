@@ -5,35 +5,36 @@
 #include <limits>
 #include "SemiSelfConsistent.H"
  
-int semiselfconsistent(TCSR<double> *Overlap,TCSR<double> *KohnSham,std::vector<double> muvec,std::vector<contact_type> contactvec,transport_parameters *transport_params)
+int semiselfconsistent(cp2k_csr_interop_type S,cp2k_csr_interop_type KS,cp2k_csr_interop_type *P,cp2k_csr_interop_type *PImag,std::vector<double> muvec,std::vector<contact_type> contactvec,std::vector<int> Bsizes,std::vector<int> orb_per_atom,transport_parameters *transport_params)
 {
     int iam;MPI_Comm_rank(MPI_COMM_WORLD,&iam);
     int procs;MPI_Comm_size(MPI_COMM_WORLD,&procs);
 
     int n_mu=muvec.size();
+    if (n_mu != 2) return (LOGCERR, EXIT_FAILURE);
 
     if (FEM->NAtom != transport_params->n_atoms) return (LOGCERR, EXIT_FAILURE);
 
-/*
     double *doping_atom = new double[FEM->NAtom];
     for (int ia=0;ia<FEM->NAtom;ia++) {
         doping_atom[ia]=FEM->doping[FEM->real_at_index[ia]];
     }
+    double dopingvec[2];
+    for (int i_mu=0;i_mu<n_mu;i_mu++) {
+        dopingvec[i_mu]=0;
+        for (int ia=contactvec[i_mu].atomstart;ia<contactvec[i_mu].atomstart+contactvec[i_mu].natoms;ia++) {
+            dopingvec[i_mu]+=doping_atom[ia];
+        }
+    }
     delete[] doping_atom;
-*/
 
     double *Vnew = new double[FEM->NGrid]();
     double *Vold = new double[FEM->NGrid];
-    double *Vbf = new double[Overlap->size_tot];
+    double *Vatom = new double[FEM->NAtom];
     double *rho_atom = new double[2*FEM->NAtom]();//ZERO IN THE SECOND COMPONENT
     double *rho_atom_previous = new double[2*FEM->NAtom];
-    double *rho_dist = new double[FEM->NAtom];
     double *drho_atom_dV = new double[2*FEM->NAtom]();
     double *drho_atom_dV_previous = new double[2*FEM->NAtom];
-    int *atom_of_bf = new int[Overlap->size_tot];
-    for (int ibf=0;ibf<Overlap->size_tot;ibf++) {
-        atom_of_bf[ibf]=ibf/(Overlap->size_tot/FEM->NAtom);//ONLY IF EQUAL NUMBER OF BASIS FUNCTIONS FOR EACH ATOMS
-    }
 
     double Temp=transport_params->temperature;
     double Vs=voltage->Vsmin;
@@ -55,11 +56,11 @@ int semiselfconsistent(TCSR<double> *Overlap,TCSR<double> *KohnSham,std::vector<
         muvec[1]=mu_avg-Vd;
     } else {
         Singularities singularities(transport_params,contactvec);
-        if ( singularities.Execute(KohnSham,Overlap) ) return (LOGCERR, EXIT_FAILURE);
+        if ( singularities.Execute(KS,S) ) return (LOGCERR, EXIT_FAILURE);
         for (int i_mu=0;i_mu<n_mu;i_mu++) muvec[i_mu]=singularities.determine_fermi(contactvec[i_mu].n_ele,i_mu);
         Vm=std::accumulate(muvec.begin(),muvec.end(),0.0)/n_mu;
-        muvec[0]=singularities.determine_fermi(contactvec[0].n_ele,0);
-        muvec[1]=singularities.determine_fermi(contactvec[1].n_ele,1);
+        muvec[0]=singularities.determine_fermi(contactvec[0].n_ele+dopingvec[0],0);
+        muvec[1]=singularities.determine_fermi(contactvec[1].n_ele+dopingvec[1],1);
         double mu_avg=std::accumulate(muvec.begin(),muvec.end(),0.0)/n_mu;
         dV=(muvec[0]-muvec[1])/2.0;
         Vg+=mu_avg-*min_element(singularities.energies_cb.begin(),singularities.energies_cb.end());
@@ -70,8 +71,6 @@ int semiselfconsistent(TCSR<double> *Overlap,TCSR<double> *KohnSham,std::vector<
 
 if (!iam) cout << "FERMI LEVEL LEFT " << muvec[0] << " RIGHT " << muvec[1] << endl;
 if (!iam) cout << "GATE POTENTIAL " << Vg << endl;
-
-    std::vector<double> nuclearchargeperatom(FEM->NAtom,-(2.0*transport_params->n_occ)/FEM->NAtom);
 
     double Ls=nanowire->Ls;
     double Lc=nanowire->Lc;
@@ -128,11 +127,6 @@ for (int ig=0;ig<FEM->NAtom;ig++) rhofile<<Vnew[FEM->real_at_index[ig]]<<endl;
 rhofile.close();
 }
 
-    double *Overlap_nnz = new double[Overlap->n_nonzeros];
-    c_dcopy(Overlap->n_nonzeros,Overlap->nnz,1,Overlap_nnz,1);
-    double *KohnSham_nnz = new double[KohnSham->n_nonzeros];
-    c_dcopy(KohnSham->n_nonzeros,KohnSham->nnz,1,KohnSham_nnz,1);
-
     double residual=(numeric_limits<double>::max)();
     double density_old=(numeric_limits<double>::max)();
     double density_new;
@@ -140,57 +134,23 @@ rhofile.close();
     int max_iter=parameter->poisson_iteration;
     for (int i_iter=1;i_iter<=max_iter;i_iter++) {
 
-        double sabtime=get_time(0.0);
-        c_dcopy(Overlap->n_nonzeros,Overlap_nnz,1,Overlap->nnz,1);
-        c_dcopy(KohnSham->n_nonzeros,KohnSham_nnz,1,KohnSham->nnz,1);
-        for (int ibf=0;ibf<Overlap->size_tot;ibf++) {
-            Vbf[ibf]=Vnew[FEM->real_at_index[atom_of_bf[ibf]]];
-        }
-        KohnSham->add_pot(Overlap,Vbf);
         for (int ia=0;ia<FEM->NAtom;ia++) {
-            Vbf[ia]=Vm+Vnew[FEM->real_at_index[ia]];
+            Vatom[ia]=Vnew[FEM->real_at_index[ia]];//add Vm here?
         }
+        double sabtime=get_time(0.0);
         Energyvector energyvector;
-        if (energyvector.Execute(Overlap,KohnSham,muvec,contactvec,transport_params)) return (LOGCERR, EXIT_FAILURE);
-
+        if (energyvector.Execute(S,KS,P,PImag,muvec,contactvec,Bsizes,orb_per_atom,Vatom,rho_atom,transport_params)) return (LOGCERR, EXIT_FAILURE);
         if (!iam) cout << "TIME FOR SCHROEDINGER " << get_time(sabtime) << endl;
 
-        for (int i=0;i<Overlap->n_nonzeros;i++) Overlap->nnz[i]*=Overlap_nnz[i];
-        c_dscal(FEM->NAtom,0.0,rho_dist,1);
-        Overlap->atom_allocate(atom_of_bf,rho_dist,2.0);
-        MPI_Allreduce(rho_dist,rho_atom,FEM->NAtom,MPI_DOUBLE,MPI_SUM,MPI_COMM_WORLD);
-        if (!iam) {
-/*
-            cout << "Number of electrons per unit cell";
-            for (int icell=0;icell<ncells;icell++) {
-                double e_per_unit_cell=0.0;
-                for (int iatom=icell*FEM->NAtom/ncells;iatom<(icell+1)*FEM->NAtom/ncells;iatom++) {
-                    e_per_unit_cell+=rho_atom[iatom];
-                }
-                cout << " " << e_per_unit_cell;
-            }
-            cout << endl;
-*/
-            double e_total=0.0;
-            for (int iatom=0;iatom<FEM->NAtom;iatom++) {
-                e_total+=rho_atom[iatom];
-            }
-            cout << "Total number of electrons " << e_total << endl;
-        }
-
+if(!iam){
 stringstream dosstream;
 dosstream << "DOS_Profile" << i_iter;
 rename("DOS_Profile",dosstream.str().c_str());
 stringstream trastream;
 trastream << "Transmission" << i_iter;
 rename("Transmission",trastream.str().c_str());
+}
 
-        if (transport_params->n_abscissae) c_daxpy(FEM->NAtom,1.0,&nuclearchargeperatom[0],1,rho_atom,1);
-
-/*
-double offsetminval=*min_element(rho_atom,rho_atom+FEM->NAtom);
-for (int i=0;i<FEM->NAtom;i++) rho_atom[i]+=-offsetminval+0.1;
-*/
 
 if(!iam){
 stringstream mysstream;
@@ -245,15 +205,11 @@ rhofile.close();
 
     delete[] Vnew;
     delete[] Vold;
-    delete[] Vbf;
+    delete[] Vatom;
     delete[] rho_atom;
     delete[] rho_atom_previous;
-    delete[] rho_dist;
     delete[] drho_atom_dV;
     delete[] drho_atom_dV_previous;
-    delete[] atom_of_bf;
-    delete[] Overlap_nnz;
-    delete[] KohnSham_nnz;
 
     return 0;
 }

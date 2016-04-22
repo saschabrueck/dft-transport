@@ -17,20 +17,90 @@ Energyvector::~Energyvector()
 {
 }
 
-int Energyvector::Execute(TCSR<double> *Overlap,TCSR<double> *KohnSham,std::vector<double> muvec,std::vector<contact_type> contactvec,transport_parameters *transport_params)
+int Energyvector::Execute(cp2k_csr_interop_type Overlap,cp2k_csr_interop_type KohnSham,cp2k_csr_interop_type *P,cp2k_csr_interop_type *PImag,std::vector<double> muvec,std::vector<contact_type> contactvec,std::vector<int> Bsizes,std::vector<int> orb_per_at,double *Vatom,double *rho_atom,transport_parameters *transport_params)
 {
+#ifdef SPLITSOLVE
+    char gpu_string[255];
+    set_gpu(0,gpu_string);
+#endif
     double sabtime;
-// allocate matrices to gather on every node
 sabtime=get_time(0.0);
     MPI_Comm matrix_comm;
-    MPI_Comm eq_rank_matrix_comm;
-    MPI_Comm_split(MPI_COMM_WORLD,iam/transport_params->tasks_per_point,iam,&matrix_comm);
-    MPI_Comm_split(MPI_COMM_WORLD,iam%transport_params->tasks_per_point,iam,&eq_rank_matrix_comm);
-    TCSR<double> *KohnShamCollect = new TCSR<double>(eq_rank_matrix_comm,KohnSham);
-    TCSR<double> *OverlapCollect  = new TCSR<double>(eq_rank_matrix_comm,Overlap);
-    TCSR<double> *Ps = new TCSR<double>(OverlapCollect);
-    c_dscal(Ps->n_nonzeros,0.0,Ps->nnz,1);
+    std::vector<int> Tsizes;
+    if (transport_params->linear_solver==11) {
+        std::vector<int> Bmin(1,0);
+        for (uint i=1;i<Bsizes.size();i++) Bmin.push_back(Bmin[i-1]+Bsizes[i-1]);
+        std::vector<int> Fsizes;
+        for (uint i=0;i<Bsizes.size();i++) Fsizes.push_back(orb_per_at[Bmin[i]+Bsizes[i]]-orb_per_at[Bmin[i]]);
+        Tsizes.assign(transport_params->tasks_per_point,0);
+        double load_max=pow(double(Overlap.nrows_total/transport_params->gpus_per_point),3);
+        int stride=transport_params->tasks_per_point/transport_params->gpus_per_point;
+        int iblock=0;
+        for (int igpu=0;igpu<transport_params->gpus_per_point;igpu++) {
+            int Gsize=0;
+            Gsize+=Fsizes[iblock++];
+            Gsize+=Fsizes[iblock++];
+            while (pow(double(Gsize+Fsizes[iblock]),3)<=load_max && Fsizes.size()-iblock-1>=2*(transport_params->gpus_per_point-igpu-1) && iblock<Fsizes.size()) {
+                Gsize+=Fsizes[iblock++];
+            }
+            if (igpu==transport_params->gpus_per_point-1) {
+                while (iblock<Fsizes.size()) {
+                    Gsize+=Fsizes[iblock++];
+                }
+            }
+            int loc=stride*(2*(igpu/2)+1)-1;
+            if (igpu%2) loc++;
+            Tsizes[loc]=Gsize;
+        }
+if (!iam) {
+cout << "B" << endl;
+for (int iout=0;iout<Bsizes.size();iout++) cout << Bsizes[iout] << endl;
+cout << "F" << endl;
+for (int iout=0;iout<Fsizes.size();iout++) cout << Fsizes[iout] << endl;
+cout << "T" << endl;
+for (int iout=0;iout<transport_params->tasks_per_point;iout++) cout << Tsizes[iout] << endl;
+}
+MPI_Barrier(MPI_COMM_WORLD);
+    } else if (transport_params->linear_solver==12 || transport_params->linear_solver==13) {
+        int loc_size=int(floor(double(Overlap.nrows_total)/double(transport_params->tasks_per_point)));
+        Tsizes.assign(transport_params->tasks_per_point,loc_size);
+        Tsizes[transport_params->tasks_per_point-1]=Overlap.nrows_total-(transport_params->tasks_per_point-1)*loc_size;
+    } else if (transport_params->linear_solver==14 || transport_params->linear_solver==15) {
+        int loc_size=int(ceil(double(Overlap.nrows_total)/double(transport_params->tasks_per_point)));
+        Tsizes.assign(transport_params->tasks_per_point,loc_size);
+        Tsizes[transport_params->tasks_per_point-1]=Overlap.nrows_total-(transport_params->tasks_per_point-1)*loc_size;
+    } else {
+        return (LOGCERR, EXIT_FAILURE);
+    }
+    int cutl=transport_params->cutl;
+    int cutr=transport_params->cutr;
+    TCSR<double> *OverlapCollect  = new TCSR<double>(Overlap ,MPI_COMM_WORLD,&Tsizes[0],Tsizes.size(),cutl,cutr,&matrix_comm);
+    TCSR<double> *KohnShamCollect = new TCSR<double>(KohnSham,MPI_COMM_WORLD,&Tsizes[0],Tsizes.size(),cutl,cutr,&matrix_comm);
+    c_dscal(KohnShamCollect->n_nonzeros,transport_params->evoltfactor,KohnShamCollect->nnz,1);
+    TCSR<double> *DensReal = new TCSR<double>(OverlapCollect);
+    c_dscal(DensReal->n_nonzeros,0.0,DensReal->nnz,1);
+    TCSR<double> *DensImag = NULL;
+    if (transport_params->method!=2) {
+        DensImag = new TCSR<double>(OverlapCollect);
+        c_dscal(DensImag->n_nonzeros,0.0,DensImag->nnz,1);
+    }
 if (!iam) cout << "TIME FOR DISTRIBUTING MATRICES " << get_time(sabtime) << endl;
+
+    std::vector<int> atom_of_bf;
+    if (transport_params->method==2) {
+        int atom=0;
+        for (int ibf=0;ibf<OverlapCollect->size_tot;ibf++) {
+            if (ibf==orb_per_at[atom+1]) ++atom;
+            atom_of_bf.push_back(atom);
+        }
+        if (++atom != transport_params->n_atoms) return (LOGCERR, EXIT_FAILURE);
+        std::vector<double> Vbf;
+        for (int ibf=0;ibf<OverlapCollect->size_tot;ibf++) {
+            Vbf.push_back(Vatom[atom_of_bf[ibf]]);
+        }
+        KohnShamCollect->add_pot(OverlapCollect,&Vbf[0]);
+    }
+
     std::vector<CPX> energyvector;
     std::vector<CPX> stepvector;
     std::vector<transport_methods::transport_method> methodvector;
@@ -39,19 +109,16 @@ if (!iam) cout << "TIME FOR DISTRIBUTING MATRICES " << get_time(sabtime) << endl
     std::vector<double> currentvector(energyvector.size(),0.0);
     std::vector<double> transmission(energyvector.size(),0.0);
     std::vector<double> dos_profile(energyvector.size(),0.0);
-    int matrix_id, n_mat_comm;
-    MPI_Comm_size(eq_rank_matrix_comm,&n_mat_comm);
-    MPI_Comm_rank(eq_rank_matrix_comm,&matrix_id);
+    int matrix_id = iam/transport_params->tasks_per_point;
+    int n_mat_comm = nprocs/transport_params->tasks_per_point;
 sabtime=get_time(0.0);
     unsigned int jpos;
     for (int iseq=0;iseq<int(ceil(double(energyvector.size())/n_mat_comm));iseq++)
         if ( (jpos=matrix_id+iseq*n_mat_comm)<energyvector.size())
             if (abs(stepvector[jpos])>0.0)
-                if (density(KohnShamCollect,OverlapCollect,Ps,energyvector[jpos],stepvector[jpos],methodvector[jpos],muvec,contactvec,currentvector[jpos],transmission[jpos],dos_profile[jpos],propagating_sizes[jpos],transport_params,jpos,matrix_comm))
+                if (density(KohnShamCollect,OverlapCollect,DensReal,DensImag,energyvector[jpos],stepvector[jpos],methodvector[jpos],muvec,contactvec,currentvector[jpos],transmission[jpos],dos_profile[jpos],propagating_sizes[jpos],Bsizes,orb_per_at,transport_params,jpos,matrix_comm))
                     return (LOGCERR, EXIT_FAILURE);
 if (!iam) cout << "TIME FOR DENSITY " << get_time(sabtime) << endl;
-    delete KohnShamCollect;
-    delete OverlapCollect;
 // trPS per energy point
     std::vector<double> currentvector2(energyvector.size(),0.0);
     std::vector<double> transmission2(energyvector.size(),0.0);
@@ -91,19 +158,30 @@ if (!iam) cout << "TIME FOR DENSITY " << get_time(sabtime) << endl;
     }
     if (!iam) cout << "CURRENT IS " << c_ddot(energyvector.size(),&currentvector2[0],1,(double*)&stepvector[0],2) << endl;
 
-    MPI_Reduce(Ps->nnz,Overlap->nnz,Ps->n_nonzeros,MPI_DOUBLE,MPI_SUM,0,eq_rank_matrix_comm);
-    delete Ps;
+    if (transport_params->method!=2) {
+        DensReal->write_back(*P    ,MPI_COMM_WORLD,&Tsizes[0],Tsizes.size(),cutl,cutr,matrix_comm);
+        DensImag->write_back(*PImag,MPI_COMM_WORLD,&Tsizes[0],Tsizes.size(),cutl,cutr,matrix_comm);
+    } else {
+        std::vector<double> rho_dist(transport_params->n_atoms,0.0);
+        DensReal->atom_allocate(OverlapCollect,&atom_of_bf[0],&rho_dist[0],2.0);
+        MPI_Allreduce(&rho_dist[0],&rho_atom[0],transport_params->n_atoms,MPI_DOUBLE,MPI_SUM,MPI_COMM_WORLD);
+    }
+    delete KohnShamCollect;
+    delete OverlapCollect;
+    delete DensReal;
+    if (transport_params->method!=2) {
+        delete DensImag;
+    }
     MPI_Comm_free(&matrix_comm);
-    MPI_Comm_free(&eq_rank_matrix_comm);
 
     return 0;
 }
 
-int Energyvector::determine_energyvector(std::vector<CPX> &energyvector,std::vector<CPX> &stepvector,std::vector<transport_methods::transport_method> &methodvector,std::vector< std::vector<int> > &propagating_sizes,TCSR<double> *KohnSham,TCSR<double> *Overlap,std::vector<double> &muvec,std::vector<contact_type> contactvec,transport_parameters *transport_params)
+int Energyvector::determine_energyvector(std::vector<CPX> &energyvector,std::vector<CPX> &stepvector,std::vector<transport_methods::transport_method> &methodvector,std::vector< std::vector<int> > &propagating_sizes,cp2k_csr_interop_type KohnSham,cp2k_csr_interop_type Overlap,std::vector<double> &muvec,std::vector<contact_type> contactvec,transport_parameters *transport_params)
 {
     Singularities singularities(transport_params,contactvec);
     int determine_singularities = !(transport_params->rlaxis_integration_method!=31 && transport_params->method==2);
-    int propagating_from_bs = (determine_singularities);
+    int propagating_from_bs = (transport_params->rlaxis_integration_method==31);
     double bands_start;
     if (determine_singularities) {
 double sabtime=get_time(0.0);
@@ -219,8 +297,10 @@ int Energyvector::read_real_axis_energies(std::vector<CPX> &energyvector,std::ve
 
 int Energyvector::add_real_axis_energies(double nonequi_start,double nonequi_end,std::vector<CPX> &energyvector,std::vector<CPX> &stepvector,std::vector<transport_methods::transport_method> &methodvector,const std::vector< std::vector<double> > &energies_extremum,transport_parameters *transport_params)
 {
+    int negf_solver=0;
+    if (transport_params->eps_decay<=0.0) negf_solver=1;
     if (transport_params->rlaxis_integration_method==33) {
-        if(read_real_axis_energies(energyvector,stepvector,methodvector)) return (LOGCERR, EXIT_FAILURE);
+        if (read_real_axis_energies(energyvector,stepvector,methodvector)) return (LOGCERR, EXIT_FAILURE);
     } else {
         int num_trapez=int(abs(nonequi_end-nonequi_start)/transport_params->energy_interval)+1;
         if (transport_params->rlaxis_integration_method==32) {
@@ -230,7 +310,11 @@ int Energyvector::add_real_axis_energies(double nonequi_start,double nonequi_end
             for (int istep=0;istep<num_trapez;istep++) {
                 energyvector.push_back(nonequi_start+istep*transport_params->energy_interval);
             }
-            methodvector.assign(energyvector.size(),transport_methods::WF);
+            if (negf_solver) {
+                methodvector.assign(energyvector.size(),transport_methods::NEGF);
+            } else {
+                methodvector.assign(energyvector.size(),transport_methods::WF);
+            }
             if (energyvector.size()==1) {
                 stepvector.assign(1,CPX(1.0,0.0));
             } else {
@@ -271,7 +355,11 @@ int Energyvector::add_real_axis_energies(double nonequi_start,double nonequi_end
                     Quadrature quadrature(quadrature_types::GC,energylist[i_energies-1],energylist[i_energies],num_points_per_interval);
                     energyvector.insert(energyvector.end(),quadrature.abscissae.begin(),quadrature.abscissae.end());
                     stepvector.insert(stepvector.end(),quadrature.weights.begin(),quadrature.weights.end());
-                    methodvector.resize(energyvector.size(),transport_methods::WF);
+                    if (negf_solver) {
+                        methodvector.resize(energyvector.size(),transport_methods::NEGF);
+                    } else {
+                        methodvector.resize(energyvector.size(),transport_methods::WF);
+                    }
                 }
             }
         }

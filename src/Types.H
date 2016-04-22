@@ -439,9 +439,12 @@ struct transport_parameters
     int    num_interval;
     int    num_contacts;
     int    tasks_per_point;
+    int    gpus_per_point;
     int    NCRC_beyn;
     int    n_points_beyn;
     int    extra_scf;
+    int    cutl;
+    int    cutr;
     int    cutout;
     double colzero_threshold;
     double eps_limit;
@@ -457,11 +460,12 @@ struct transport_parameters
     double fac_neigbeyn;
     double fac_neigbeyn_cc;
     double svd_cutoff;
+    double evoltfactor;
 };
 
 struct contact_type
 {
-    int    bandwidth, ndof, start, inj_sign;
+    int    bandwidth, natoms, atomstart, ndof, start, inj_sign, sigmasize, sigmastart, triblockstart;
     double n_ele;
 };
 
