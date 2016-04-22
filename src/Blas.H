@@ -4,6 +4,8 @@
 #include "mpi.h"
 #include <iostream>
 #include "Types.H"
+#include "CWC_utility.H"
+#include "magma.h"
 
 extern "C" {
 //Blas
@@ -598,9 +600,262 @@ inline void c_zlacpy(char UPLO, int M, int N, CPX* A, int LDA, CPX* B, int LDB)
   fortran_name(zlacpy,ZLACPY)(&UPLO, &M, &N, A, &LDA, B, &LDB);
 }
 
-
-
 /*MMC*END***************************************************************************************/
+
+#ifdef SPLITSOLVE
+template <typename T>
+inline void tgemm_dev(void *handle,char transa, char transb, int m, int n, int k, T alpha, T *a,\
+		      int lda, T *b, int ldb, T beta, T *c, int ldc);
+
+template <>
+inline void tgemm_dev(void *handle,char transa, char transb, int m, int n, int k, double alpha,\
+		      double *a, int lda, double *b, int ldb, double beta, double *c, int ldc)
+{
+    dgemm_on_dev(handle,transa,transb,m,n,k,alpha,a,lda,b,ldb,beta,c,ldc);
+}
+
+template <>
+inline void tgemm_dev(void *handle,char transa, char transb, int m, int n, int k, CPX alpha,\
+		      CPX *a, int lda, CPX *b, int ldb, CPX beta, CPX *c, int ldc)
+{
+    zgemm_on_dev(handle,transa,transb,m,n,k,alpha,a,lda,b,ldb,beta,c,ldc);
+}
+#endif
+
+/*magma*****************************************************************************************/
+
+#ifdef SPLITSOLVE
+template <typename T>
+inline void tgetrf_dev(int m,int n,T *a,int lda,int *ipiv,int *info);
+
+template <>
+inline void tgetrf_dev(int m,int n,double *a,int lda,int *ipiv,int *info)
+{
+    magma_dgetrf_gpu(m,n,a,lda,ipiv,info);
+}
+
+template <>
+inline void tgetrf_dev(int m,int n,CPX *a,int lda,int *ipiv,int *info)
+{
+    magma_zgetrf_gpu(m,n,(magmaDoubleComplex_ptr)a,lda,ipiv,info);
+}
+
+/************************************************************************************************/
+
+template <typename T>
+inline void tgetrs_dev(char transa,int n,int nrhs,T *a,int lda,int *ipiv,T *b,int ldb,int *info);
+
+template <>
+inline void tgetrs_dev(char transa,int n,int nrhs,double *a,int lda,int *ipiv,double *b,int ldb,\
+		       int *info)
+{
+    magma_trans_t magma_opa;
+
+    if(transa=='N'){
+        magma_opa = MagmaNoTrans; 
+    }
+    if(transa=='T'){
+        magma_opa = MagmaTrans;
+    }
+
+    magma_dgetrs_gpu(magma_opa,n,nrhs,a,lda,ipiv,b,ldb,info);
+}
+
+template <>
+inline void tgetrs_dev(char transa,int n,int nrhs,CPX *a,int lda,int *ipiv,CPX *b,int ldb,\
+		       int *info)
+{
+    magma_trans_t magma_opa;
+
+    if(transa=='N'){
+        magma_opa = MagmaNoTrans; 
+    }
+    if(transa=='T'){
+        magma_opa = MagmaTrans;
+    }
+
+    magma_zgetrs_gpu(magma_opa,n,nrhs,(magmaDoubleComplex_ptr)a,lda,ipiv,\
+		     (magmaDoubleComplex_ptr)b,ldb,info);
+}
+
+/************************************************************************************************/
+
+template <typename T>
+inline void tgesv_dev(int n,int nrhs,T *a,int lda,int *ipiv,T *b,int ldb,int type,int *info);
+
+template <>
+inline void tgesv_dev(int n,int nrhs,double *a,int lda,int *ipiv,double *b,int ldb,int type,int *info)
+{
+    if(type){
+	magma_dgesv_nopiv_gpu(n,nrhs,a,lda,b,ldb,info);  
+    }else{
+      /*                                                                                                                   
+        magma_dgesv_nopiv_gpu(n,nrhs,a,lda,b,ldb,info);                                                                    
+      */
+        magma_dsysv_nopiv_gpu(MagmaLower,n,nrhs,a,lda,b,ldb,info);
+    }
+}
+
+template <>
+inline void tgesv_dev(int n,int nrhs,CPX *a,int lda,int *ipiv,CPX *b,int ldb,int type,int *info)
+{
+
+    if(type){
+	magma_zgesv_nopiv_gpu(n,nrhs,(magmaDoubleComplex_ptr)a,lda,(magmaDoubleComplex_ptr)b,\
+			      ldb,info);
+    }else{
+      /*                                                                                                 
+        magma_zgesv_nopiv_gpu(n,nrhs,(magmaDoubleComplex_ptr)a,lda,(magmaDoubleComplex_ptr)b,\
+			      ldb,info);                                                                                         
+      */
+        magma_zhesv_nopiv_gpu(MagmaLower,n,nrhs,(magmaDoubleComplex_ptr)a,lda,(magmaDoubleComplex_ptr)b,\
+                              ldb,info);
+    }
+}
+
+/************************************************************************************************/
+
+template <typename T>
+inline void tgetri_dev(int n,T *a,int lda,int *ipiv,T *work,int lwork,int *info);
+
+template <>
+inline void tgetri_dev(int n,double *a,int lda,int *ipiv,double *work,int lwork,int *info)
+{
+    magma_dgetri_gpu(n,a,lda,ipiv,work,lwork,info);
+}
+
+template <>
+inline void tgetri_dev(int n,CPX *a,int lda,int *ipiv,CPX *work,int lwork,int *info)
+{
+    magma_zgetri_gpu(n,(magmaDoubleComplex_ptr)a,lda,ipiv,(magmaDoubleComplex_ptr)work,lwork,info);
+}
+
+/************************************************************************************************/
+
+inline void zgetrf_nopiv_dev(int m,int n,CPX *a,int lda,int *info)
+{
+    magma_zgetrf_nopiv_gpu(m,n,(magmaDoubleComplex_ptr)a,lda,info);
+}
+
+/************************************************************************************************/
+
+inline void zgetri_dev(int n,CPX *a,int lda,int *ipiv,CPX *work,int lwork,int *info)
+{
+    magma_zgetri_gpu(n,(magmaDoubleComplex_ptr)a,lda,ipiv,(magmaDoubleComplex_ptr)work,lwork,info);
+}
+
+/************************************************************************************************/
+
+inline void zgetrs_nopiv_dev(char transa,int n,int nrhs,CPX *a,int lda,CPX *b,int ldb,int *info)
+{
+    magma_trans_t magma_opa;
+
+    if(transa=='N'){
+        magma_opa = MagmaNoTrans; 
+    }
+    if(transa=='T'){
+        magma_opa = MagmaTrans;
+    }
+
+    magma_zgetrs_nopiv_gpu(magma_opa,n,nrhs,(magmaDoubleComplex_ptr)a,lda,\
+			   (magmaDoubleComplex_ptr)b,ldb,info);
+}
+
+/************************************************************************************************/
+
+#endif
+
+/************************************************************************************************/
+
+#ifdef SPLITSOLVE
+template <typename T>
+inline void copy_csr_to_device(int size,int n_nonzeros,int *hedge_i,int *hindex_j,T *hnnz,\
+			       int *dedge_i,int *dindex_j,T *dnnz);
+
+template <>
+inline void copy_csr_to_device(int size,int n_nonzeros,int *hedge_i,int *hindex_j,double *hnnz,\
+			       int *dedge_i,int *dindex_j,double *dnnz)
+{
+    d_copy_csr_to_device(size,n_nonzeros,hedge_i,hindex_j,hnnz,dedge_i,dindex_j,dnnz);
+}
+
+template <>
+inline void copy_csr_to_device(int size,int n_nonzeros,int *hedge_i,int *hindex_j,CPX *hnnz,\
+			       int *dedge_i,int *dindex_j,CPX *dnnz)
+{
+    z_copy_csr_to_device(size,n_nonzeros,hedge_i,hindex_j,hnnz,dedge_i,dindex_j,dnnz);
+}
+
+/************************************************************************************************/
+
+template <typename T>
+inline void init_var_on_dev(T *var,int N,cudaStream_t stream);
+
+template <>
+inline void init_var_on_dev(double *var,int N,cudaStream_t stream){
+    d_init_var_on_dev(var,N,stream);
+}
+
+template <>
+inline void init_var_on_dev(CPX *var,int N,cudaStream_t stream){
+    z_init_var_on_dev(var,N,stream);
+}
+
+/************************************************************************************************/
+
+template <typename T>
+inline void init_eye_on_dev(T *var,int N,cudaStream_t stream);
+
+template <>
+inline void init_eye_on_dev(double *var,int N,cudaStream_t stream){
+    d_init_eye_on_dev(var,N,stream);
+}
+
+template <>
+inline void init_eye_on_dev(CPX *var,int N,cudaStream_t stream){
+    z_init_eye_on_dev(var,N,stream);
+}
+
+/************************************************************************************************/
+
+template <typename T>
+inline void csr_mult_f(void *handle,int m,int n,int k,int n_nonzeros,int *Aedge_i,int *Aindex_j,\
+		       T *Annz,T alpha,T *B,T beta,T *C);
+
+template <>
+inline void csr_mult_f(void *handle,int m,int n,int k,int n_nonzeros,int *Aedge_i,int *Aindex_j,\
+		       double *Annz,double alpha,double *B,double beta,double *C)
+{
+    d_csr_mult_f(handle,m,n,k,n_nonzeros,Aedge_i,Aindex_j,Annz,alpha,B,beta,C);
+}
+
+template <>
+inline void csr_mult_f(void *handle,int m,int n,int k,int n_nonzeros,int *Aedge_i,int *Aindex_j,\
+		       CPX *Annz,CPX alpha,CPX *B,CPX beta,CPX *C)
+{
+    z_csr_mult_f(handle,m,n,k,n_nonzeros,Aedge_i,Aindex_j,Annz,alpha,B,beta,C);
+}
+
+/************************************************************************************************/
+
+template <typename T>
+inline void transpose_matrix(T *odata,T *idata,int size_x,int size_y);
+
+template <>
+inline void transpose_matrix(double *odata,double *idata,int size_x,int size_y)
+{
+    d_transpose_matrix(odata,idata,size_x,size_y);
+}
+
+template <>
+inline void transpose_matrix(CPX *odata,CPX *idata,int size_x,int size_y)
+{
+    z_transpose_matrix(odata,idata,size_x,size_y);
+}
+
+#endif
+
+/************************************************************************************************/
 
 #endif
 

@@ -23,6 +23,8 @@ extern "C" {
            int     num_interval;
            int     num_contacts;
            int     tasks_per_point;
+           int     gpus_per_point;
+           int     n_blocks;
            int     n_points_beyn;
            int     ncrc_beyn;
            int     cutout[2];
@@ -43,6 +45,7 @@ extern "C" {
            int*    contacts_data;
            int*    nsgf;
            double* zeff;
+           int*    tridiag_blocks;
            bool    extra_scf;
            } cp2k_transport_parameters;
 
@@ -63,8 +66,8 @@ extern "C" {
            } cp2k_csr_interop_type;
 
 /* funtion pointer type pointing to a C routine that takes the S and H matrices as input and outputs a P matrix */
-   typedef void(*ptr2function) (cp2k_transport_parameters, cp2k_csr_interop_type, cp2k_csr_interop_type, cp2k_csr_interop_type *);
-   void c_scf_method(cp2k_transport_parameters cp2k_transport_params, cp2k_csr_interop_type S, cp2k_csr_interop_type KS, cp2k_csr_interop_type * P);
+   typedef void(*ptr2function) (cp2k_transport_parameters, cp2k_csr_interop_type, cp2k_csr_interop_type, cp2k_csr_interop_type *, cp2k_csr_interop_type *);
+   void c_scf_method(cp2k_transport_parameters cp2k_transport_params, cp2k_csr_interop_type S, cp2k_csr_interop_type KS, cp2k_csr_interop_type * P, cp2k_csr_interop_type * PImag);
 
 /* routines for initializing and finalizing a CP2K run and setting up and destroying CP2K environments */
    void cp_c_init_cp2k(int *init_mpi, int *ierr);

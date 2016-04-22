@@ -75,6 +75,7 @@ extern "C" {
                                        int*,int*,double*,double*,int*,int*,double*,int*,int*,\
                                        double*,double*,CPX*,int*,int*,int*,CPX*,int*,double*,\
                                        int*,int*,int*,int*,int*,double*,int*);
+    void fortran_name(pdgemr2d,PDGEMR2D)(int*,int*,double*,int*,int*,int*,double*,int*,int*,int*,int*);
     void fortran_name(pzgemr2d,PZGEMR2D)(int*,int*,CPX*,int*,int*,int*,CPX*,int*,int*,int*,int*);
     void fortran_name(pzgbtrf,PZGBTRF)(int*,int*,int*,CPX*,int*,int*,int*,CPX*,int*,CPX*,\
                                        int*,int*);
@@ -407,6 +408,14 @@ inline void c_pzhegvx(int ibtype, char jobz, char range, char uplo, int n, CPX *
     fortran_name(pzhegvx,PZHEGVX)(&ibtype,&jobz,&range,&uplo,&n,a,&ia,&ja,desca,b,&ib,&jb,descb,\
                                   &vl,&vu,&il,&iu,&abstol,m,nz,w,&orfac,z,&iz,&jz,descz,\
                                   work,&lwork,rwork,&lrwork,iwork,&liwork,ifail,iclustr,gap,info);
+}
+
+/************************************************************************************************/
+
+inline void c_pdgemr2d(int m,int n,double *a,int ia,int ja,int *desca,\
+                       double *b,int ib,int jb,int *descb,int ictxt)
+{
+    fortran_name(pdgemr2d,PDGEMR2D)(&m,&n,a,&ia,&ja,desca,b,&ib,&jb,descb,&ictxt);
 }
 
 /************************************************************************************************/

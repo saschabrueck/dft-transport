@@ -16,6 +16,7 @@ BoundarySelfEnergy::BoundarySelfEnergy()
 {
     sigma = NULL;
     inj = NULL;
+    gamma = NULL;
     spsigmadist = NULL;
     spainjdist = NULL;
     lambdapro = NULL;
@@ -30,15 +31,51 @@ BoundarySelfEnergy::BoundarySelfEnergy()
     H = NULL;
 
     compute_inj=0;
+    compute_gamma=0;
 }
 
 BoundarySelfEnergy::~BoundarySelfEnergy()
 {
-    delete spsigmadist;
+    if (sigma || inj || gamma || spsigmadist || spainjdist || lambdapro || H || H0 || H1 || H1t ) throw std::exception();
+}
 
+void BoundarySelfEnergy::Deallocate_Sigma()
+{
+    delete spsigmadist;
+    spsigmadist = NULL;
+}
+
+void BoundarySelfEnergy::Deallocate_Gamma()
+{
+    if (compute_gamma) {
+        delete[] gamma;
+        gamma = NULL;
+    }
+}
+
+void BoundarySelfEnergy::Deallocate_Injection()
+{
     if (compute_inj) {
         delete spainjdist;
+        spainjdist = NULL;
         delete[] lambdapro;
+        lambdapro = NULL;
+    }
+}
+
+void BoundarySelfEnergy::Finalize()
+{
+    delete[] sigma;
+    sigma = NULL;
+    if (compute_inj) {
+        delete[] inj;
+        inj = NULL;
+        delete[] lambdapro;
+        lambdapro = NULL;
+    }
+    if (compute_gamma) {
+        delete[] gamma;
+        gamma = NULL;
     }
 }
 
@@ -78,14 +115,17 @@ int BoundarySelfEnergy::Cutout(TCSR<CPX> *SumHamC,contact_type pcontact,CPX pene
 {
     energy=penergy;
     if (method==transport_methods::WF) compute_inj=1;
-    if (imag(energy) && compute_inj) return (LOGCERR, EXIT_FAILURE);
+    if (method==transport_methods::NEGF) compute_gamma=1;
 
     contact=pcontact;
-    int start=contact.start;
     int inj_sign=contact.inj_sign;
     int ndof=contact.ndof;
     int bandwidth=contact.bandwidth;
     int ntriblock=bandwidth*ndof;
+    int start=contact.start;
+    if (inj_sign==-1) {
+        start+=-(bandwidth-1)*ndof;
+    }
 
     int iam,nprocs;
     MPI_Comm_size(matrix_comm,&nprocs);
@@ -146,10 +186,25 @@ void BoundarySelfEnergy::Distribute(TCSR<CPX> *SumHamC,MPI_Comm matrix_comm)
 {
     int iam;
     MPI_Comm_rank(matrix_comm,&iam);
-    int start=contact.start;
     int ndof=contact.ndof;
     int bandwidth=contact.bandwidth;
     int ntriblock=bandwidth*ndof;
+    int start=contact.start;
+    if (contact.inj_sign==-1) {
+        start+=-(bandwidth-1)*ndof;
+    }
+
+    if (compute_gamma) {
+        gamma = new CPX[ntriblock*ntriblock];
+        if (iam==master_rank) {
+            full_transpose(ntriblock,ntriblock,sigma,gamma);
+            c_dscal(ntriblock*ntriblock,-1.0,((double*)gamma)+1,2);
+            c_zaxpy(ntriblock*ntriblock,CPX(-1.0,0.0),sigma,1,gamma,1);
+            c_zscal(ntriblock*ntriblock,CPX(0.0,-1.0),gamma,1);
+        }
+        MPI_Bcast(gamma,ntriblock*ntriblock,MPI_DOUBLE_COMPLEX,master_rank,matrix_comm);
+    }
+
     TCSR<CPX> *spsigma = NULL;
     if (iam==master_rank) {
         spsigma = new TCSR<CPX>(SumHamC->size_tot,ntriblock*ntriblock,SumHamC->findx);
@@ -177,7 +232,7 @@ void BoundarySelfEnergy::Distribute(TCSR<CPX> *SumHamC,MPI_Comm matrix_comm)
         }
         spainjdist = new TCSR<CPX>(SumHamC,spainj,master_rank,matrix_comm);
         if (iam==master_rank) delete spainj;
-        }
+    }
 }
 
 int BoundarySelfEnergy::GetSigma(MPI_Comm boundary_comm,int evecpos,transport_parameters *parameter_sab)
@@ -361,6 +416,7 @@ myfile.close();
             delete H[ibw];
         }
         delete[] H;
+        H = NULL;
         if (nprotra!=nproref) return (LOGCERR, EXIT_FAILURE);
         int neigbas=nproref+ndecref;
         CPX *VT=new CPX[neigbas*ntriblock];
@@ -545,8 +601,11 @@ if (!worldrank) cout << "MATRIX MATRIX MULTIPLICATIONS FOR INJECTION " << get_ti
         delete[] veltra;
         delete[] velref;
         delete H0;
+        H0 = NULL;
         delete H1;
+        H1 = NULL;
         delete H1t;
+        H1t = NULL;
     }//end if !boundary_rank
     return 0;
 }

@@ -170,11 +170,11 @@ public:
     void psipsidagger(double*,int,double);
     void psipsidagger_transpose(CPX*,int,CPX);
     void psipsidagger_transpose(CPX*,CPX*,int,CPX);
-    void psipsidagger_transpose(TCSR<double>*,CPX*,int,CPX);
+    void psipsidagger_transpose(TCSR<double>*,CPX*,int,CPX,CPX);
     void psipsidagger_transpose(double*,int,double);
     double psipsidagger(TCSR<double>*,CPX*,CPX*,CPX*,int,int,int,CPX);
     double psipsidagger_transpose(TCSR<double>*,CPX*,CPX*,CPX*,int,int,int,CPX);
-    void atom_allocate(int*,T*,T);
+    void atom_allocate(TCSR<T>*,int*,T*,T);
     void settozeropbc(int,int);
     void removepbc(int,int);
     void tr_full_to_sparse(T*,int,int);
@@ -2294,14 +2294,14 @@ inline void TCSR<double>::psipsidagger_transpose(CPX* psi_loc,CPX* psi,int nkval
 /************************************************************************************************/
 
 template <>
-inline void TCSR<double>::psipsidagger_transpose(TCSR<double>* mat,CPX* psi,int nkval,CPX factor)
+inline void TCSR<double>::psipsidagger_transpose(TCSR<double>* mat,CPX* psi,int nkval,CPX factor, CPX factorI)
 {
     int i,e;
     for(i=0;i<size;i++){
         for(e=edge_i[i]-findx;e<edge_i[i+1]-findx;e++){
-            CPX res=factor*c_zdotc(nkval,&psi[(index_j[e]-findx)*nkval],1,&psi[(first_row+i)*nkval],1);
-            nnz[e]+=real(res);
-            mat->nnz[e]+=imag(res);
+            CPX res=c_zdotc(nkval,&psi[(index_j[e]-findx)*nkval],1,&psi[(first_row+i)*nkval],1);
+            nnz[e]+=real(factor*res);
+            mat->nnz[e]+=imag(factorI*res);
         }
     }
 }
@@ -2370,12 +2370,12 @@ inline double TCSR<double>::psipsidagger_transpose(TCSR<double>* mat,CPX* psi,CP
 /************************************************************************************************/
 
 template <class T>
-void TCSR<T>::atom_allocate(int* atom_of_bf,T* result,T factor)
+void TCSR<T>::atom_allocate(TCSR<T>* mat,int* atom_of_bf,T* result,T factor)
 {
     int i,e;
     for(i=0;i<size;i++){
         for(e=edge_i[i]-findx;e<edge_i[i+1]-findx;e++){
-            result[atom_of_bf[first_row+i]]+=factor*nnz[e];
+            result[atom_of_bf[first_row+i]]+=factor*nnz[e]*mat->nnz[e];
         }
     }
 }
