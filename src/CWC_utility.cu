@@ -1,3 +1,4 @@
+#ifdef SPLITSOLVE
 #include <stdio.h>
 #include "Types.H"
 #include "cublas_v2.h"
@@ -675,3 +676,5 @@ void z_symmetrize_matrix_2(CPX *matrix,int N,cudaStream_t stream){
 
     z_symmetrize_2<<< grid, threads, 0, stream >>>((cuDoubleComplex*)matrix, N);
 }
+
+#endif

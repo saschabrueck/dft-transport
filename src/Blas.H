@@ -4,8 +4,10 @@
 #include "mpi.h"
 #include <iostream>
 #include "Types.H"
+#ifdef SPLITSOLVE
 #include "CWC_utility.H"
 #include "magma.h"
+#endif
 
 extern "C" {
 //Blas

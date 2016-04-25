@@ -429,9 +429,11 @@ sabtime=get_time(d_zer);
         }
         delete solver;
         delete HamSig;
+#ifdef SPLITSOLVE
         if (solver_method==11 && boundary_id==n_mu) {
             cudaFreeHost(M_host);
         }
+#endif
 if (!worldrank) cout << "TIME FOR WAVEFUNCTION SPARSE SOLVE PHASE " << get_time(sabtime) << endl;
         int solsize=Ps->size_tot;
         CPX* Sol = new CPX[solsize*(nprol+npror)];

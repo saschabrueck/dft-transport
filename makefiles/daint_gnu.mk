@@ -4,9 +4,9 @@ CPP = $(SCOREP) CC
 GCC = cc
 NVCC = nvcc
 
-#CFLAGS = -Wall -fopenmp -O3 -ffast-math -funroll-loops -march=native
+CFLAGS = -Wall -fopenmp -O3 -ffast-math -funroll-loops -march=native
 #CFLAGS = -Wall -dynamic -fno-omit-frame-pointer -O1 -g -fsanitize=leak
-CFLAGS = -Wall -g -fopenmp
+#CFLAGS = -Wall -g -fopenmp
 CXXFLAGS = -std=c++11 $(CFLAGS)
 NVCCFLAGS = -arch=compute_35 -code=sm_35
 
