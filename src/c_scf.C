@@ -1,5 +1,5 @@
 #include "Types.H"
-#include "libcp2k.H"
+#include "libcp2k.h"
 #include "DiagScaLapack.H"
 #include "SemiSelfConsistent.H"
 #include "EnergyVector.H"

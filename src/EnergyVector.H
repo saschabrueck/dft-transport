@@ -5,7 +5,7 @@
 #ifndef __ENERGYVECTOR
 #define __ENERGYVECTOR
 
-#include "libcp2k.H"
+#include "libcp2k.h"
 #include "Types.H"
 
 class Energyvector {
