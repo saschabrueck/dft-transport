@@ -4,6 +4,7 @@
 #include "SemiSelfConsistent.H"
 #include "EnergyVector.H"
 #include "WriteMatrix.H"
+#include "c_scf.H"
 
 /**  
  *   \brief Takes the overlap (S) and Kohn-Sham (KS) matrices as input and returns a density matrix (P).
@@ -67,6 +68,8 @@ void c_scf_method(cp2k_transport_parameters cp2k_transport_params, cp2k_csr_inte
     for (int i=0;i<cp2k_transport_params.n_blocks;i++) {
         Bsizes.push_back(cp2k_transport_params.tridiag_blocks[i]);
     }
+    Bsizes[0]-=cp2k_transport_params.cutout[0];
+    Bsizes[Bsizes.size()-1]-=cp2k_transport_params.cutout[1];
     std::vector<int> orb_per_atom(1,0);
     for (int iii=0;iii<transport_params->n_atoms;iii++) {
         orb_per_atom.push_back(orb_per_atom[iii]+cp2k_transport_params.nsgf[cp2k_transport_params.cutout[0]+iii]);//partial_sum
@@ -97,6 +100,7 @@ void c_scf_method(cp2k_transport_parameters cp2k_transport_params, cp2k_csr_inte
         contactvec[i_t].natoms    = n_atoms_c;
         contactvec[i_t].atomstart = atom_start-cp2k_transport_params.cutout[0];
         contactvec[i_t].start     = std::accumulate(&cp2k_transport_params.nsgf[cp2k_transport_params.cutout[0]],&cp2k_transport_params.nsgf[atom_start],0);
+        contactvec[i_t].start_bs  = std::accumulate(&cp2k_transport_params.nsgf[0],&cp2k_transport_params.nsgf[atom_start],0);
         contactvec[i_t].ndof      = std::accumulate(&cp2k_transport_params.nsgf[atom_start],&cp2k_transport_params.nsgf[atom_stop],0);
         contactvec[i_t].n_ele     = std::accumulate(&cp2k_transport_params.zeff[atom_start],&cp2k_transport_params.zeff[atom_stop],0.0);
     }

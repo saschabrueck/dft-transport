@@ -126,7 +126,7 @@ template <class T>
 void InjectionBeyn<T>::initialize(int ND,int NP,int NM)
 {
 
-    NM_input = min(2*NM,ND);
+    NM_input = min(2*NM,ND/slab_per_bc);
  
 }
 
@@ -838,24 +838,27 @@ void InjectionBeyn<T>::init_matrix_double(TCSR<CPX> *A,TCSR<CPX> *B,TCSR<T> *D,\
 		B->n_nonzeros++;
 	    }
 
-	    row_ind = i+ND/2-2*ND/slab_per_bc;
+            if(slab_per_bc>2){ 
 
-	    for(j=D->edge_i[row_ind]-D->findx;j<D->edge_i[row_ind+1]-D->findx;j++){
+	        row_ind = i+ND/2-2*ND/slab_per_bc;
 
-	        col_ind           = D->index_j[j]-D->findx+ND/slab_per_bc;
+	        for(j=D->edge_i[row_ind]-D->findx;j<D->edge_i[row_ind+1]-D->findx;j++){
 
-		if((col_ind>=ND/2)&&(col_ind<ND-ND/slab_per_bc)){
-		    line[col_ind] = convert<CPX,T>(D->nnz[j]);
-		}
-	    }
+	            col_ind           = D->index_j[j]-D->findx+ND/slab_per_bc;
 
-	    for(j=P->edge_i[row_ind]-P->findx;j<P->edge_i[row_ind+1]-P->findx;j++){
+		    if((col_ind>=ND/2)&&(col_ind<ND-ND/slab_per_bc)){
+		        line[col_ind] = convert<CPX,T>(D->nnz[j]);
+		    }
+	        }
 
-	        col_ind           = P->index_j[j]-P->findx+ND-NP+ND/slab_per_bc;
+	        for(j=P->edge_i[row_ind]-P->findx;j<P->edge_i[row_ind+1]-P->findx;j++){
 
-		if((col_ind>=ND/2)&&(col_ind<ND-ND/slab_per_bc)){
-		    line[col_ind] = line[col_ind]+convert<CPX,T>(P->nnz[j]);
-		}
+	            col_ind           = P->index_j[j]-P->findx+ND-NP+ND/slab_per_bc;
+
+		    if((col_ind>=ND/2)&&(col_ind<ND-ND/slab_per_bc)){
+		        line[col_ind] = line[col_ind]+convert<CPX,T>(P->nnz[j]);
+		    }
+	        }
 	    }
 
 	    for(j=0;j<D->size;j++){
