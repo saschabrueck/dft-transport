@@ -1,7 +1,7 @@
 #include <string.h>
 #include <mpi.h>
 #include <assert.h>
-#include "libcp2k.H"
+#include "libcp2k.h"
 
 // OMEN INPUT
 #include "Types.H"
@@ -37,8 +37,8 @@ int main (int argc, char **argv)
    char *output_file;
    char *command_file;
 #ifdef libcp2k
-   int init_mpi, finalize_mpi;
-   int error, f_env_id, natom, calc_force, n_el, n_el_pos, n_el_force;
+   force_env_t force_env;
+   int natom, n_el, n_el_pos, n_el_force;
    double e_pot;
    double *pos, *force;
 #endif
@@ -66,14 +66,10 @@ int main (int argc, char **argv)
    fcomm = MPI_Comm_c2f(mpi_comm);
 
 #ifdef libcp2k
-   init_mpi = 0;
-   finalize_mpi = 0;
-   calc_force = 1;
-
-   cp_c_init_cp2k(&init_mpi, &error);
-   cp_c_create_fenv_comm(&f_env_id, input_file, output_file, &fcomm, &error);
-   cp_c_ext_method_set_ptr(&f_env_id, &c_scf_method, &error);
-   cp_c_get_natom(&f_env_id, &natom, &error);
+   cp2k_init_without_mpi();
+   cp2k_create_force_env_comm(&force_env, input_file, output_file, fcomm);
+   cp2k_transport_set_callback(force_env, &c_scf_method);
+   cp2k_get_natom(force_env, &natom);
 
    n_el = natom*3;
    n_el_pos = natom*3;
@@ -115,12 +111,12 @@ int main (int argc, char **argv)
 
 #ifdef libcp2k
    if (!w_rank) std::cout << "Starting CP2K" << std::endl;
-   cp_c_calc_energy_force(&f_env_id, &calc_force, &error);
-   cp_c_get_energy(&f_env_id, &e_pot, &error);
-   cp_c_get_force(&f_env_id, force, &n_el_force, &error);
-   cp_c_get_pos(&f_env_id, pos, &n_el, &error);
-   cp_c_destroy_fenv(&f_env_id, &error);
-   cp_c_finalize_cp2k(&finalize_mpi, &error);
+   cp2k_calc_energy_force(force_env);
+   cp2k_get_potential_energy(force_env, &e_pot);
+   cp2k_get_forces(force_env, force, n_el_force);
+   cp2k_get_positions(force_env, pos, n_el);
+   cp2k_destroy_force_env(force_env);
+   cp2k_finalize_without_mpi();
 #else
    transport_parameters* transport_env_params = new transport_parameters();
    ifstream paraminfile;

@@ -6,7 +6,7 @@
 #include <algorithm>
 #include <complex>
 #include "Blas.H"
-#include "libcp2k.H"
+#include "libcp2k.h"
 
 #define LOGCERR std::cerr << "ERROR IN LINE " << __LINE__ << " OF FILE " << __FILE__ << std::endl
 
