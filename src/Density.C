@@ -11,6 +11,7 @@ using namespace std;
 #include "CSC.H"
 #include "LinearSolver.H"
 #include "tmprGF.H"
+#include "FullInvert.H"
 #include "Full.H"
 #include "Banded.H"
 #ifdef HAVE_MUMPS
@@ -128,75 +129,89 @@ if (!worldrank) cout << "TIME FOR ADDING SIGMA " << get_time(sabtime) << endl;
         delete SumHamC;
     }
     if (method==transport_methods::EQ) {
-        if (KohnSham->findx!=1 || Overlap->findx!=1) return (LOGCERR, EXIT_FAILURE);
- 
-        double *HS_nnz_inp = new double[2*Overlap->n_nonzeros]();
-        double *HS_nnz_out = new double[2*Overlap->n_nonzeros]();
- 
-        c_dcopy(Overlap->n_nonzeros,Overlap->nnz,1,HS_nnz_inp,2);
-        c_zscal(Overlap->n_nonzeros,-energy,(CPX*)HS_nnz_inp,1);
-        c_daxpy(Overlap->n_nonzeros,1.0,KohnSham->nnz,1,HS_nnz_inp,2);
- 
-        int n_nonzeros_global;
-        MPI_Allreduce(&Overlap->n_nonzeros,&n_nonzeros_global,1,MPI_INT,MPI_SUM,matrix_comm);
-        int info;
- 
-        PPEXSIOptions options;
-        PPEXSISetDefaultOptions(&options);
-        options.npSymbFact = 1;
-        options.ordering = 1;
+        if (solver_method==12 || solver_method==13) {
+            if (KohnSham->findx!=1 || Overlap->findx!=1) return (LOGCERR, EXIT_FAILURE);
   
-        PPEXSIPlan plan;
-        int nprowcol[2]={0,0};
-        MPI_Dims_create(matrix_procs,2,nprowcol);
-        plan = PPEXSIPlanInitialize(matrix_comm,nprowcol[0],nprowcol[1],-1,&info);
-        if (info) return (LOGCERR, EXIT_FAILURE);
-        PPEXSILoadRealSymmetricHSMatrix(plan,options,Overlap->size_tot,n_nonzeros_global,Overlap->n_nonzeros,Overlap->size,Overlap->edge_i,Overlap->index_j,HS_nnz_inp,1,NULL,&info);
-        if (info) return (LOGCERR, EXIT_FAILURE);
-        PPEXSISymbolicFactorizeComplexSymmetricMatrix(plan,options,&info);
-        if (info) return (LOGCERR, EXIT_FAILURE);
-        PPEXSISelInvComplexSymmetricMatrix(plan,options,HS_nnz_inp,HS_nnz_out,&info);
-        if (info) return (LOGCERR, EXIT_FAILURE);
-        PPEXSIPlanFinalize(plan,&info);
-        if (info) return (LOGCERR, EXIT_FAILURE);
- 
-        delete[] HS_nnz_inp;
-        c_zscal(Overlap->n_nonzeros,-weight/M_PI*CPX(0.0,1.0),(CPX*)HS_nnz_out,1);
-        dos=c_ddot(Overlap->n_nonzeros,Overlap->nnz,1,HS_nnz_out,2);
-        c_daxpy(Overlap->n_nonzeros,1.0,HS_nnz_out,2,Ps->nnz,1);
-        delete[] HS_nnz_out;
+            double *HS_nnz_inp = new double[2*Overlap->n_nonzeros]();
+            double *HS_nnz_out = new double[2*Overlap->n_nonzeros]();
+  
+            c_dcopy(Overlap->n_nonzeros,Overlap->nnz,1,HS_nnz_inp,2);
+            c_zscal(Overlap->n_nonzeros,-energy,(CPX*)HS_nnz_inp,1);
+            c_daxpy(Overlap->n_nonzeros,1.0,KohnSham->nnz,1,HS_nnz_inp,2);
+  
+            int n_nonzeros_global;
+            MPI_Allreduce(&Overlap->n_nonzeros,&n_nonzeros_global,1,MPI_INT,MPI_SUM,matrix_comm);
+            int info;
+  
+            PPEXSIOptions options;
+            PPEXSISetDefaultOptions(&options);
+            options.npSymbFact = 1;
+            options.ordering = 1;
+      
+            PPEXSIPlan plan;
+            int nprowcol[2]={0,0};
+            MPI_Dims_create(matrix_procs,2,nprowcol);
+            plan = PPEXSIPlanInitialize(matrix_comm,nprowcol[0],nprowcol[1],-1,&info);
+            if (info) return (LOGCERR, EXIT_FAILURE);
+            PPEXSILoadRealSymmetricHSMatrix(plan,options,Overlap->size_tot,n_nonzeros_global,Overlap->n_nonzeros,Overlap->size,Overlap->edge_i,Overlap->index_j,HS_nnz_inp,1,NULL,&info);
+            if (info) return (LOGCERR, EXIT_FAILURE);
+            PPEXSISymbolicFactorizeComplexSymmetricMatrix(plan,options,&info);
+            if (info) return (LOGCERR, EXIT_FAILURE);
+            PPEXSISelInvComplexSymmetricMatrix(plan,options,HS_nnz_inp,HS_nnz_out,&info);
+            if (info) return (LOGCERR, EXIT_FAILURE);
+            PPEXSIPlanFinalize(plan,&info);
+            if (info) return (LOGCERR, EXIT_FAILURE);
+  
+            delete[] HS_nnz_inp;
+            c_zscal(Overlap->n_nonzeros,-weight/M_PI*CPX(0.0,1.0),(CPX*)HS_nnz_out,1);
+            dos=c_ddot(Overlap->n_nonzeros,Overlap->nnz,1,HS_nnz_out,2);
+            c_daxpy(Overlap->n_nonzeros,1.0,HS_nnz_out,2,Ps->nnz,1);
+            delete[] HS_nnz_out;
+        } else if (solver_method==14 || solver_method==15) {
+            TCSR<CPX> *SumHamC = new TCSR<CPX>(Overlap->size,Overlap->n_nonzeros,Overlap->findx);
+            SumHamC->copy_contain(Overlap,d_one);
+            c_zscal(SumHamC->n_nonzeros,-energy,SumHamC->nnz,1);
+            c_daxpy(SumHamC->n_nonzeros,d_one,KohnSham->nnz,1,(double*)SumHamC->nnz,2);
+            FullInvert solver(SumHamC,Ps,-weight/M_PI*CPX(0.0,1.0),matrix_comm);
+            delete SumHamC;
+        } else return (LOGCERR, EXIT_FAILURE);
     } else if (method==transport_methods::GF) {
-        if (HamSig->findx!=1) return (LOGCERR, EXIT_FAILURE);
- 
-        double *HS_nnz_inp = new double[2*HamSig->n_nonzeros]();
-        c_dcopy(2*HamSig->n_nonzeros,(double*)HamSig->nnz,1,HS_nnz_inp,1);
- 
-        int n_nonzeros_global;
-        MPI_Allreduce(&HamSig->n_nonzeros,&n_nonzeros_global,1,MPI_INT,MPI_SUM,matrix_comm);
-        int info;
- 
-        PPEXSIOptions options;
-        PPEXSISetDefaultOptions(&options);
-        options.npSymbFact = 1;
-        options.ordering = 1;
+        if (solver_method==12 || solver_method==13) {
+            if (HamSig->findx!=1) return (LOGCERR, EXIT_FAILURE);
   
-        PPEXSIPlan plan;
-        int nprowcol[2]={0,0};
-        MPI_Dims_create(matrix_procs,2,nprowcol);
-        plan = PPEXSIPlanInitialize(matrix_comm,nprowcol[0],nprowcol[1],-1,&info);
-        if (info) return (LOGCERR, EXIT_FAILURE);
-        PPEXSILoadRealSymmetricHSMatrix(plan,options,HamSig->size_tot,n_nonzeros_global,HamSig->n_nonzeros,HamSig->size,HamSig->edge_i,HamSig->index_j,HS_nnz_inp,1,NULL,&info);
-        if (info) return (LOGCERR, EXIT_FAILURE);
-        PPEXSISymbolicFactorizeComplexSymmetricMatrix(plan,options,&info);
-        if (info) return (LOGCERR, EXIT_FAILURE);
-        PPEXSISelInvComplexSymmetricMatrix(plan,options,HS_nnz_inp,(double*)HamSig->nnz,&info);
-        if (info) return (LOGCERR, EXIT_FAILURE);
-        PPEXSIPlanFinalize(plan,&info);
-        if (info) return (LOGCERR, EXIT_FAILURE);
- 
-        delete[] HS_nnz_inp;
-        Ps->add_real(HamSig,-weight/M_PI*CPX(0.0,1.0));
-        delete HamSig;
+            double *HS_nnz_inp = new double[2*HamSig->n_nonzeros]();
+            c_dcopy(2*HamSig->n_nonzeros,(double*)HamSig->nnz,1,HS_nnz_inp,1);
+  
+            int n_nonzeros_global;
+            MPI_Allreduce(&HamSig->n_nonzeros,&n_nonzeros_global,1,MPI_INT,MPI_SUM,matrix_comm);
+            int info;
+  
+            PPEXSIOptions options;
+            PPEXSISetDefaultOptions(&options);
+            options.npSymbFact = 1;
+            options.ordering = 1;
+      
+            PPEXSIPlan plan;
+            int nprowcol[2]={0,0};
+            MPI_Dims_create(matrix_procs,2,nprowcol);
+            plan = PPEXSIPlanInitialize(matrix_comm,nprowcol[0],nprowcol[1],-1,&info);
+            if (info) return (LOGCERR, EXIT_FAILURE);
+            PPEXSILoadRealSymmetricHSMatrix(plan,options,HamSig->size_tot,n_nonzeros_global,HamSig->n_nonzeros,HamSig->size,HamSig->edge_i,HamSig->index_j,HS_nnz_inp,1,NULL,&info);
+            if (info) return (LOGCERR, EXIT_FAILURE);
+            PPEXSISymbolicFactorizeComplexSymmetricMatrix(plan,options,&info);
+            if (info) return (LOGCERR, EXIT_FAILURE);
+            PPEXSISelInvComplexSymmetricMatrix(plan,options,HS_nnz_inp,(double*)HamSig->nnz,&info);
+            if (info) return (LOGCERR, EXIT_FAILURE);
+            PPEXSIPlanFinalize(plan,&info);
+            if (info) return (LOGCERR, EXIT_FAILURE);
+  
+            delete[] HS_nnz_inp;
+            Ps->add_real(HamSig,-weight/M_PI*CPX(0.0,1.0));
+            delete HamSig;
+        } else if (solver_method==14 || solver_method==15) {
+            FullInvert solver(HamSig,Ps,-weight/M_PI*CPX(0.0,1.0),matrix_comm);
+            delete HamSig;
+        } else return (LOGCERR, EXIT_FAILURE);
     } else if (method==transport_methods::NEGF) {
 sabtime=get_time(d_zer);
         LinearSolver<CPX>* solver;
