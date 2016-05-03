@@ -4,7 +4,6 @@
 #include "SemiSelfConsistent.H"
 #include "EnergyVector.H"
 #include "WriteMatrix.H"
-#include "c_scf.H"
 
 /**  
  *   \brief Takes the overlap (S) and Kohn-Sham (KS) matrices as input and returns a density matrix (P).
