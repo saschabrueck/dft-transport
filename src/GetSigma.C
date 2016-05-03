@@ -310,7 +310,7 @@ int worldrank; MPI_Comm_rank(MPI_COMM_WORLD,&worldrank);
             }
         }
         InjectionIEV inj_iev;
-        inj_iev.Compute(neigval,lambdavec,eigvecc,KScpx,ndof,bandwidth,inj_sign,complexenergypoint,colzerothr,boundary_comm);
+        if (inj_iev.Compute(neigval,lambdavec,eigvecc,KScpx,ndof,bandwidth,inj_sign,complexenergypoint,colzerothr,boundary_comm)) return (LOGCERR, EXIT_FAILURE);
         if (!boundary_rank) {
             delete[] KScpx;
         }

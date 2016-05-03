@@ -75,7 +75,7 @@ int Singularities::Execute(cp2k_csr_interop_type KohnSham,cp2k_csr_interop_type 
     int kpos;
     for (int i_mu=0;i_mu<n_mu;i_mu++) {
         int inj_sign=contactvec[i_mu].inj_sign;
-        int start=contactvec[i_mu].start;
+        int start=contactvec[i_mu].start_bs;
         int bandwidth=contactvec[i_mu].bandwidth;
         int ndof=contactvec[i_mu].ndof;
         int noccunitcell=floor(contactvec[i_mu].n_ele/2.0);

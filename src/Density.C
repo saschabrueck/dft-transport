@@ -434,7 +434,7 @@ sabtime=get_time(d_zer);
             cudaFreeHost(M_host);
         }
 #endif
-if (!worldrank) cout << "TIME FOR WAVEFUNCTION SPARSE SOLVE PHASE " << get_time(sabtime) << endl;
+if (worldrank==left_gpu_rank) cout << "TIME FOR WAVEFUNCTION SPARSE SOLVE PHASE " << get_time(sabtime) << endl;
         int solsize=Ps->size_tot;
         CPX* Sol = new CPX[solsize*(nprol+npror)];
         for (int icol=0;icol<nprol+npror;icol++) {

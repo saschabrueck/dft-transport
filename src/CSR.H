@@ -158,14 +158,14 @@ public:
     int additionalentries(TCSR<T>*);
     void add(TCSR<T>*,T);
     void add_real(TCSR<CPX>*,CPX);
-    void copy_shifted(cp2k_csr_interop_type&,int,int,int,int);
+    void copy_shifted(TCSR<T>*,int,int,int,int);
     void copy_pbc_cell(contact_type,int,int,MPI_Comm);
     void add_pot(TCSR<T>*,T*);
     void Bcast(int,MPI_Comm);
     void scatter(TCSR<T>*,int,MPI_Comm);
     void reduce(int,MPI_Comm);
     void reducescatter(TCSR<T>*,MPI_Comm);
-    void write_back(cp2k_csr_interop_type&,MPI_Comm,int*,int,int,int,MPI_Comm);
+    void distribute_back(cp2k_csr_interop_type&,MPI_Comm,int*,int,int,int,MPI_Comm);
     void psipsidagger(CPX*,int,CPX);
     void psipsidagger(double*,int,double);
     void psipsidagger_transpose(CPX*,int,CPX);
@@ -1992,7 +1992,7 @@ inline void TCSR<double>::add_real(TCSR<CPX> *A,CPX factor)
 /************************************************************************************************/
 
 template <class T>
-void TCSR<T>::copy_shifted(cp2k_csr_interop_type& cp2kCSRmat,int istart, int ilength, int jstart, int jlength)
+void TCSR<T>::copy_shifted(TCSR<T>* mat,int istart, int ilength, int jstart, int jlength)
 {
     int i,e;
     T *linefull=new T[size_tot];
@@ -2002,9 +2002,9 @@ void TCSR<T>::copy_shifted(cp2k_csr_interop_type& cp2kCSRmat,int istart, int ile
         for (e=edge_i[i]-findx;e<edge_i[i+1]-findx;e++) {
             linefull[index_j[e]-findx]=nnz[e];
         }
-        for (e=cp2kCSRmat.rowptr_local[i+istart+first_row-cp2kCSRmat.first_row]-1;e<cp2kCSRmat.rowptr_local[i+istart+first_row-cp2kCSRmat.first_row+1]-1;e++) {
-            if (cp2kCSRmat.colind_local[e]-1>=jstart && cp2kCSRmat.colind_local[e]-1<jstart+jlength) {
-                cp2kCSRmat.nzvals_local[e]=linefull[cp2kCSRmat.colind_local[e]-1-jstart];
+        for (e=mat->edge_i[i+istart+first_row-mat->first_row]-mat->findx;e<mat->edge_i[i+istart+first_row-mat->first_row+1]-mat->findx;e++) {
+            if (mat->index_j[e]-mat->findx>=jstart && mat->index_j[e]-mat->findx<jstart+jlength) {
+                mat->nnz[e]=linefull[mat->index_j[e]-mat->findx-jstart];
             }
         }
     }
@@ -2193,7 +2193,7 @@ void TCSR<T>::reducescatter(TCSR<T>*matdist,MPI_Comm my_comm)
 /************************************************************************************************/
 
 template <class T>
-void TCSR<T>::write_back(cp2k_csr_interop_type& cp2kCSRmat,MPI_Comm my_comm_in,int *sizes,int outsize,int cutoutl,int cutoutr,MPI_Comm my_comm_out)
+void TCSR<T>::distribute_back(cp2k_csr_interop_type& cp2kCSRmat,MPI_Comm my_comm_in,int *sizes,int outsize,int cutoutl,int cutoutr,MPI_Comm my_comm_out)
 {
     int iam,insize;
     MPI_Comm_size(my_comm_in,&insize);
