@@ -25,7 +25,7 @@ class InjectionBeyn : public Injection<T>{
 public:
     
     InjectionBeyn(int,double);
-    InjectionBeyn(int,double,double,int,int);
+    InjectionBeyn(int,double,double,int,int,int);
 
     virtual ~InjectionBeyn();
 
@@ -52,6 +52,7 @@ private:
     int loc_size,loc_rank;
     int NM_input;
     int slab_per_bc;
+    int size_lin_comm;
     int NQDR;
     int NCRC;
     int parallel_svd;
@@ -83,6 +84,7 @@ InjectionBeyn<T>::InjectionBeyn(int pslab_per_bc,double pcontour_radius)
     svd_fac        = 1.0;
     NQDR           = 32;
     NCRC           = 2;
+    size_lin_comm  = 0;
     parallel_svd   = 1;
 
     slab_per_bc    = pslab_per_bc;
@@ -96,7 +98,7 @@ InjectionBeyn<T>::InjectionBeyn(int pslab_per_bc,double pcontour_radius)
 /************************************************************************************************/
 
 template<class T>
-InjectionBeyn<T>::InjectionBeyn(int pslab_per_bc,double pcontour_radius,double psv,int pNQ,int pNC)
+InjectionBeyn<T>::InjectionBeyn(int pslab_per_bc,double pcontour_radius,double psv,int pNQ,int pNC,int pslc)
 {
     imag_limit     = 5.0e-5; //eps_decay for OMEN part
     mult_factor    = 1.2;
@@ -105,6 +107,7 @@ InjectionBeyn<T>::InjectionBeyn(int pslab_per_bc,double pcontour_radius,double p
     svd_fac        = psv;
     NQDR           = pNQ;
     NCRC           = pNC;
+    size_lin_comm  = pslc;
     slab_per_bc    = pslab_per_bc;
     contour_radius = pcontour_radius;
     imag_limit     = slab_per_bc*imag_limit;
@@ -445,15 +448,10 @@ template <class T>
 void InjectionBeyn<T>::get_Q_matrix(CPX *Q,CPX *Q2,CPX *Y,TCSR<CPX> **A,int sign,int NR,int NM,\
                                      int NPOC,MPI_Comm comm)
 {
+    if(slab_per_bc==1) NCRC=2;
+    if(size_lin_comm<=0 || size_lin_comm>loc_size) size_lin_comm=max(1,loc_size/(NCRC*NPOC));
 
-    int IR;
-    CPX z;
     double R_in,R_out;
-
-    if(slab_per_bc==1) NCRC=2; //NOT IMPLEMENTED FOR SPARSE SOLVER
-
-    int size_lin_comm = max(1,loc_size/(NCRC*NPOC));
-
     R_out = mult_factor*contour_radius;
     if(NCRC==2){
         if(sign>0){
@@ -465,143 +463,94 @@ void InjectionBeyn<T>::get_Q_matrix(CPX *Q,CPX *Q2,CPX *Y,TCSR<CPX> **A,int sign
         }
     }
 
-    if(size_lin_comm>1){
+    MPI_Comm lin_comm;
+    int point_index_in_iter = loc_rank/size_lin_comm;
+    MPI_Comm_split(comm,point_index_in_iter,loc_rank,&lin_comm);
+    int rank_lin_comm;
+    MPI_Comm_rank(lin_comm,&rank_lin_comm);
+    MPI_Comm master_comm;
+    int points_per_iter = loc_size/size_lin_comm;
+    int color = rank_lin_comm;
+    if (loc_rank>=points_per_iter*size_lin_comm) {
+        color = MPI_UNDEFINED;
+        rank_lin_comm = -1;
+    }
+    MPI_Comm_split(comm,color,loc_rank,&master_comm);
 
-        IR = loc_rank / size_lin_comm;
-        MPI_Comm lin_comm;
-        MPI_Comm_split(comm,IR,loc_rank,&lin_comm);
-        int rank_lin_comm;
-        MPI_Comm_rank(lin_comm,&rank_lin_comm);
-        MPI_Comm master_comm;
-        int color = rank_lin_comm;
-        if (loc_rank>=size_lin_comm*NCRC*NPOC) {
-            color = MPI_UNDEFINED;
-            rank_lin_comm = -1;
-        }
-        MPI_Comm_split(comm,color,loc_rank,&master_comm);
+    if(!rank_lin_comm && loc_size>1){
+        allocate_bcast_H(A,0,master_comm);
+    }
+    if(!loc_rank){
+        init_var(Q ,NR*NM);
+        init_var(Q2,NR*NM);
+    }
+    CPX *QLoc  = NULL;
+    CPX *QLoc2 = NULL;
+    if(!rank_lin_comm){
+        QLoc  = new CPX[NR*NR];
+        QLoc2 = new CPX[NR*NM];
+    }
 
-        CPX *QLoc  = NULL;
-        CPX *QLoc2 = NULL;
-        if(!rank_lin_comm){
-            QLoc  = new CPX[NR*NR];
-            QLoc2 = new CPX[NR*NM];
-        }
+    int IP;
+    for(IP=0;IP<ceil(double(NCRC*NPOC)/double(points_per_iter));IP++){
+
+        int IR = IP*points_per_iter+point_index_in_iter;
 
         if(!loc_rank){
             c_zcopy(NM*NR,Y,1,QLoc2,1);
         }
-        if(!rank_lin_comm){
-            allocate_bcast_H(A,0,master_comm);
+        if(!rank_lin_comm && loc_size>1){
             MPI_Bcast(QLoc2,NM*NR,MPI_DOUBLE_COMPLEX,0,master_comm);
         }
 
+        CPX z;
         if(IR<NPOC){
             z = R_out*exp(CPX(0.0,2.0*(IR+0.5)*M_PI/NQDR));
-	}else if(IR>=NPOC && IR<NCRC*NPOC){
+        }else if(IR>=NPOC && IR<NCRC*NPOC){
             z = R_in*exp(CPX(0.0,2.0*((IR-NPOC)+0.5)*M_PI/NQDR));
-	}
+        }
 
-        if(IR<NCRC*NPOC){
+        if(!rank_lin_comm && IR<NCRC*NPOC){
+            create_M_matrix(QLoc,A,NR,z);
+        }
 
-            if(!rank_lin_comm){
-                create_M_matrix(QLoc,A,NR,z);
-            }
-
-	    if(slab_per_bc==1){
+        if(rank_lin_comm>=0 && IR<NCRC*NPOC){
+            if(slab_per_bc==1){
                 solve_Q_sparse(QLoc,QLoc2,NR,NM,z,lin_comm);
   	    }else if(NR==NM){
   	        inv_Q_full(QLoc,QLoc2,NM,z,lin_comm);
-	    }else{
-	        solve_Q_full(QLoc,QLoc2,NR,NM,z,lin_comm);
-	    }
-
-        }
-
-        if(!rank_lin_comm){
-            MPI_Reduce(QLoc ,Q ,NR*NM,MPI_DOUBLE_COMPLEX,MPI_SUM,0,master_comm);
-            MPI_Reduce(QLoc2,Q2,NR*NM,MPI_DOUBLE_COMPLEX,MPI_SUM,0,master_comm);
-            delete[] QLoc;
-            delete[] QLoc2;
-            if(loc_rank){
-                for(int IP=0;IP<slab_per_bc+1;IP++){
-                    delete A[IP];
-                }
-                delete[] A;
+            }else{
+                solve_Q_full(QLoc,QLoc2,NR,NM,z,lin_comm);
             }
+        }else if(!rank_lin_comm){
+            init_var(QLoc ,NR*NM);
+            init_var(QLoc2,NR*NM);
         }
 
-        MPI_Comm_free(&lin_comm);
-        MPI_Comm_free(&master_comm);
-
-    }else{
-
-        CPX *QLoc  = new CPX[NR*NR];
-        CPX *QLoc2 = new CPX[NR*NM];
-        CPX *QRed  = NULL;
+        if(!rank_lin_comm && loc_size>1){
+            MPI_Allreduce(MPI_IN_PLACE,QLoc ,NR*NM,MPI_DOUBLE_COMPLEX,MPI_SUM,master_comm);
+            MPI_Allreduce(MPI_IN_PLACE,QLoc2,NR*NM,MPI_DOUBLE_COMPLEX,MPI_SUM,master_comm);
+        }
         if(!loc_rank){
-            init_var(Q ,NR*NM);
-            init_var(Q2,NR*NM);
-            QRed  = new CPX[NR*NM];
-        }
-        if(loc_size>1){
-            allocate_bcast_H(A,0,comm);
+            c_zaxpy(NR*NM,CPX(1.0,0.0),QLoc ,1,Q ,1);
+            c_zaxpy(NR*NM,CPX(1.0,0.0),QLoc2,1,Q2,1);
         }
 
-        for(IR=loc_rank;IR<NCRC*NPOC;IR=IR+loc_size){
+    }
 
-            if(!loc_rank){
-                c_zcopy(NM*NR,Y,1,QLoc2,1);
-            }
-            if(loc_size>1){
-                MPI_Bcast(QLoc2,NM*NR,MPI_DOUBLE_COMPLEX,0,comm);
-            }
- 
-            if(IR<NPOC){
-                z = R_out*exp(CPX(0.0,2.0*(IR+0.5)*M_PI/NQDR));
-            }else if(IR>=NPOC && IR<NCRC*NPOC){
-                z = R_in*exp(CPX(0.0,2.0*((IR-NPOC)+0.5)*M_PI/NQDR));
-            }
-
-            if(IR<NCRC*NPOC){
- 
-                create_M_matrix(QLoc,A,NR,z);
-                if(slab_per_bc==1){
-                    solve_Q_sparse(QLoc,QLoc2,NR,NM,z,MPI_COMM_SELF);
-                }else{
-                    solve_Q_full(QLoc,QLoc2,NR,NM,z,MPI_COMM_SELF);
-                }
- 
-	    }else{
-
-                init_var(QLoc ,NR*NM);
-                init_var(QLoc2,NR*NM);
-
-            }
-
-            MPI_Reduce(QLoc ,QRed,NR*NM,MPI_DOUBLE_COMPLEX,MPI_SUM,0,comm);
-            if(!loc_rank){
-                c_zaxpy(NR*NM,CPX(1.0,0.0),QRed,1,Q ,1);
-            }
-            MPI_Reduce(QLoc2,QRed,NR*NM,MPI_DOUBLE_COMPLEX,MPI_SUM,0,comm);
-            if(!loc_rank){
-                c_zaxpy(NR*NM,CPX(1.0,0.0),QRed,1,Q2,1);
-            }
- 
-        }
-
+    if(!rank_lin_comm){
         delete[] QLoc;
         delete[] QLoc2;
-        if(!loc_rank){
-            delete[] QRed;
-        }
         if(loc_rank){
-            for(int IP=0;IP<slab_per_bc+1;IP++){
+            for(IP=0;IP<slab_per_bc+1;IP++){
                 delete A[IP];
             }
             delete[] A;
         }
-
     }
+
+    MPI_Comm_free(&lin_comm);
+    MPI_Comm_free(&master_comm);
 
 }
 
@@ -722,13 +671,24 @@ void InjectionBeyn<T>::solve_Q_full(CPX *QM,CPX *QY,int NR,int NM,CPX z,MPI_Comm
 template <class T>
 void InjectionBeyn<T>::inv_Q_full(CPX *QM,CPX *QY,int NR,CPX z,MPI_Comm lin_comm)
 {
-    int lin_rank;
+    int lin_size,lin_rank;
+    MPI_Comm_size(lin_comm,&lin_size);
     MPI_Comm_rank(lin_comm,&lin_rank);
 
     if(NCRC==1){
         p_inv(QM,QY,NR,z,lin_comm);
     }else{
-        p_inv(QM,NR,lin_comm);
+        if(lin_size==1){
+            int info;
+            int *ipiv = new int[NR];
+            c_zgetrf(NR,NR,QM,NR,ipiv,&info);
+            c_zgetri(NR,QM,NR,ipiv,QY,-1,&info);
+            int lwork=min(int(real(QY[0])),NR*NR);
+            c_zgetri(NR,QM,NR,ipiv,QY,lwork,&info);
+            delete[] ipiv;
+        }else{
+            p_inv(QM,NR,lin_comm);
+        }
         if(!lin_rank){
             if(abs(z)<1.0) c_zscal(NR*NR,-1.0,QM,1);
             c_zcopy(NR*NR,QM,1,QY,1);
