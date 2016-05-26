@@ -1,4 +1,4 @@
-#include "p_eig.H"
+#include "ParallelEig.H"
 
 int p_grid_desc_init(int &icontxt,int nprocs,int nvec,int &rloc,int &cloc,int *descfull,int *descloc)
 {
