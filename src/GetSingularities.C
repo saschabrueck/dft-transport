@@ -4,7 +4,7 @@
 #include <valarray>
 #include <limits>
 #include "Utilities.H"
-#include "p_eig.H"
+#include "ParallelEig.H"
 
 Singularities::Singularities(transport_parameters *parameter_sab,std::vector<contact_type> pcontactvec)
 {

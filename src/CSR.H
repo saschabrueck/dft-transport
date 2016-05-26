@@ -102,6 +102,7 @@ public:
     TCSR(TCSR<T>*,int,int,int,int);
     TCSR(cp2k_csr_interop_type&,int,int,int,int);
     TCSR(cp2k_csr_interop_type&,MPI_Comm,int*,int,int,int,MPI_Comm*);
+    TCSR(cp2k_csr_interop_type&);
 // this constructs a matrix by summing of a vector of matrices
     TCSR(int,T*,TCSR<T>**,int=-1);
 // and this is the gather
@@ -188,11 +189,6 @@ public:
     int get_bandwidth(MPI_Comm);
     void sparse_to_narrow_band(T*,int,int);
 // sab end
-    void set_nnz(int,T*);
-    void set_index_i(int,int*);
-    void set_index_j(int,int*);
-    void set_edge_i(int,int*);
-    
     
     void get_dense_by_range(T* matrix_out, int start_row, int start_col, int end_row, int end_col);
     void get_dense_by_range_trans(T* matrix_out, int start_row, int start_col, int end_row, int end_col);
@@ -473,6 +469,32 @@ inline TCSR<T>::TCSR(cp2k_csr_interop_type& cp2kCSRmat,MPI_Comm my_comm_in,int *
     MPI_Bcast(diag_pos,size      ,MPI_INT                  ,0,equal_rank_comm);
 
     MPI_Comm_free(&equal_rank_comm);
+}
+
+/******************** written by SAB ********************/
+
+template <class T>
+inline TCSR<T>::TCSR(cp2k_csr_interop_type& cp2kCSRmat)
+{
+    size       = cp2kCSRmat.nrows_local;
+    size_tot   = cp2kCSRmat.nrows_total;
+    type       = 0;
+    findx      = 1;
+    first_row  = cp2kCSRmat.first_row;
+    n_nonzeros = cp2kCSRmat.nze_local;
+
+    nnz        = new T[n_nonzeros];
+    index_i    = new int[size];
+    index_j    = new int[n_nonzeros];
+    edge_i     = new int[size+1];
+    diag_pos   = new int[size];
+
+    c_tcopy(n_nonzeros,cp2kCSRmat.nzvals_local,1,nnz,1);
+    c_icopy(size,cp2kCSRmat.nzerow_local,1,index_i,1);
+    c_icopy(n_nonzeros,cp2kCSRmat.colind_local,1,index_j,1);
+    c_icopy(size+1,cp2kCSRmat.rowptr_local,1,edge_i,1);
+
+    get_diag_pos();
 }
 
 /******************** written by SAB ********************/
@@ -3016,29 +3038,5 @@ int TCSR<T>::get_msize(int start,int stop,int tb,int* n_of_el)
     return (tb/10)*(n_of_el[stop+1]-n_of_el[start]);
 }
 /************************************************************************************************/
-
-template<class T>
-void TCSR<T>::set_nnz(int n_nnz, T *nnz_arr)
-{
-    c_tcopy(n_nnz,nnz_arr,1,nnz,1);
-}
-
-template<class T>
-void TCSR<T>::set_index_i(int N, int *index_i_arr)
-{
-    c_icopy(N,index_i_arr,1,index_i,1);
-}
-
-template<class T>
-void TCSR<T>::set_index_j(int n_nnz, int *index_j_arr)
-{
-    c_icopy(n_nnz,index_j_arr,1,index_j,1);
-}
-
-template<class T>
-void TCSR<T>::set_edge_i(int N, int *edge_i_arr)
-{
-    c_icopy(N+1,edge_i_arr,1,edge_i,1);
-}
 
 #endif

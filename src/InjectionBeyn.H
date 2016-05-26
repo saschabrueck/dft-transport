@@ -18,7 +18,7 @@
 #include "LinearSolver.H"
 #include "Umfpack.H"
 #include "Injection.H"
-#include "p_eig.H"
+#include "ParallelEig.H"
 
 template<class T>
 class InjectionBeyn : public Injection<T>{
@@ -413,10 +413,10 @@ void InjectionBeyn<T>::calc_kphase_sym(TCSR<T> *D,T *P,TCSR<CPX> *T01,int ND,int
 /************************************************************************************************/
 
 template <class T>
-void InjectionBeyn<T>::allocate_bcast_H(TCSR<CPX> **&H,int broot_rank,MPI_Comm bcast_comm)
+void InjectionBeyn<T>::allocate_bcast_H(TCSR<CPX> **&H,int source,MPI_Comm comm)
 {
     int bcast_rank;
-    MPI_Comm_rank(bcast_comm,&bcast_rank);
+    MPI_Comm_rank(comm,&bcast_rank);
     int *nonzH = new int[slab_per_bc+1];
     int findxH;
     int sizeH;
@@ -427,9 +427,9 @@ void InjectionBeyn<T>::allocate_bcast_H(TCSR<CPX> **&H,int broot_rank,MPI_Comm b
         findxH = H[0]->findx;
         sizeH  = H[0]->size;
     }
-    MPI_Bcast(nonzH,slab_per_bc+1,MPI_INT,broot_rank,bcast_comm);
-    MPI_Bcast(&findxH,1,MPI_INT,broot_rank,bcast_comm);
-    MPI_Bcast(&sizeH,1,MPI_INT,broot_rank,bcast_comm);
+    MPI_Bcast(nonzH,slab_per_bc+1,MPI_INT,source,comm);
+    MPI_Bcast(&findxH,1,MPI_INT,source,comm);
+    MPI_Bcast(&sizeH,1,MPI_INT,source,comm);
     if(bcast_rank){
         H = new TCSR<CPX>*[slab_per_bc+1];
         for(int ibw=0;ibw<slab_per_bc+1;ibw++){
@@ -438,7 +438,14 @@ void InjectionBeyn<T>::allocate_bcast_H(TCSR<CPX> **&H,int broot_rank,MPI_Comm b
     }
     delete[] nonzH;
     for(int ibw=0;ibw<slab_per_bc+1;ibw++){
-        H[ibw]->Bcast(broot_rank,bcast_comm);
+        TCSR<CPX> *M=H[ibw];
+        MPI_Bcast(&M->size,1,MPI_INT,source,comm);
+        MPI_Bcast(&M->n_nonzeros,1,MPI_INT,source,comm);
+        MPI_Bcast(M->index_i,M->size,MPI_INT,source,comm);
+        MPI_Bcast(M->edge_i,M->size+1,MPI_INT,source,comm);
+        MPI_Bcast(M->index_j,M->n_nonzeros,MPI_INT,source,comm);
+        MPI_Bcast(M->diag_pos,M->size,MPI_INT,source,comm);
+        MPI_Bcast(M->nnz,M->n_nonzeros,MPI_DOUBLE_COMPLEX,source,comm);
     }
 }
 
