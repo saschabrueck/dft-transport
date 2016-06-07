@@ -20,6 +20,8 @@ int Set_master(MPI_Comm,MPI_Comm);
 int Cutout(TCSR<CPX>*,contact_type,CPX,transport_methods::transport_method,MPI_Comm);
 void Distribute(TCSR<CPX>*,MPI_Comm);
 int GetSigma(MPI_Comm,int,transport_parameters*);
+int GetSigmaEig(MPI_Comm,int,transport_parameters*);
+int GetSigmaInv(MPI_Comm,int,transport_parameters*);
 
 /// Self Energy
 CPX *sigma;
@@ -37,6 +39,8 @@ int n_propagating;
 CPX *lambdapro;
 
 private:
+void create_M_matrix(CPX*,int,TCSR<CPX>**,int,CPX);
+
 int master_rank;
 
 CPX energy;
