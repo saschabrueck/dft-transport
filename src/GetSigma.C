@@ -39,6 +39,22 @@ BoundarySelfEnergy::~BoundarySelfEnergy()
     if (sigma || inj || gamma || spsigmadist || spainjdist || lambdapro || H || H0 || H1 || H1t ) throw std::exception();
 }
 
+void BoundarySelfEnergy::create_M_matrix(CPX *M,int NR,TCSR<CPX> **A,int bw,CPX z)
+{
+    init_var(M,NR*NR);
+ 
+    for(int IP=-bw;IP<bw+1;IP++){
+        TCSR<CPX>* AA = A[IP+bw];
+        int ffindx = AA->findx;
+        CPX zz = pow(z,IP);
+        for(int IR=0;IR<NR;IR++){
+            for(int IJ=AA->edge_i[IR]-ffindx;IJ<AA->edge_i[IR+1]-ffindx;IJ++){
+                M[IR+(AA->index_j[IJ]-ffindx)*NR] += zz*AA->nnz[IJ];
+            }
+        }
+    }
+}
+
 void BoundarySelfEnergy::Deallocate_Sigma()
 {
     delete spsigmadist;
@@ -237,6 +253,115 @@ void BoundarySelfEnergy::Distribute(TCSR<CPX> *SumHamC,MPI_Comm matrix_comm)
 
 int BoundarySelfEnergy::GetSigma(MPI_Comm boundary_comm,int evecpos,transport_parameters *parameter_sab)
 {
+    if (!compute_inj) {
+        if (GetSigmaInv(boundary_comm,evecpos,parameter_sab)) return (LOGCERR, EXIT_FAILURE);
+    } else {
+        if (GetSigmaEig(boundary_comm,evecpos,parameter_sab)) return (LOGCERR, EXIT_FAILURE);
+    }
+    return 0;
+}
+
+int BoundarySelfEnergy::GetSigmaInv(MPI_Comm boundary_comm,int evecpos,transport_parameters *parameter_sab)
+{
+    int complexenergypoint=0;
+    if (imag(energy)) complexenergypoint=1;
+    int inj_sign=contact.inj_sign;
+    int ndof=contact.ndof;
+    int bandwidth=contact.bandwidth;
+    int ndofsq=ndof*ndof;
+    int nblocksband=2*bandwidth+1;
+    int ntriblock=bandwidth*ndof;
+    int triblocksize=ntriblock*ntriblock;
+    int boundary_rank;
+    MPI_Comm_rank(boundary_comm,&boundary_rank);
+int worldrank; MPI_Comm_rank(MPI_COMM_WORLD,&worldrank);
+double sabtime=get_time(0.0);
+    if (!boundary_rank) {
+        CPX **B=new CPX*[4*bandwidth-1];
+        for (int IB=0;IB<4*bandwidth-1;IB++) {
+            B[IB]=new CPX[ndofsq]();
+        }
+        int NK=16;
+        double imag_shift=0.0;
+        CPX *M=new CPX[ndofsq];
+        int *pivarrays=new int[ndof];
+        int iinfo;
+        for (int IK=0;IK<NK;IK++) {
+            CPX z = exp(CPX(0.0,2.0*(IK+0.5)*M_PI/NK))+imag_shift*CPX(0.0,1.0);
+            create_M_matrix(M,ndof,H,bandwidth,z);
+            c_zgetrf(ndof,ndof,M,ndof,pivarrays,&iinfo);
+            if (iinfo) return (LOGCERR, EXIT_FAILURE);
+            CPX nworks;
+            c_zgetri(ndof,M,ndof,pivarrays,&nworks,-1,&iinfo);
+            int lworks=int(real(nworks));
+            CPX* works=new CPX[lworks];
+            c_zgetri(ndof,M,ndof,pivarrays,works,lworks,&iinfo);
+            if (iinfo) return (LOGCERR, EXIT_FAILURE);
+            delete[] works;
+            for (int IB=0;IB<4*bandwidth-1;IB++) {
+                CPX expfac=pow(z,IB-(2*bandwidth-1))/double(NK);
+                c_zaxpy(ndofsq,expfac,M,1,B[IB],1);
+            }
+        }
+        delete[] pivarrays;
+        delete[] M;
+if (!worldrank) cout << "TIME FOR SIGMA SOLVER INTEGRATION " << get_time(sabtime) << endl;
+        sigma = new CPX[triblocksize];
+        CPX *BB = new CPX[triblocksize];
+        int *pivarray=new int[ntriblock];
+        for (int IB=0;IB<bandwidth;IB++) {
+            for (int JB=0;JB<bandwidth;JB++) {
+                c_zlacpy('A',ndof,ndof,B[IB-JB+2*bandwidth-1-inj_sign*bandwidth],ndof,&sigma[ndof*IB+ntriblock*ndof*JB],ntriblock);
+            }
+        }
+        full_transpose(ntriblock,ntriblock,sigma,BB);
+        for (int IB=0;IB<bandwidth;IB++) {
+            for (int JB=0;JB<bandwidth;JB++) {
+                c_zlacpy('A',ndof,ndof,B[IB-JB+2*bandwidth-1],ndof,&sigma[ndof*IB+ntriblock*ndof*JB],ntriblock);
+            }
+        }
+        c_zgetrf(ntriblock,ntriblock,sigma,ntriblock,pivarray,&iinfo);
+        if (iinfo) return (LOGCERR, EXIT_FAILURE);
+        c_zgetrs('T',ntriblock,ntriblock,sigma,ntriblock,pivarray,BB,ntriblock,&iinfo);
+        if (iinfo) return (LOGCERR, EXIT_FAILURE);
+        H1t->trans_mat_vec_mult(BB,sigma,ntriblock,1);
+        c_zscal(triblocksize,CPX(-1.0,0.0),sigma,1);
+        delete[] pivarray;
+        delete[] BB;
+        for (int IB=0;IB<4*bandwidth-1;IB++) {
+            delete[] B[IB];
+        }
+        delete[] B;
+        for (int ibw=0;ibw<nblocksband;ibw++) {
+            delete H[ibw];
+        }
+        delete[] H;
+        H = NULL;
+        delete H0;
+        H0 = NULL;
+        delete H1;
+        H1 = NULL;
+        delete H1t;
+        H1t = NULL;
+if (!worldrank) cout << "TIME FOR SIGMA SOLVER " << get_time(sabtime) << endl;
+// ONLY CHANGES THE RESULT SLIGHTLY BUT IS IMPORTANT FOR PEXSI
+// /*
+        if (complexenergypoint) {
+            for (int i=0;i<ntriblock;i++) for (int j=0;j<i;j++) {
+                sigma[i+ntriblock*j]+=sigma[j+ntriblock*i];
+                sigma[i+ntriblock*j]*=0.5;
+            }
+            for (int i=0;i<ntriblock;i++) for (int j=0;j<i;j++) {
+                sigma[j+ntriblock*i]=sigma[i+ntriblock*j];
+            }
+        }
+// */
+    }
+    return 0;
+}
+
+int BoundarySelfEnergy::GetSigmaEig(MPI_Comm boundary_comm,int evecpos,transport_parameters *parameter_sab)
+{
     double d_one=1.0;
     double d_zer=0.0;
     CPX z_one=CPX(d_one,d_zer);
@@ -262,8 +387,9 @@ int BoundarySelfEnergy::GetSigma(MPI_Comm boundary_comm,int evecpos,transport_pa
     double eps_decay=parameter_sab->eps_decay;
     double eps_eigval_degen=parameter_sab->eps_eigval_degen;
     double svd_fac=parameter_sab->svd_cutoff;
-    double NCRC_beyn=parameter_sab->NCRC_beyn;
     double NQ_beyn=parameter_sab->n_points_beyn;
+    double NCRC_beyn=parameter_sab->NCRC_beyn;
+    int ntasks_beyn=0;
     int boundary_rank;
     MPI_Comm_rank(boundary_comm,&boundary_rank);
 int worldrank; MPI_Comm_rank(MPI_COMM_WORLD,&worldrank);
@@ -293,11 +419,11 @@ int worldrank; MPI_Comm_rank(MPI_COMM_WORLD,&worldrank);
     sabtime=get_time(d_zer);
     if (injection_method==22) {
         if (complexenergypoint) {
-            InjectionBeyn<CPX> *k_inj = new InjectionBeyn<CPX>(2*bandwidth,1.0/eps_limit,svd_fac,NQ_beyn,NCRC_beyn);
+            InjectionBeyn<CPX> *k_inj = new InjectionBeyn<CPX>(2*bandwidth,1.0/eps_limit,svd_fac,NQ_beyn,NCRC_beyn,ntasks_beyn);
             neigval = k_inj->execute(H,ndof,neigbeyn,lambdavec,eigvecc,inj_sign,boundary_comm);
             delete k_inj;
         } else {
-            InjectionBeyn<double> *k_inj = new InjectionBeyn<double>(2*bandwidth,1.0/eps_limit,svd_fac,NQ_beyn,NCRC_beyn);
+            InjectionBeyn<double> *k_inj = new InjectionBeyn<double>(2*bandwidth,1.0/eps_limit,svd_fac,NQ_beyn,NCRC_beyn,ntasks_beyn);
             neigval = k_inj->execute(H,ndof,neigbeyn,lambdavec,eigvecc,inj_sign,boundary_comm);
             delete k_inj;
         }
@@ -490,26 +616,29 @@ if (!worldrank) cout << "TIME FOR INVERSION AND MATRIX MATRIX MULTIPLICATIONS FO
         sabtime=get_time(d_zer);
         int inversion_with_sparse_mult_symm=0;
         int linear_system_with_dense_mult_symm=0;
+        int iter_max=1;
         if (inversion_with_sparse_mult_symm) {
             CPX *matctri  = new CPX[triblocksize];
             CPX *presigma  = new CPX[triblocksize];
-            H0->sparse_to_full(matctri,ntriblock,ntriblock);
-            c_zaxpy(triblocksize,-z_one,sigma,1,matctri,1);
-            int *pivarrays=new int[ntriblock];
-            c_zgetrf(ntriblock,ntriblock,matctri,ntriblock,pivarrays,&iinfo);
-            if (iinfo) return (LOGCERR, EXIT_FAILURE);
-            CPX nworks;
-            c_zgetri(ntriblock,matctri,ntriblock,pivarrays,&nworks,-1,&iinfo);
-            int lworks=int(real(nworks));
-            CPX* works=new CPX[lworks];
-            c_zgetri(ntriblock,matctri,ntriblock,pivarrays,works,lworks,&iinfo);
-            if (iinfo) return (LOGCERR, EXIT_FAILURE);
-            delete[] works;
-            delete[] pivarrays;
-            full_transpose(ntriblock,ntriblock,matctri,sigma);
-            H1t->trans_mat_vec_mult(sigma,presigma,ntriblock,1);
-            H1t->trans_mat_vec_mult(presigma,matctri,ntriblock,1);
-            full_transpose(ntriblock,ntriblock,matctri,sigma);
+            for (int iter=0;iter<iter_max;iter++){
+                H0->sparse_to_full(matctri,ntriblock,ntriblock);
+                c_zaxpy(triblocksize,-z_one,sigma,1,matctri,1);
+                int *pivarrays=new int[ntriblock];
+                c_zgetrf(ntriblock,ntriblock,matctri,ntriblock,pivarrays,&iinfo);
+                if (iinfo) return (LOGCERR, EXIT_FAILURE);
+                CPX nworks;
+                c_zgetri(ntriblock,matctri,ntriblock,pivarrays,&nworks,-1,&iinfo);
+                int lworks=int(real(nworks));
+                CPX* works=new CPX[lworks];
+                c_zgetri(ntriblock,matctri,ntriblock,pivarrays,works,lworks,&iinfo);
+                if (iinfo) return (LOGCERR, EXIT_FAILURE);
+                delete[] works;
+                delete[] pivarrays;
+                full_transpose(ntriblock,ntriblock,matctri,sigma);
+                H1t->trans_mat_vec_mult(sigma,presigma,ntriblock,1);
+                H1t->trans_mat_vec_mult(presigma,matctri,ntriblock,1);
+                full_transpose(ntriblock,ntriblock,matctri,sigma);
+            }
             int do_extra_symm=0;
             if (do_extra_symm) {
                 c_zaxpy(ntriblock*ntriblock,z_one,matctri,1,sigma,1);
@@ -520,18 +649,20 @@ if (!worldrank) cout << "TIME FOR INVERSION AND MATRIX MATRIX MULTIPLICATIONS FO
         } else if (linear_system_with_dense_mult_symm) {
             CPX *matctri  = new CPX[triblocksize];
             CPX *presigma  = new CPX[triblocksize];
-            H0->sparse_to_full(matctri,ntriblock,ntriblock);
-            c_zaxpy(triblocksize,-z_one,sigma,1,matctri,1);
-            int *pivarrays=new int[ntriblock];
-            c_zgetrf(ntriblock,ntriblock,matctri,ntriblock,pivarrays,&iinfo);
-            if (iinfo) return (LOGCERR, EXIT_FAILURE);
-            H1->sparse_to_full(sigma,ntriblock,ntriblock);
-            c_zgetrs('T',ntriblock,ntriblock,matctri,ntriblock,pivarrays,sigma,ntriblock,&iinfo);
-            if (iinfo) return (LOGCERR, EXIT_FAILURE);
-            delete[] pivarrays;
-            full_transpose(ntriblock,ntriblock,sigma,presigma);
-            H1t->trans_mat_vec_mult(presigma,matctri,ntriblock,1);
-            full_transpose(ntriblock,ntriblock,matctri,sigma);
+            for (int iter=0;iter<iter_max;iter++){
+                H0->sparse_to_full(matctri,ntriblock,ntriblock);
+                c_zaxpy(triblocksize,-z_one,sigma,1,matctri,1);
+                int *pivarrays=new int[ntriblock];
+                c_zgetrf(ntriblock,ntriblock,matctri,ntriblock,pivarrays,&iinfo);
+                if (iinfo) return (LOGCERR, EXIT_FAILURE);
+                H1->sparse_to_full(sigma,ntriblock,ntriblock);
+                c_zgetrs('T',ntriblock,ntriblock,matctri,ntriblock,pivarrays,sigma,ntriblock,&iinfo);
+                if (iinfo) return (LOGCERR, EXIT_FAILURE);
+                delete[] pivarrays;
+                full_transpose(ntriblock,ntriblock,sigma,presigma);
+                H1t->trans_mat_vec_mult(presigma,matctri,ntriblock,1);
+                full_transpose(ntriblock,ntriblock,matctri,sigma);
+            }
             int do_extra_symm=0;
             if (do_extra_symm) {
                 c_zaxpy(ntriblock*ntriblock,z_one,matctri,1,sigma,1);
