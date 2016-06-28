@@ -442,6 +442,7 @@ struct transport_parameters
     int    gpus_per_point;
     int    NCRC_beyn;
     int    n_points_beyn;
+    int    tasks_per_integration_point;
     int    extra_scf;
     int    cutl;
     int    cutr;

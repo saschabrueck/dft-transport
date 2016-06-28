@@ -253,7 +253,7 @@ void BoundarySelfEnergy::Distribute(TCSR<CPX> *SumHamC,MPI_Comm matrix_comm)
 
 int BoundarySelfEnergy::GetSigma(MPI_Comm boundary_comm,int evecpos,transport_parameters *parameter_sab)
 {
-    if (!compute_inj) {
+    if (0) {
         if (GetSigmaInv(boundary_comm,evecpos,parameter_sab)) return (LOGCERR, EXIT_FAILURE);
     } else {
         if (GetSigmaEig(boundary_comm,evecpos,parameter_sab)) return (LOGCERR, EXIT_FAILURE);
@@ -281,7 +281,7 @@ double sabtime=get_time(0.0);
         for (int IB=0;IB<4*bandwidth-1;IB++) {
             B[IB]=new CPX[ndofsq]();
         }
-        int NK=16;
+        int NK=64;
         double imag_shift=0.0;
         CPX *M=new CPX[ndofsq];
         int *pivarrays=new int[ndof];
@@ -389,7 +389,7 @@ int BoundarySelfEnergy::GetSigmaEig(MPI_Comm boundary_comm,int evecpos,transport
     double svd_fac=parameter_sab->svd_cutoff;
     double NQ_beyn=parameter_sab->n_points_beyn;
     double NCRC_beyn=parameter_sab->NCRC_beyn;
-    int ntasks_beyn=0;
+    int ntasks_beyn=parameter_sab->tasks_per_integration_point;
     int boundary_rank;
     MPI_Comm_rank(boundary_comm,&boundary_rank);
 int worldrank; MPI_Comm_rank(MPI_COMM_WORLD,&worldrank);
