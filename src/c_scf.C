@@ -19,48 +19,49 @@ void c_scf_method(cp2k_transport_parameters cp2k_transport_params, cp2k_csr_inte
     c_dscal(P->nze_local,0.5,P->nzvals_local,1);
  
     transport_parameters* transport_params = new transport_parameters();
-    transport_params->n_occ                      = cp2k_transport_params.n_occ;
-    transport_params->method                     = cp2k_transport_params.method;
-    transport_params->injection_method           = cp2k_transport_params.injection_method;
-    transport_params->linear_solver              = cp2k_transport_params.linear_solver;
-    transport_params->rlaxis_integration_method  = cp2k_transport_params.rlaxis_integration_method;
-    transport_params->n_abscissae                = cp2k_transport_params.n_abscissae;
-    transport_params->n_kpoint                   = cp2k_transport_params.n_kpoint;
-    transport_params->num_interval               = cp2k_transport_params.num_interval;
-    transport_params->num_contacts               = cp2k_transport_params.num_contacts;
-    transport_params->tasks_per_point            = cp2k_transport_params.tasks_per_point;
-    transport_params->gpus_per_point             = cp2k_transport_params.gpus_per_point;
-    transport_params->colzero_threshold          = cp2k_transport_params.colzero_threshold;
-    transport_params->eps_limit                  = cp2k_transport_params.eps_limit;
-    transport_params->eps_limit_cc               = cp2k_transport_params.eps_limit_cc;
-    transport_params->eps_decay                  = cp2k_transport_params.eps_decay;
-    transport_params->eps_singularity_curvatures = cp2k_transport_params.eps_singularity_curvatures;
-    transport_params->eps_mu                     = cp2k_transport_params.eps_mu;
-    transport_params->eps_eigval_degen           = cp2k_transport_params.eps_eigval_degen;
-    transport_params->energy_interval            = cp2k_transport_params.energy_interval;
-    transport_params->min_interval               = cp2k_transport_params.min_interval;
-    transport_params->temperature                = cp2k_transport_params.temperature;
-    transport_params->svd_cutoff                 = cp2k_transport_params.svd_cutoff;
-    transport_params->n_points_beyn              = cp2k_transport_params.n_points_beyn;
-    transport_params->extra_scf                  = cp2k_transport_params.extra_scf;
-    transport_params->n_atoms                    = cp2k_transport_params.n_atoms-cp2k_transport_params.cutout[0]-cp2k_transport_params.cutout[1];
-    transport_params->cutout                     = cp2k_transport_params.cutout[0] || cp2k_transport_params.cutout[1];
-    transport_params->evoltfactor                = cp2k_transport_params.evoltfactor;
-    transport_params->NCRC_beyn                  = cp2k_transport_params.ncrc_beyn;
+    transport_params->n_occ                       = cp2k_transport_params.n_occ;
+    transport_params->method                      = cp2k_transport_params.method;
+    transport_params->injection_method            = cp2k_transport_params.injection_method;
+    transport_params->linear_solver               = cp2k_transport_params.linear_solver;
+    transport_params->rlaxis_integration_method   = cp2k_transport_params.rlaxis_integration_method;
+    transport_params->n_abscissae                 = cp2k_transport_params.n_abscissae;
+    transport_params->n_kpoint                    = cp2k_transport_params.n_kpoint;
+    transport_params->num_interval                = cp2k_transport_params.num_interval;
+    transport_params->num_contacts                = cp2k_transport_params.num_contacts;
+    transport_params->tasks_per_point             = cp2k_transport_params.tasks_per_energy_point;
+    transport_params->gpus_per_point              = cp2k_transport_params.gpus_per_point;
+    transport_params->colzero_threshold           = cp2k_transport_params.colzero_threshold;
+    transport_params->eps_limit                   = cp2k_transport_params.eps_limit;
+    transport_params->eps_limit_cc                = cp2k_transport_params.eps_limit_cc;
+    transport_params->eps_decay                   = cp2k_transport_params.eps_decay;
+    transport_params->eps_singularity_curvatures  = cp2k_transport_params.eps_singularity_curvatures;
+    transport_params->eps_mu                      = cp2k_transport_params.eps_mu;
+    transport_params->eps_eigval_degen            = cp2k_transport_params.eps_eigval_degen;
+    transport_params->energy_interval             = cp2k_transport_params.energy_interval;
+    transport_params->min_interval                = cp2k_transport_params.min_interval;
+    transport_params->temperature                 = cp2k_transport_params.temperature;
+    transport_params->svd_cutoff                  = cp2k_transport_params.svd_cutoff;
+    transport_params->n_points_beyn               = cp2k_transport_params.n_points_beyn;
+    transport_params->tasks_per_integration_point = cp2k_transport_params.tasks_per_integration_point;
+    transport_params->extra_scf                   = cp2k_transport_params.extra_scf;
+    transport_params->n_atoms                     = cp2k_transport_params.n_atoms-cp2k_transport_params.cutout[0]-cp2k_transport_params.cutout[1];
+    transport_params->cutout                      = cp2k_transport_params.cutout[0] || cp2k_transport_params.cutout[1];
+    transport_params->evoltfactor                 = cp2k_transport_params.evoltfactor;
+    transport_params->NCRC_beyn                   = cp2k_transport_params.ncrc_beyn;
     if (cp2k_transport_params.eps_fermi<=(numeric_limits<double>::epsilon)()) {
-        transport_params->eps_fermi              = (numeric_limits<double>::epsilon)();
+        transport_params->eps_fermi               = (numeric_limits<double>::epsilon)();
     } else {
-        transport_params->eps_fermi              = cp2k_transport_params.eps_fermi;
+        transport_params->eps_fermi               = cp2k_transport_params.eps_fermi;
     }
     if (cp2k_transport_params.n_rand_beyn>1.0 || cp2k_transport_params.n_rand_beyn<=0.0) {
-        transport_params->fac_neigbeyn           = 1.0;
+        transport_params->fac_neigbeyn            = 1.0;
     } else {
-        transport_params->fac_neigbeyn           = cp2k_transport_params.n_rand_beyn;
+        transport_params->fac_neigbeyn            = cp2k_transport_params.n_rand_beyn;
     }
     if (cp2k_transport_params.n_rand_cc_beyn>1.0 || cp2k_transport_params.n_rand_cc_beyn<=0.0) {
-        transport_params->fac_neigbeyn_cc        = 1.0;
+        transport_params->fac_neigbeyn_cc         = 1.0;
     } else {
-        transport_params->fac_neigbeyn_cc        = cp2k_transport_params.n_rand_cc_beyn;
+        transport_params->fac_neigbeyn_cc         = cp2k_transport_params.n_rand_cc_beyn;
     }
 
     std::vector<int> Bsizes;
