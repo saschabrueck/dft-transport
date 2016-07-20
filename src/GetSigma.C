@@ -447,7 +447,7 @@ int worldrank; MPI_Comm_rank(MPI_COMM_WORLD,&worldrank);
         int *decrefvec=new int[neigval];
         int *protravec=new int[neigval];
         int *prorefvec=new int[neigval];
-        CPX *matcdof=new CPX[ndofsq];
+        CPX *matcdof=new CPX[ndofsq]();
         CPX *vecout=new CPX[ndof];
         for (int iindnzcoln=0;iindnzcoln<neigval;iindnzcoln++) {
             CPX lambda=lambdavec[iindnzcoln];
