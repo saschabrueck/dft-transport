@@ -2963,7 +2963,9 @@ void TCSR<T>::init_variable(int *var,int N)
 template <class T>
 void TCSR<T>::init_variable(double *var,int N)
 {
-    c_dscal(N,0.0,var,1);
+    for(int i=0;i<N;i++){
+        var[i] = 0.0;
+    }
 }
 
 /************************************************************************************************/
@@ -2971,7 +2973,9 @@ void TCSR<T>::init_variable(double *var,int N)
 template <class T>
 void TCSR<T>::init_variable(CPX *var,int N)
 {
-    c_zscal(N,CPX(0.0,0.0),var,1);
+    for(int i=0;i<N;i++){
+        var[i] = CPX(0.0,0.0);
+    }
 }
 
 /************************************************************************************************/
