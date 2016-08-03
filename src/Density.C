@@ -277,13 +277,18 @@ sabtime=get_time(d_zer);
         full_transpose(nprol,dist_sol[matrix_rank],inj,sol);
         full_transpose(npror,dist_sol[matrix_rank],&inj[dist_sol[matrix_rank]*nprol],&sol[dist_sol[matrix_rank]*nprol]);
         delete[] inj;
-        double fermil = fermi(real(energy),muvec[0],parameter_sab->temperature,0)-fermi(real(energy),muvec[1],parameter_sab->temperature,0);
-        double fermir = fermi(real(energy),muvec[1],parameter_sab->temperature,0)-fermi(real(energy),muvec[0],parameter_sab->temperature,0);
         CPX* SolT = new CPX[solsize*max(nprol,npror)];
-        full_transpose(nprol,solsize,Sol,SolT);
-        Ps->psipsidagger_transpose(sol,SolT,nprol,-weight/2.0/M_PI*fermil);
-        full_transpose(npror,solsize,&Sol[solsize*nprol],SolT);
-        Ps->psipsidagger_transpose(&sol[dist_sol[matrix_rank]*nprol],SolT,npror,-weight/2.0/M_PI*fermir);
+        if (parameter_sab->method==3) {
+            if (muvec[0]>muvec[1]) {
+                double fermil = fermi(real(energy),muvec[0],parameter_sab->temperature,0)-fermi(real(energy),muvec[1],parameter_sab->temperature,0);
+                full_transpose(nprol,solsize,Sol,SolT);
+                Ps->psipsidagger_transpose(sol,SolT,nprol,-weight/2.0/M_PI*fermil);
+            } else {
+                double fermir = fermi(real(energy),muvec[1],parameter_sab->temperature,0)-fermi(real(energy),muvec[0],parameter_sab->temperature,0);
+                full_transpose(npror,solsize,&Sol[solsize*nprol],SolT);
+                Ps->psipsidagger_transpose(&sol[dist_sol[matrix_rank]*nprol],SolT,npror,-weight/2.0/M_PI*fermir);
+            }
+        }
 if (!worldrank) cout << "TIME FOR CONSTRUCTION OF S-PATTERN DENSITY MATRIX " << get_time(sabtime) << endl;
 sabtime=get_time(d_zer);
         full_transpose(nprol,solsize,Sol,SolT);
