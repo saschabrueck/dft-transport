@@ -9,6 +9,8 @@
 #include "magma.h"
 #endif
 
+namespace MYBLAS {
+
 extern "C" {
 //Blas
     void fortran_name(dcopy,DCOPY)(int *n,double *dx,int *incx,double *dy,int *incy);
@@ -858,6 +860,8 @@ inline void transpose_matrix(CPX *odata,CPX *idata,int size_x,int size_y)
 #endif
 
 /************************************************************************************************/
+
+}
 
 #endif
 

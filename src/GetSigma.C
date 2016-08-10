@@ -253,7 +253,7 @@ void BoundarySelfEnergy::Distribute(TCSR<CPX> *SumHamC,MPI_Comm matrix_comm)
 
 int BoundarySelfEnergy::GetSigma(MPI_Comm boundary_comm,int evecpos,transport_parameters *parameter_sab)
 {
-    if (0) {
+    if (imag(energy)) {
         if (GetSigmaInv(boundary_comm,evecpos,parameter_sab)) return (LOGCERR, EXIT_FAILURE);
     } else {
         if (GetSigmaEig(boundary_comm,evecpos,parameter_sab)) return (LOGCERR, EXIT_FAILURE);
@@ -272,6 +272,7 @@ int BoundarySelfEnergy::GetSigmaInv(MPI_Comm boundary_comm,int evecpos,transport
     int nblocksband=2*bandwidth+1;
     int ntriblock=bandwidth*ndof;
     int triblocksize=ntriblock*ntriblock;
+    int NK=parameter_sab->n_points_inv;
     int boundary_rank;
     MPI_Comm_rank(boundary_comm,&boundary_rank);
 int worldrank; MPI_Comm_rank(MPI_COMM_WORLD,&worldrank);
@@ -281,13 +282,12 @@ double sabtime=get_time(0.0);
         for (int IB=0;IB<4*bandwidth-1;IB++) {
             B[IB]=new CPX[ndofsq]();
         }
-        int NK=64;
         double imag_shift=0.0;
         CPX *M=new CPX[ndofsq];
         int *pivarrays=new int[ndof];
         int iinfo;
         for (int IK=0;IK<NK;IK++) {
-            CPX z = exp(CPX(0.0,2.0*(IK+0.5)*M_PI/NK))+imag_shift*CPX(0.0,1.0);
+            CPX z = exp(CPX(0.0,2.0*(IK+0.5)*M_PI/double(NK)))+imag_shift*CPX(0.0,1.0);
             create_M_matrix(M,ndof,H,bandwidth,z);
             c_zgetrf(ndof,ndof,M,ndof,pivarrays,&iinfo);
             if (iinfo) return (LOGCERR, EXIT_FAILURE);

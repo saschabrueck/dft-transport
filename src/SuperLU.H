@@ -4,7 +4,7 @@
 #include "CSR.H"
 #include "Types.H"
 #include "LinearSolver.H"
-#include "superlu.h"
+#include "superlu_zdefs.h"
 
 template <class T>
 class SuperLU : public LinearSolver<T>{
@@ -97,6 +97,7 @@ void SuperLU<CPX>::prepare()
 
     ScalePermstructInit(A.nrow,A.ncol,&ScalePermstruct);
     LUstructInit(A.nrow,A.ncol,&LUstruct);
+//    LUstructInit(A.ncol,&LUstruct);
 
     PStatInit(&stat);
     

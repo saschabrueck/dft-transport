@@ -126,14 +126,18 @@ if (!iam) cout << "TIME FOR DENSITY " << get_time(sabtime) << endl;
     MPI_Allreduce(&transmission[0],&transmission2[0],energyvector.size(),MPI_DOUBLE,MPI_SUM,MPI_COMM_WORLD);
     MPI_Allreduce(&dos_profile[0],&dos_profile2[0],energyvector.size(),MPI_DOUBLE,MPI_SUM,MPI_COMM_WORLD);
     if (!iam) {
-        ofstream myfile("DOS_Profile");
+        stringstream mysstream;
+        mysstream << "DOS_Profile_" << transport_params->cp2k_scf_iter;
+        ofstream myfile(mysstream.str().c_str());
         myfile.precision(15);
         for (uint iele=0;iele<energyvector.size();iele++)
             myfile << real(energyvector[iele]) << " " << imag(energyvector[iele]) << " " << real(stepvector[iele]) << " " << imag(stepvector[iele]) << " " << dos_profile2[iele] << endl;
         myfile.close();
     }
     if (!iam) {
-        ofstream myfile("Transmission");
+        stringstream mysstream;
+        mysstream << "Transmission_" << transport_params->cp2k_scf_iter;
+        ofstream myfile(mysstream.str().c_str());
         myfile.precision(15);
         for (uint iele=0;iele<energyvector.size();iele++)
             if (!imag(energyvector[iele]))
@@ -141,7 +145,9 @@ if (!iam) cout << "TIME FOR DENSITY " << get_time(sabtime) << endl;
         myfile.close();
     }
     if (!iam) {
-        ofstream myfile("CurrentFromTransmission");
+        stringstream mysstream;
+        mysstream << "CurrentFromTransmission_" << transport_params->cp2k_scf_iter;
+        ofstream myfile(mysstream.str().c_str());
         myfile.precision(15);
         for (int ibias=1;ibias<=600;ibias++) {
             double current = 0.0;
@@ -163,6 +169,7 @@ if (!iam) cout << "TIME FOR DENSITY " << get_time(sabtime) << endl;
         DensReal->copy_shifted(DensRealCollect,0,OverlapCollect->size_tot,cutl,OverlapCollect->size_tot);
         delete DensReal;
         DensReal = DensRealCollect;
+#ifdef HAVE_PIMAG
         if (transport_params->method!=2) {
             TCSR<double> *DensImagCollect = new TCSR<double>(*PImag,MPI_COMM_WORLD,&Tsizes[0],Tsizes.size(),cutl,cutr,&matrix_comm);
             c_dscal(DensImagCollect->n_nonzeros,double(Tsizes.size())/double(nprocs),DensImagCollect->nnz,1);
@@ -170,12 +177,15 @@ if (!iam) cout << "TIME FOR DENSITY " << get_time(sabtime) << endl;
             delete DensImag;
             DensImag = DensImagCollect;
         }
+#endif
     }
     if (transport_params->method!=2) {
         if (!(transport_params->method==4 && transport_params->extra_scf)) {
             DensReal->distribute_back(*P,MPI_COMM_WORLD,&Tsizes[0],Tsizes.size(),cutl,cutr,matrix_comm);
         }
+#ifdef HAVE_PIMAG
         DensImag->distribute_back(*PImag,MPI_COMM_WORLD,&Tsizes[0],Tsizes.size(),cutl,cutr,matrix_comm);
+#endif
     } else {
         std::vector<double> rho_dist(transport_params->n_atoms,0.0);
         DensReal->atom_allocate(OverlapCollect,&atom_of_bf[0],&rho_dist[0],2.0);
@@ -215,6 +225,8 @@ if (!iam) cout << "TIME FOR SINGULARITIES " << get_time(sabtime) << endl;
     double muvec_avg=accumulate(muvec.begin(),muvec.end(),0.0)/muvec.size();
     double nonequi_start=muvec_min-delta_eps_fermi;
     double nonequi_end=muvec_max+delta_eps_fermi;
+
+if (!iam) cout << "Fermi level difference " << muvec_max-muvec_min << endl;
 
 // all localized states with lowest fermi level corresponding to occupation of localized states in bandgap
     if (transport_params->method==2) {
@@ -312,8 +324,6 @@ int Energyvector::read_real_axis_energies(std::vector<CPX> &energyvector,std::ve
 
 int Energyvector::add_real_axis_energies(double nonequi_start,double nonequi_end,std::vector<CPX> &energyvector,std::vector<CPX> &stepvector,std::vector<transport_methods::transport_method> &methodvector,const std::vector< std::vector<double> > &energies_extremum,transport_parameters *transport_params)
 {
-    int negf_solver=0;
-    if (transport_params->eps_decay<=0.0) negf_solver=1;
     if (transport_params->rlaxis_integration_method==33) {
         if (read_real_axis_energies(energyvector,stepvector,methodvector)) return (LOGCERR, EXIT_FAILURE);
     } else {
@@ -325,7 +335,7 @@ int Energyvector::add_real_axis_energies(double nonequi_start,double nonequi_end
             for (int istep=0;istep<num_trapez;istep++) {
                 energyvector.push_back(nonequi_start+istep*transport_params->energy_interval);
             }
-            if (negf_solver) {
+            if (transport_params->negf_solver) {
                 methodvector.assign(energyvector.size(),transport_methods::NEGF);
             } else {
                 methodvector.assign(energyvector.size(),transport_methods::WF);
@@ -370,7 +380,7 @@ int Energyvector::add_real_axis_energies(double nonequi_start,double nonequi_end
                     Quadrature quadrature(quadrature_types::GC,energylist[i_energies-1],energylist[i_energies],num_points_per_interval);
                     energyvector.insert(energyvector.end(),quadrature.abscissae.begin(),quadrature.abscissae.end());
                     stepvector.insert(stepvector.end(),quadrature.weights.begin(),quadrature.weights.end());
-                    if (negf_solver) {
+                    if (transport_params->negf_solver) {
                         methodvector.resize(energyvector.size(),transport_methods::NEGF);
                     } else {
                         methodvector.resize(energyvector.size(),transport_methods::WF);

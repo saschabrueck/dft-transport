@@ -34,6 +34,7 @@ int n_k;
 double Temp;
 double evfac;
 int n_mu;
+int sab_iter;
 
 int iam;
 int k_rank;
