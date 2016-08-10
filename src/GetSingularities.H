@@ -13,7 +13,7 @@ public:
 Singularities(transport_parameters*,std::vector<contact_type>);
 int Execute(cp2k_csr_interop_type,cp2k_csr_interop_type);
 double determine_fermi(double,int);
-void write_bandstructure(int,int);
+void write_bandstructure(int,int,int,int);
 std::vector< std::vector< std::vector<double> > > get_propagating(const std::vector<CPX>&);
 ~Singularities();
 
@@ -34,7 +34,6 @@ int n_k;
 double Temp;
 double evfac;
 int n_mu;
-int sab_iter;
 
 int iam;
 int k_rank;

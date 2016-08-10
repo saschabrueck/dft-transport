@@ -67,7 +67,7 @@ sabtime=get_time(0.0);
     }
     TCSR<double> *OverlapCollect  = new TCSR<double>(Overlap ,MPI_COMM_WORLD,&Tsizes[0],Tsizes.size(),cutl,cutr,&matrix_comm);
     TCSR<double> *KohnShamCollect = new TCSR<double>(KohnSham,MPI_COMM_WORLD,&Tsizes[0],Tsizes.size(),cutl,cutr,&matrix_comm);
-    if (transport_params->cutout) {
+    if (cutl || cutr) {
         TCSR<double> *OverlapCollectCut  = new TCSR<double>(OverlapCollect ,0,OverlapCollect->size_tot,cutl,OverlapCollect->size_tot);
         TCSR<double> *KohnShamCollectCut = new TCSR<double>(KohnShamCollect,0,OverlapCollect->size_tot,cutl,OverlapCollect->size_tot);
         delete OverlapCollect;
@@ -164,7 +164,7 @@ if (!iam) cout << "TIME FOR DENSITY " << get_time(sabtime) << endl;
     }
     if (!iam) cout << "CURRENT IS " << c_ddot(energyvector.size(),&currentvector2[0],1,(double*)&stepvector[0],2) << endl;
 
-    if (transport_params->cutout) {
+    if (cutl || cutr) {
         TCSR<double> *DensRealCollect = new TCSR<double>(*P,MPI_COMM_WORLD,&Tsizes[0],Tsizes.size(),cutl,cutr,&matrix_comm);
         c_dscal(DensRealCollect->n_nonzeros,double(Tsizes.size())/double(nprocs),DensRealCollect->nnz,1);
         DensReal->copy_shifted(DensRealCollect,0,OverlapCollect->size_tot,cutl,OverlapCollect->size_tot);
@@ -216,7 +216,8 @@ double sabtime=get_time(0.0);
         bands_start=singularities.energy_gs;
 if (!iam) cout << "TIME FOR SINGULARITIES " << get_time(sabtime) << endl;
         int follow_bands = (transport_params->rlaxis_integration_method==31);
-        for (uint i_mu=0;i_mu<contactvec.size();i_mu++) singularities.write_bandstructure(i_mu,follow_bands);
+        int debugout = 0;
+        for (uint i_mu=0;i_mu<contactvec.size();i_mu++) singularities.write_bandstructure(i_mu,transport_params->cp2k_scf_iter,follow_bands,debugout);
     }
  
     double Temp=transport_params->temperature;
@@ -445,7 +446,7 @@ int Energyvector::add_cmpx_cont_energies(double start,double mu,std::vector<CPX>
         energyvector.insert(energyvector.end(),quadrature.abscissae.begin(),quadrature.abscissae.end());
         stepvector.insert(stepvector.end(),quadrature.weights.begin(),quadrature.weights.end());
     }
-    if (transport_params->method==4 && !transport_params->cutout) {
+    if (transport_params->method==4 && !transport_params->obc) {
         methodvector.resize(energyvector.size(),transport_methods::EQ);
     } else {
         methodvector.resize(energyvector.size(),transport_methods::GF);

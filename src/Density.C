@@ -40,7 +40,6 @@ int worldrank; MPI_Comm_rank(MPI_COMM_WORLD,&worldrank);
     int n_mu=muvec.size();
     int solver_method=parameter_sab->linear_solver;
     int GPUS_per_point=parameter_sab->gpus_per_point;
-    int cutout=parameter_sab->cutout;
     int run_splitsolve = solver_method==11 && method==transport_methods::WF;
 int bandwidth=contactvec[0].bandwidth;
 int ndof=contactvec[0].ndof;
@@ -67,9 +66,7 @@ sabtime=get_time(d_zer);
         c_daxpy(SumHamC->n_nonzeros,d_one,KohnSham->nnz,1,(double*)SumHamC->nnz,2);
 if (!worldrank) cout << "TIME FOR SumHamC " << get_time(sabtime) << endl;
 // set pbc to zero 
-//        if (!cutout) SumHamC->settozeropbc(bandwidth,ndof);
-SumHamC->removepbc(bandwidth,ndof);//this does not cost additional memory
-//SumHamC->remove_thr(1.0E-6);
+        SumHamC->removepbc(bandwidth,ndof);
 // compute self energies
         if (run_splitsolve) {
             MPI_Comm dist_comm;
