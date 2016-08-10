@@ -149,15 +149,16 @@ if (!iam) cout << "TIME FOR DENSITY " << get_time(sabtime) << endl;
         mysstream << "CurrentFromTransmission_" << transport_params->cp2k_scf_iter;
         ofstream myfile(mysstream.str().c_str());
         myfile.precision(15);
-        for (int ibias=1;ibias<=600;ibias++) {
+        for (int ibias=-600;ibias<=600;ibias++) {
+            double dbias=ibias*0.001;
             double current = 0.0;
             for (uint iele=0;iele<energyvector.size();iele++) {
                 if (!imag(energyvector[iele])) {
-                    double diff_fermi = fermi(real(energyvector[iele]),muvec[0]+ibias*0.001,transport_params->temperature,0)-fermi(real(energyvector[iele]),muvec[0],transport_params->temperature,0);
+                    double diff_fermi = fermi(real(energyvector[iele]),muvec[0]+dbias,transport_params->temperature,0)-fermi(real(energyvector[iele]),muvec[0],transport_params->temperature,0);
                     current += 2.0*E_ELECTRON*E_ELECTRON/(2.0*M_PI*H_BAR)*diff_fermi*real(stepvector[iele])*(-transmission2[iele]);
                 }
             }
-            myfile << ibias*0.001 << " " << current << endl;
+            myfile << dbias << " " << current << endl;
         }
         myfile.close();
     }
@@ -270,18 +271,21 @@ if (!iam) cout << "TIME FOR PROPAGATING MODES " << get_time(sabtime) << endl;
             MPI_Bcast(&propagating_sizes[ie][0],contactvec.size(),MPI_INT,0,MPI_COMM_WORLD);
         }
         if (!iam && contactvec.size()>muvec.size()) {
-            ofstream myfile("CurrentFromBandstructure");
+            stringstream mysstream;
+            mysstream << "CurrentFromBandstructure_" << transport_params->cp2k_scf_iter;
+            ofstream myfile(mysstream.str().c_str());
             myfile.precision(15);
             double cb_max = *max_element(singularities.energies_cb.begin(),singularities.energies_cb.end());
-            for (int ibias=1;ibias<=12;ibias++) {
+            for (int ibias=-600;ibias<=600;ibias++) {
+                double dbias=ibias*0.001;
                 double current = 0.0;
                 for (uint iele=0;iele<energyvector.size();iele++) {
                     if (!imag(energyvector[iele]) && real(energyvector[iele])>cb_max) {
-                        double diff_fermi = fermi(real(energyvector[iele]),muvec[0]+ibias*0.05,transport_params->temperature,0)-fermi(real(energyvector[iele]),muvec[0],transport_params->temperature,0);
+                        double diff_fermi = fermi(real(energyvector[iele]),muvec[0]+dbias,transport_params->temperature,0)-fermi(real(energyvector[iele]),muvec[0],transport_params->temperature,0);
                         current += 2.0*E_ELECTRON*E_ELECTRON/(2.0*M_PI*H_BAR)*diff_fermi*real(stepvector[iele])*propagating_sizes[iele][contactvec.size()-1];
                     }
                 }
-                myfile << ibias*0.05 << " " << current << endl;
+                myfile << dbias << " " << current << endl;
             }
             myfile.close();
         }
