@@ -17,6 +17,7 @@ Singularities::Singularities(transport_parameters *parameter_sab,std::vector<con
     Temp=parameter_sab->temperature;
     n_mu=contactvec.size();
     evfac=parameter_sab->evoltfactor;
+    sab_iter=parameter_sab->cp2k_scf_iter;
 
     int nprocs;
     MPI_Comm_size(MPI_COMM_WORLD,&nprocs);
@@ -290,7 +291,7 @@ void Singularities::write_bandstructure(int i_mu,int do_follow_band)
         int ndof=contactvec[i_mu].ndof;
         ofstream myfile;
         stringstream mysstream;
-        mysstream << "EnergiesWRTk" << i_mu;
+        mysstream << "EnergiesWRTk" << i_mu << "_" << sab_iter;
         myfile.open(mysstream.str().c_str());
         myfile.precision(15);
         for (int iband=0;iband<ndof;iband++) {

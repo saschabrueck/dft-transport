@@ -30,6 +30,8 @@ WireGenerator* Wire;
 FEMGrid *FEM;
 Poisson *OMEN_Poisson_Solver;
 
+int scf_iter_sab=0;
+
 int main (int argc, char **argv)
 {
    int fcomm;

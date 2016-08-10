@@ -2,6 +2,8 @@
 #include "Quadrature.H"
 #include "Blas.H"
 
+using namespace MYBLAS;
+
 struct QUADRATURE_Exception{
     QUADRATURE_Exception(const int line,const char* file) {std::cerr<<"Error in line "<<line<<" of file "<<file<<std::endl;}
 };

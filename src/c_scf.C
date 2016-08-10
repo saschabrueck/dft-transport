@@ -10,8 +10,61 @@
  *          This function acts as the gate to the CP2K's world. 
  *          Here only call functions that evaluate a P matrix.   
  */
+
+extern int scf_iter_sab;
+
+void add_to_cp2k_csr(cp2k_csr_interop_type& cp2kCSRmat,double factor,int start_i_fr,int start_j_fr,int start_i_to,int start_j_to,int length_i,int length_j,MPI_Comm cp2k_comm)
+{
+    TCSR<double> *Pmc = new TCSR<double>(cp2kCSRmat,start_i_fr,length_i,start_j_fr,length_j);
+    TCSR<double> *Pm  = new TCSR<double>(Pmc,cp2k_comm);
+    delete Pmc;
+    double *Pf = new double[length_i*length_j];
+    Pm->sparse_to_full(Pf,length_i,length_j);
+    delete Pm;
+    for(int r=0;r<cp2kCSRmat.nrows_local;r++){
+        int i=r+cp2kCSRmat.first_row-start_i_to;
+        if(i>=0 && i<length_i){
+            for(int e=cp2kCSRmat.rowptr_local[r]-1;e<cp2kCSRmat.rowptr_local[r+1]-1;e++){
+                int j=cp2kCSRmat.colind_local[e]-1-start_j_to;
+                if(j>=0 && j<length_j){
+                    cp2kCSRmat.nzvals_local[e]+=factor*Pf[i+j*length_i];
+                }
+            }
+        }
+    }
+    delete[] Pf;
+}
+
+void copy_to_cp2k_csr(cp2k_csr_interop_type& cp2kCSRmat,double factor,int start_i_fr,int start_j_fr,int start_i_to,int start_j_to,int length_i,int length_j,MPI_Comm cp2k_comm)
+{
+    TCSR<double> *Pmc = new TCSR<double>(cp2kCSRmat,start_i_fr,length_i,start_j_fr,length_j);
+    TCSR<double> *Pm  = new TCSR<double>(Pmc,cp2k_comm);
+    delete Pmc;
+    double *Pf = new double[length_i*length_j];
+    Pm->sparse_to_full(Pf,length_i,length_j);
+    delete Pm;
+    for(int r=0;r<cp2kCSRmat.nrows_local;r++){
+        int i=r+cp2kCSRmat.first_row-start_i_to;
+        if(i>=0 && i<length_i){
+            for(int e=cp2kCSRmat.rowptr_local[r]-1;e<cp2kCSRmat.rowptr_local[r+1]-1;e++){
+                int j=cp2kCSRmat.colind_local[e]-1-start_j_to;
+                if(j>=0 && j<length_j){
+                    cp2kCSRmat.nzvals_local[e]=factor*Pf[i+j*length_i];
+                }
+            }
+        }
+    }
+    delete[] Pf;
+}
+
+#ifdef HAVE_PIMAG
 void c_scf_method(cp2k_transport_parameters cp2k_transport_params, cp2k_csr_interop_type S, cp2k_csr_interop_type KS, cp2k_csr_interop_type * P, cp2k_csr_interop_type * PImag)
 {
+#else
+void c_scf_method(cp2k_transport_parameters cp2k_transport_params, cp2k_csr_interop_type S, cp2k_csr_interop_type KS, cp2k_csr_interop_type * P)
+{
+    cp2k_csr_interop_type * PImag = NULL;
+#endif
     MPI::Intercomm Comm;
     Comm = MPI::COMM_WORLD;
     int rank = Comm.Get_rank();
@@ -108,32 +161,151 @@ void c_scf_method(cp2k_transport_parameters cp2k_transport_params, cp2k_csr_inte
     transport_params->cutl = std::accumulate(&cp2k_transport_params.nsgf[0],&cp2k_transport_params.nsgf[cp2k_transport_params.cutout[0]],0);
     transport_params->cutr = std::accumulate(&cp2k_transport_params.nsgf[cp2k_transport_params.n_atoms-cp2k_transport_params.cutout[1]],&cp2k_transport_params.nsgf[cp2k_transport_params.n_atoms],0);
 
-    int wr_cutblocksize = 0;
-    int wr_bw           = 0;
-    int wr_ndof         = 0;
-    if (!transport_params->cutout && transport_params->method==0 && contactvec.size()>0) {
-        wr_bw   = contactvec[0].bandwidth;
-        wr_ndof = contactvec[0].ndof;
+    transport_params->n_points_inv=256;
+
+    transport_params->cp2k_scf_iter = ++scf_iter_sab;
+
+    if (!rank) for (uint i=0;i<contactvec.size();i++) cout << "Contact BW " << contactvec[i].bandwidth << endl;
+
+    transport_params->negf_solver=0;
+    if (transport_params->eps_decay<0.0) {
+        transport_params->negf_solver=1;
+        transport_params->eps_decay=-transport_params->eps_decay;
     }
-    switch (transport_params->method) {
-        case 0:
-            if (!rank) cout << "Writing Matrices" << endl;
-//            write_matrix(Overlap,KohnSham,wr_cutblocksize,wr_bw,wr_ndof);
-            break;
-        case 1:
-            if (!rank) cout << "Starting ScaLaPackDiag" << endl;
-//            if (diagscalapack(Overlap,KohnSham,transport_params)) throw std::exception();
-            break;
-        case 2:
-            if (!rank) cout << "Starting CP2K core/valence Hamiltonian + OMEN Poisson local self consistent code" << endl;
-            if (semiselfconsistent(S,KS,P,PImag,muvec,contactvec,Bsizes,orb_per_atom,transport_params)) throw std::exception();
-            break;
-        case 3:
-        case 4:
-        default:
-            if (!rank) cout << "Starting Transport " << transport_params->method << endl;
-            Energyvector energyvector;
-            if (energyvector.Execute(S,KS,P,PImag,muvec,contactvec,Bsizes,orb_per_atom,NULL,NULL,transport_params)) throw std::exception();
+
+    int do_double=0;
+    if (transport_params->method==3) do_double=1;
+    for (int i=0;i<=do_double;i++) {
+        if (do_double) {
+            if (!i) {
+                transport_params->cutl=0;
+                transport_params->cutr=P->nrows_total/2;
+                transport_params->cutout=1;
+                contactvec[1].start+=-P->nrows_total/2;
+                contactvec[1].start_bs+=-P->nrows_total/2;
+                transport_params->cp2k_scf_iter=scf_iter_sab;
+            } else {
+                transport_params->cutl=P->nrows_total/2;
+                transport_params->cutr=0;
+                transport_params->cutout=1;
+                contactvec[0].start_bs+=P->nrows_total/2;
+                contactvec[1].start_bs+=P->nrows_total/2;
+                transport_params->cp2k_scf_iter=-scf_iter_sab;
+            }
+        }
+
+        int wr_cutblocksize = 0;
+        int wr_bw           = 0;
+        int wr_ndof         = 0;
+        if (!transport_params->cutout && transport_params->method==0 && contactvec.size()>0) {
+            wr_bw   = contactvec[0].bandwidth;
+            wr_ndof = contactvec[0].ndof;
+        }
+        switch (transport_params->method) {
+            case 0:
+                if (!rank) cout << "Writing Matrices" << endl;
+                //write_matrix(Overlap,KohnSham,wr_cutblocksize,wr_bw,wr_ndof);
+                break;
+            case 1:
+                if (!rank) cout << "Starting ScaLaPackDiag" << endl;
+                //if (diagscalapack(Overlap,KohnSham,transport_params)) throw std::exception();
+                break;
+            case 2:
+                if (!rank) cout << "Starting CP2K core/valence Hamiltonian + OMEN Poisson local self consistent code" << endl;
+                if (semiselfconsistent(S,KS,P,PImag,muvec,contactvec,Bsizes,orb_per_atom,transport_params)) throw std::exception();
+                break;
+            case 3:
+            case 4:
+            default:
+                if (!rank) cout << "Starting Transport " << transport_params->method << endl;
+                Energyvector energyvector;
+                if (energyvector.Execute(S,KS,P,PImag,muvec,contactvec,Bsizes,orb_per_atom,NULL,NULL,transport_params)) throw std::exception();
+        }
+
+    }
+
+    if (!transport_params->extra_scf) {
+        for (int i=0;i<contactvec[0].bandwidth;i++) {
+            for (int ii=0;ii<=i;ii++) {
+            int size_tot=P->nrows_total;
+            int offset=0;
+            copy_to_cp2k_csr(*P,0.5,\
+                        (i+1+offset)*contactvec[0].ndof,\
+                        offset*contactvec[0].ndof,\
+                        ii*contactvec[0].ndof,\
+                        size_tot+(ii-(i+1))*contactvec[0].ndof,\
+                        contactvec[0].ndof,contactvec[0].ndof,MPI_COMM_WORLD);
+            add_to_cp2k_csr(*P,0.5,\
+                        size_tot-(offset+1)*contactvec[0].ndof,\
+                        size_tot-(i+2+offset)*contactvec[0].ndof,\
+                        ii*contactvec[0].ndof,\
+                        size_tot+(ii-(i+1))*contactvec[0].ndof,\
+                        contactvec[0].ndof,contactvec[0].ndof,MPI_COMM_WORLD);
+            copy_to_cp2k_csr(*P,0.5,\
+                        offset*contactvec[0].ndof,\
+                        (i+1+offset)*contactvec[0].ndof,\
+                        size_tot+(ii-(i+1))*contactvec[0].ndof,\
+                        ii*contactvec[0].ndof,\
+                        contactvec[0].ndof,contactvec[0].ndof,MPI_COMM_WORLD);
+            add_to_cp2k_csr(*P,0.5,\
+                        size_tot-(i+2+offset)*contactvec[0].ndof,\
+                        size_tot-(offset+1)*contactvec[0].ndof,\
+                        size_tot+(ii-(i+1))*contactvec[0].ndof,\
+                        ii*contactvec[0].ndof,\
+                        contactvec[0].ndof,contactvec[0].ndof,MPI_COMM_WORLD);
+            }
+        }
+        if (transport_params->cutout) {
+            for (int i=0;i<contactvec[0].bandwidth;i++) {
+                for (int ii=0;ii<=i;ii++) {
+                    int size_tot=P->nrows_total;
+                    int mid=size_tot/2;
+                    copy_to_cp2k_csr(*P,0.5,\
+                        mid+(-i-2)*contactvec[0].ndof,\
+                        mid+(-1)*contactvec[0].ndof,\
+                        mid+(-i-1+ii)*contactvec[0].ndof,\
+                        mid+(0+ii)*contactvec[0].ndof,\
+                        contactvec[0].ndof,contactvec[0].ndof,MPI_COMM_WORLD);
+                    add_to_cp2k_csr(*P,0.5,\
+                        mid+0*contactvec[0].ndof,\
+                        mid+(i+1)*contactvec[0].ndof,\
+                        mid+(-i-1+ii)*contactvec[0].ndof,\
+                        mid+(0+ii)*contactvec[0].ndof,\
+                        contactvec[0].ndof,contactvec[0].ndof,MPI_COMM_WORLD);
+                    copy_to_cp2k_csr(*P,0.5,\
+                        mid+(-1)*contactvec[0].ndof,\
+                        mid+(-i-2)*contactvec[0].ndof,\
+                        mid+(0+ii)*contactvec[0].ndof,\
+                        mid+(-i-1+ii)*contactvec[0].ndof,\
+                        contactvec[0].ndof,contactvec[0].ndof,MPI_COMM_WORLD);
+                    add_to_cp2k_csr(*P,0.5,\
+                        mid+(i+1)*contactvec[0].ndof,\
+                        mid+0*contactvec[0].ndof,\
+                        mid+(0+ii)*contactvec[0].ndof,\
+                        mid+(-i-1+ii)*contactvec[0].ndof,\
+                        contactvec[0].ndof,contactvec[0].ndof,MPI_COMM_WORLD);
+                }
+            }
+        }
+    }
+
+    if (!transport_params->extra_scf) {
+        double *mulli=new double[S.nrows_total]();
+        for (int i=0;i<S.nrows_local;i++) {
+            for (int e=S.rowptr_local[i]-1;e<S.rowptr_local[i+1]-1;e++) {
+                mulli[i+S.first_row]+=S.nzvals_local[e]*P->nzvals_local[e];
+            }
+        }
+        MPI_Allreduce(MPI_IN_PLACE,mulli,S.nrows_total,MPI_DOUBLE,MPI_SUM,MPI_COMM_WORLD);
+        if (!rank) {
+            stringstream mysstream;
+            mysstream << "Density_BF_" << scf_iter_sab;
+            ofstream myfile(mysstream.str().c_str());
+            myfile.precision(8);
+            for (int i=0;i<S.nrows_total;i++) myfile<<mulli[i]<<"\n";
+            myfile.close();
+        }
+        delete[] mulli;
     }
  
     delete transport_params;
