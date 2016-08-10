@@ -447,7 +447,7 @@ struct transport_parameters
     int    extra_scf;
     int    cutl;
     int    cutr;
-    int    cutout;
+    int    obc;
     int    negf_solver;
     int    cp2k_scf_iter;
     double colzero_threshold;

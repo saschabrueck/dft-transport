@@ -98,9 +98,9 @@ void c_scf_method(cp2k_transport_parameters cp2k_transport_params, cp2k_csr_inte
     transport_params->tasks_per_integration_point = cp2k_transport_params.tasks_per_integration_point;
     transport_params->extra_scf                   = cp2k_transport_params.extra_scf;
     transport_params->n_atoms                     = cp2k_transport_params.n_atoms-cp2k_transport_params.cutout[0]-cp2k_transport_params.cutout[1];
-    transport_params->cutout                      = cp2k_transport_params.cutout[0] || cp2k_transport_params.cutout[1];
     transport_params->evoltfactor                 = cp2k_transport_params.evoltfactor;
     transport_params->NCRC_beyn                   = cp2k_transport_params.ncrc_beyn;
+    transport_params->obc                         = cp2k_transport_params.cutout[0] || cp2k_transport_params.cutout[1];
     if (cp2k_transport_params.eps_fermi<=(numeric_limits<double>::epsilon)()) {
         transport_params->eps_fermi               = (numeric_limits<double>::epsilon)();
     } else {
@@ -161,7 +161,8 @@ void c_scf_method(cp2k_transport_parameters cp2k_transport_params, cp2k_csr_inte
     transport_params->cutl = std::accumulate(&cp2k_transport_params.nsgf[0],&cp2k_transport_params.nsgf[cp2k_transport_params.cutout[0]],0);
     transport_params->cutr = std::accumulate(&cp2k_transport_params.nsgf[cp2k_transport_params.n_atoms-cp2k_transport_params.cutout[1]],&cp2k_transport_params.nsgf[cp2k_transport_params.n_atoms],0);
 
-    transport_params->n_points_inv=256;
+//    transport_params->obc = 1;
+    transport_params->n_points_inv = 256;
 
     transport_params->cp2k_scf_iter = ++scf_iter_sab;
 
@@ -180,14 +181,14 @@ void c_scf_method(cp2k_transport_parameters cp2k_transport_params, cp2k_csr_inte
             if (!i) {
                 transport_params->cutl=0;
                 transport_params->cutr=P->nrows_total/2;
-                transport_params->cutout=1;
+                transport_params->obc=1;
                 contactvec[1].start+=-P->nrows_total/2;
                 contactvec[1].start_bs+=-P->nrows_total/2;
                 transport_params->cp2k_scf_iter=scf_iter_sab;
             } else {
                 transport_params->cutl=P->nrows_total/2;
                 transport_params->cutr=0;
-                transport_params->cutout=1;
+                transport_params->obc=1;
                 contactvec[0].start_bs+=P->nrows_total/2;
                 contactvec[1].start_bs+=P->nrows_total/2;
                 transport_params->cp2k_scf_iter=-scf_iter_sab;
@@ -197,7 +198,7 @@ void c_scf_method(cp2k_transport_parameters cp2k_transport_params, cp2k_csr_inte
         int wr_cutblocksize = 0;
         int wr_bw           = 0;
         int wr_ndof         = 0;
-        if (!transport_params->cutout && transport_params->method==0 && contactvec.size()>0) {
+        if (!transport_params->obc && transport_params->method==0 && contactvec.size()>0) {
             wr_bw   = contactvec[0].bandwidth;
             wr_ndof = contactvec[0].ndof;
         }
@@ -224,30 +225,30 @@ void c_scf_method(cp2k_transport_parameters cp2k_transport_params, cp2k_csr_inte
 
     }
 
-    if (!transport_params->extra_scf) {
+    if (!transport_params->extra_scf && transport_params->obc) {
         for (int i=0;i<contactvec[0].bandwidth;i++) {
             for (int ii=0;ii<=i;ii++) {
-            int size_tot=P->nrows_total;
-            int offset=0;
-            copy_to_cp2k_csr(*P,0.5,\
+                int size_tot=P->nrows_total;
+                int offset=0;
+                copy_to_cp2k_csr(*P,0.5,\
                         (i+1+offset)*contactvec[0].ndof,\
                         offset*contactvec[0].ndof,\
                         ii*contactvec[0].ndof,\
                         size_tot+(ii-(i+1))*contactvec[0].ndof,\
                         contactvec[0].ndof,contactvec[0].ndof,MPI_COMM_WORLD);
-            add_to_cp2k_csr(*P,0.5,\
+                add_to_cp2k_csr(*P,0.5,\
                         size_tot-(offset+1)*contactvec[0].ndof,\
                         size_tot-(i+2+offset)*contactvec[0].ndof,\
                         ii*contactvec[0].ndof,\
                         size_tot+(ii-(i+1))*contactvec[0].ndof,\
                         contactvec[0].ndof,contactvec[0].ndof,MPI_COMM_WORLD);
-            copy_to_cp2k_csr(*P,0.5,\
+                copy_to_cp2k_csr(*P,0.5,\
                         offset*contactvec[0].ndof,\
                         (i+1+offset)*contactvec[0].ndof,\
                         size_tot+(ii-(i+1))*contactvec[0].ndof,\
                         ii*contactvec[0].ndof,\
                         contactvec[0].ndof,contactvec[0].ndof,MPI_COMM_WORLD);
-            add_to_cp2k_csr(*P,0.5,\
+                add_to_cp2k_csr(*P,0.5,\
                         size_tot-(i+2+offset)*contactvec[0].ndof,\
                         size_tot-(offset+1)*contactvec[0].ndof,\
                         size_tot+(ii-(i+1))*contactvec[0].ndof,\
@@ -255,36 +256,36 @@ void c_scf_method(cp2k_transport_parameters cp2k_transport_params, cp2k_csr_inte
                         contactvec[0].ndof,contactvec[0].ndof,MPI_COMM_WORLD);
             }
         }
-        if (transport_params->cutout) {
-            for (int i=0;i<contactvec[0].bandwidth;i++) {
-                for (int ii=0;ii<=i;ii++) {
-                    int size_tot=P->nrows_total;
-                    int mid=size_tot/2;
-                    copy_to_cp2k_csr(*P,0.5,\
+    }
+    if (do_double) {
+        for (int i=0;i<contactvec[0].bandwidth;i++) {
+            for (int ii=0;ii<=i;ii++) {
+                int size_tot=P->nrows_total;
+                int mid=size_tot/2;
+                copy_to_cp2k_csr(*P,0.5,\
                         mid+(-i-2)*contactvec[0].ndof,\
                         mid+(-1)*contactvec[0].ndof,\
                         mid+(-i-1+ii)*contactvec[0].ndof,\
                         mid+(0+ii)*contactvec[0].ndof,\
                         contactvec[0].ndof,contactvec[0].ndof,MPI_COMM_WORLD);
-                    add_to_cp2k_csr(*P,0.5,\
+                add_to_cp2k_csr(*P,0.5,\
                         mid+0*contactvec[0].ndof,\
                         mid+(i+1)*contactvec[0].ndof,\
                         mid+(-i-1+ii)*contactvec[0].ndof,\
                         mid+(0+ii)*contactvec[0].ndof,\
                         contactvec[0].ndof,contactvec[0].ndof,MPI_COMM_WORLD);
-                    copy_to_cp2k_csr(*P,0.5,\
+                copy_to_cp2k_csr(*P,0.5,\
                         mid+(-1)*contactvec[0].ndof,\
                         mid+(-i-2)*contactvec[0].ndof,\
                         mid+(0+ii)*contactvec[0].ndof,\
                         mid+(-i-1+ii)*contactvec[0].ndof,\
                         contactvec[0].ndof,contactvec[0].ndof,MPI_COMM_WORLD);
-                    add_to_cp2k_csr(*P,0.5,\
+                add_to_cp2k_csr(*P,0.5,\
                         mid+(i+1)*contactvec[0].ndof,\
                         mid+0*contactvec[0].ndof,\
                         mid+(0+ii)*contactvec[0].ndof,\
                         mid+(-i-1+ii)*contactvec[0].ndof,\
                         contactvec[0].ndof,contactvec[0].ndof,MPI_COMM_WORLD);
-                }
             }
         }
     }

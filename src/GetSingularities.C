@@ -17,7 +17,6 @@ Singularities::Singularities(transport_parameters *parameter_sab,std::vector<con
     Temp=parameter_sab->temperature;
     n_mu=contactvec.size();
     evfac=parameter_sab->evoltfactor;
-    sab_iter=parameter_sab->cp2k_scf_iter;
 
     int nprocs;
     MPI_Comm_size(MPI_COMM_WORLD,&nprocs);
@@ -284,14 +283,14 @@ void Singularities::follow_band(int i_mu)
     }
 }
 
-void Singularities::write_bandstructure(int i_mu,int do_follow_band)
+void Singularities::write_bandstructure(int i_mu,int iter_num,int do_follow_band,int do_debug)
 {
     if (!iam) {
         if (do_follow_band) follow_band(i_mu);
         int ndof=contactvec[i_mu].ndof;
         ofstream myfile;
         stringstream mysstream;
-        mysstream << "EnergiesWRTk" << i_mu << "_" << sab_iter;
+        mysstream << "EnergiesWRTk" << i_mu << "_" << iter_num;
         myfile.open(mysstream.str().c_str());
         myfile.precision(15);
         for (int iband=0;iband<ndof;iband++) {
@@ -301,39 +300,41 @@ void Singularities::write_bandstructure(int i_mu,int do_follow_band)
             myfile << endl;
         }
         myfile.close();
-        mysstream.str("");
-        mysstream.clear();
-        mysstream << "DerivativesWRTk" << i_mu;
-        myfile.open(mysstream.str().c_str());
-        myfile.precision(15);
-        for (int iband=0;iband<ndof;iband++) {
-            for (int i_k=0;i_k<n_k;i_k++) {
-                myfile << " " << derivatives_matrix[i_mu][iband+ndof*i_k];
+        if (do_debug) {
+            mysstream.str("");
+            mysstream.clear();
+            mysstream << "DerivativesWRTk" << i_mu << "_" << iter_num;
+            myfile.open(mysstream.str().c_str());
+            myfile.precision(15);
+            for (int iband=0;iband<ndof;iband++) {
+                for (int i_k=0;i_k<n_k;i_k++) {
+                    myfile << " " << derivatives_matrix[i_mu][iband+ndof*i_k];
+                }
+                myfile << endl;
             }
-            myfile << endl;
-        }
-        myfile.close();
-        mysstream.str("");
-        mysstream.clear();
-        mysstream << "CurvaturesWRTk" << i_mu;
-        myfile.open(mysstream.str().c_str());
-        myfile.precision(15);
-        for (int iband=0;iband<ndof;iband++) {
-            for (int i_k=0;i_k<n_k;i_k++) {
-                myfile << " " << curvatures_matrix[i_mu][iband+ndof*i_k];
+            myfile.close();
+            mysstream.str("");
+            mysstream.clear();
+            mysstream << "CurvaturesWRTk" << i_mu << "_" << iter_num;
+            myfile.open(mysstream.str().c_str());
+            myfile.precision(15);
+            for (int iband=0;iband<ndof;iband++) {
+                for (int i_k=0;i_k<n_k;i_k++) {
+                    myfile << " " << curvatures_matrix[i_mu][iband+ndof*i_k];
+                }
+                myfile << endl;
             }
-            myfile << endl;
+            myfile.close();
+            mysstream.str("");
+            mysstream.clear();
+            mysstream << "ExtremeValues" << i_mu << "_" << iter_num;
+            myfile.open(mysstream.str().c_str());
+            myfile.precision(15);
+            for (uint ival=0;ival<energies_extremum[i_mu].size();ival++) {
+                myfile << kval_extremum[i_mu][ival] << " " << energies_extremum[i_mu][ival] << " " << curvatures_extremum[i_mu][ival] << endl;
+            }
+            myfile.close();
         }
-        myfile.close();
-        mysstream.str("");
-        mysstream.clear();
-        mysstream << "ExtremeValues" << i_mu;
-        myfile.open(mysstream.str().c_str());
-        myfile.precision(15);
-        for (uint ival=0;ival<energies_extremum[i_mu].size();ival++) {
-            myfile << kval_extremum[i_mu][ival] << " " << energies_extremum[i_mu][ival] << " " << curvatures_extremum[i_mu][ival] << endl;
-        }
-        myfile.close();
     }
 }
 
