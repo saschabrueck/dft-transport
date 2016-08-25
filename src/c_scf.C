@@ -92,7 +92,7 @@ void c_scf_method(cp2k_transport_parameters cp2k_transport_params, cp2k_csr_inte
     transport_params->eps_eigval_degen            = cp2k_transport_params.eps_eigval_degen;
     transport_params->energy_interval             = cp2k_transport_params.energy_interval;
     transport_params->min_interval                = cp2k_transport_params.min_interval;
-    transport_params->temperature                 = cp2k_transport_params.temperature;
+    transport_params->temperature                 = cp2k_transport_params.temperature*cp2k_transport_params.evoltfactor/K_BOLTZMANN;
     transport_params->svd_cutoff                  = cp2k_transport_params.svd_cutoff;
     transport_params->n_points_beyn               = cp2k_transport_params.n_points_beyn;
     transport_params->tasks_per_integration_point = cp2k_transport_params.tasks_per_integration_point;
