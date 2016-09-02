@@ -105,9 +105,7 @@ if (!iam) cout << "TIME FOR DISTRIBUTING MATRICES " << get_time(sabtime) << endl
     std::vector<transport_methods::transport_method> methodvector;
     std::vector< std::vector<int> > propagating_sizes;
     if (determine_energyvector(energyvector,stepvector,methodvector,propagating_sizes,KohnSham,Overlap,muvec,contactvec,transport_params)) return (LOGCERR, EXIT_FAILURE);
-    std::vector<double> currentvector(energyvector.size(),0.0);
     std::vector<double> transmission(energyvector.size(),0.0);
-    std::vector<double> dos_profile(energyvector.size(),0.0);
     int matrix_id = iam/transport_params->tasks_per_point;
     int n_mat_comm = nprocs/transport_params->tasks_per_point;
 sabtime=get_time(0.0);
@@ -115,34 +113,25 @@ sabtime=get_time(0.0);
     for (int iseq=0;iseq<int(ceil(double(energyvector.size())/n_mat_comm));iseq++)
         if ( (jpos=matrix_id+iseq*n_mat_comm)<energyvector.size())
             if (abs(stepvector[jpos])>0.0)
-                if (density(KohnShamCollect,OverlapCollect,DensReal,DensImag,energyvector[jpos],stepvector[jpos],methodvector[jpos],muvec,contactvec,currentvector[jpos],transmission[jpos],dos_profile[jpos],propagating_sizes[jpos],Bsizes,orb_per_at,transport_params,jpos,matrix_comm))
+                if (density(KohnShamCollect,OverlapCollect,DensReal,DensImag,energyvector[jpos],stepvector[jpos],methodvector[jpos],muvec,contactvec,transmission[jpos],propagating_sizes[jpos],Bsizes,orb_per_at,transport_params,jpos,matrix_comm))
                     return (LOGCERR, EXIT_FAILURE);
 if (!iam) cout << "TIME FOR DENSITY " << get_time(sabtime) << endl;
-// trPS per energy point
-    std::vector<double> currentvector2(energyvector.size(),0.0);
-    std::vector<double> transmission2(energyvector.size(),0.0);
-    std::vector<double> dos_profile2(energyvector.size(),0.0);
-    MPI_Allreduce(&currentvector[0],&currentvector2[0],energyvector.size(),MPI_DOUBLE,MPI_SUM,MPI_COMM_WORLD);
-    MPI_Allreduce(&transmission[0],&transmission2[0],energyvector.size(),MPI_DOUBLE,MPI_SUM,MPI_COMM_WORLD);
-    MPI_Allreduce(&dos_profile[0],&dos_profile2[0],energyvector.size(),MPI_DOUBLE,MPI_SUM,MPI_COMM_WORLD);
-    if (!iam) {
-        stringstream mysstream;
-        mysstream << "DOS_Profile_" << transport_params->cp2k_scf_iter;
-        ofstream myfile(mysstream.str().c_str());
-        myfile.precision(15);
-        for (uint iele=0;iele<energyvector.size();iele++)
-            myfile << real(energyvector[iele]) << " " << imag(energyvector[iele]) << " " << real(stepvector[iele]) << " " << imag(stepvector[iele]) << " " << dos_profile2[iele] << endl;
-        myfile.close();
-    }
+    MPI_Allreduce(MPI_IN_PLACE,&transmission[0],energyvector.size(),MPI_DOUBLE,MPI_SUM,MPI_COMM_WORLD);
     if (!iam) {
         stringstream mysstream;
         mysstream << "Transmission_" << transport_params->cp2k_scf_iter;
         ofstream myfile(mysstream.str().c_str());
         myfile.precision(15);
-        for (uint iele=0;iele<energyvector.size();iele++)
-            if (!imag(energyvector[iele]))
-                myfile << real(energyvector[iele]) << " " << real(stepvector[iele]) << " " << transmission2[iele] << endl;
+        double current = 0.0;
+        for (uint iele=0;iele<energyvector.size();iele++) {
+            if (!imag(energyvector[iele])) {
+                myfile << real(energyvector[iele]) << " " << real(stepvector[iele]) << " " << transmission[iele] << endl;
+                double diff_fermi=fermi(real(energyvector[iele]),muvec[0],transport_params->temperature,0)-fermi(real(energyvector[iele]),muvec[1],transport_params->temperature,0);
+                current += 2.0*E_ELECTRON*E_ELECTRON/(2.0*M_PI*H_BAR)*diff_fermi*real(stepvector[iele])*(-transmission[iele]);
+            }
+        }
         myfile.close();
+        cout << "CURRENT IS " << current << endl;
     }
     if (!iam) {
         stringstream mysstream;
@@ -155,14 +144,13 @@ if (!iam) cout << "TIME FOR DENSITY " << get_time(sabtime) << endl;
             for (uint iele=0;iele<energyvector.size();iele++) {
                 if (!imag(energyvector[iele])) {
                     double diff_fermi = fermi(real(energyvector[iele]),muvec[0]+dbias,transport_params->temperature,0)-fermi(real(energyvector[iele]),muvec[0],transport_params->temperature,0);
-                    current += 2.0*E_ELECTRON*E_ELECTRON/(2.0*M_PI*H_BAR)*diff_fermi*real(stepvector[iele])*(-transmission2[iele]);
+                    current += 2.0*E_ELECTRON*E_ELECTRON/(2.0*M_PI*H_BAR)*diff_fermi*real(stepvector[iele])*(-transmission[iele]);
                 }
             }
             myfile << dbias << " " << current << endl;
         }
         myfile.close();
     }
-    if (!iam) cout << "CURRENT IS " << c_ddot(energyvector.size(),&currentvector2[0],1,(double*)&stepvector[0],2) << endl;
 
     if (cutl || cutr) {
         TCSR<double> *DensRealCollect = new TCSR<double>(*P,MPI_COMM_WORLD,&Tsizes[0],Tsizes.size(),cutl,cutr,&matrix_comm);

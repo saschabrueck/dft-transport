@@ -21,6 +21,7 @@ BoundarySelfEnergy::BoundarySelfEnergy()
     spainjdist = NULL;
     lambdapro = NULL;
     n_propagating=-1;
+    rcond=0.0;
 
     master_rank=-1;
 
@@ -574,14 +575,12 @@ if (!worldrank) cout << "TIME FOR MATRIX MATRIX MULTIPLICATIONS FOR INVERSE OF G
         int *pivarrayg=new int[neigbas];
         c_zgetrf(neigbas,neigbas,invgrs,neigbas,pivarrayg,&iinfo);
         if (iinfo) return (LOGCERR, EXIT_FAILURE);
-        double rcond;
         CPX *cworkcond=new CPX[2*neigbas];
         double *dworkcond=new double[2*neigbas];
         c_zgecon('1',neigbas,invgrs,neigbas,anorm,&rcond,cworkcond,dworkcond,&iinfo);
         if (iinfo) return (LOGCERR, EXIT_FAILURE);
         delete[] cworkcond;
         delete[] dworkcond;
-cout<<evecpos<<" HAS CONDITION NUMBER "<<rcond<<" SIGN "<<inj_sign<<endl;
         if (rcond<numeric_limits<double>::epsilon()) return (LOGCERR, EXIT_FAILURE);
         sigma = new CPX[triblocksize];
         CPX* RCOR = new CPX[ntriblock*neigbas];

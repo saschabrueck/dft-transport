@@ -7,6 +7,6 @@
 
 #include "CSR.H"
 
-int density(TCSR<double> *,TCSR<double> *,TCSR<double> *,TCSR<double> *,CPX,CPX,transport_methods::transport_method,std::vector<double>,std::vector<contact_type>,double&,double&,double&,std::vector<int>,std::vector<int>,std::vector<int>,transport_parameters*,int,MPI_Comm);
+int density(TCSR<double> *,TCSR<double> *,TCSR<double> *,TCSR<double> *,CPX,CPX,transport_methods::transport_method,std::vector<double>,std::vector<contact_type>,double&,std::vector<int>,std::vector<int>,std::vector<int>,transport_parameters*,int,MPI_Comm);
  
 #endif

@@ -26,7 +26,7 @@ using namespace std;
 #include "GetSigma.H"
 #include "Density.H"
 
-int density(TCSR<double> *KohnSham,TCSR<double> *Overlap,TCSR<double> *Ps,TCSR<double> *PsImag,CPX energy,CPX weight,transport_methods::transport_method method,std::vector<double> muvec,std::vector<contact_type> contactvec,double &current,double &transm,double &dos,std::vector<int> propnum,std::vector<int> Bsizes,std::vector<int> orb_per_at,transport_parameters *parameter_sab,int evecpos,MPI_Comm matrix_comm)
+int density(TCSR<double> *KohnSham,TCSR<double> *Overlap,TCSR<double> *Ps,TCSR<double> *PsImag,CPX energy,CPX weight,transport_methods::transport_method method,std::vector<double> muvec,std::vector<contact_type> contactvec,double &transm,std::vector<int> propnum,std::vector<int> Bsizes,std::vector<int> orb_per_at,transport_parameters *parameter_sab,int evecpos,MPI_Comm matrix_comm)
 {
     double d_one = 1.0;
     double d_zer = 0.0;
@@ -65,8 +65,9 @@ sabtime=get_time(d_zer);
         c_zscal(SumHamC->n_nonzeros,-energy,SumHamC->nnz,1);
         c_daxpy(SumHamC->n_nonzeros,d_one,KohnSham->nnz,1,(double*)SumHamC->nnz,2);
 if (!worldrank) cout << "TIME FOR SumHamC " << get_time(sabtime) << endl;
-// set pbc to zero 
-        SumHamC->removepbc(bandwidth,ndof);
+        if (!parameter_sab->cutl && !parameter_sab->cutr) {
+            SumHamC->removepbc(bandwidth,ndof);
+        }
 // compute self energies
         if (run_splitsolve) {
             MPI_Comm dist_comm;
@@ -161,7 +162,6 @@ if (!worldrank) cout << "TIME FOR ADDING SIGMA " << get_time(sabtime) << endl;
   
             delete[] HS_nnz_inp;
             c_zscal(Overlap->n_nonzeros,-weight/M_PI*CPX(0.0,1.0),(CPX*)HS_nnz_out,1);
-            dos=c_ddot(Overlap->n_nonzeros,Overlap->nnz,1,HS_nnz_out,2);
             c_daxpy(Overlap->n_nonzeros,1.0,HS_nnz_out,2,Ps->nnz,1);
             delete[] HS_nnz_out;
         } else if (solver_method==14 || solver_method==15) {
@@ -326,9 +326,6 @@ if (!worldrank) cout << "TIME FOR TRANSMISSION " << get_time(sabtime) << endl;
 if (abs(abs(transml)-abs(transmr))/max(1.0,min(abs(transml),abs(transmr)))>0.1) cout << "CAUTION: TRANSMISSION " << transml << " " << transmr << " AT ENERGY " << real(energy) << " AT POSITION " << evecpos << endl;
 //if (abs(transml)<1.0E-2 && nprol>0 && npror>0) cout << "RED ALERT: ZERO TRANSMISSION IN SPITE OF " << nprol << " AND " << npror << " AT ENERGY " << real(energy) << " AT POSITION " << evecpos << endl;
             transm=transml;
-            double diff_fermi=fermi(real(energy),muvec[0],parameter_sab->temperature,0)-fermi(real(energy),muvec[1],parameter_sab->temperature,0);
-            current=2.0*E_ELECTRON*E_ELECTRON/(2.0*M_PI*H_BAR)*diff_fermi*transm;
-cout << evecpos << " Transmission LEFT TO RIGHT: " << transml << " RIGHT TO LEFT: " << transmr << " FERMI DIFFERENCE: " << diff_fermi << endl;
         }
         for (int i_mu=0;i_mu<n_mu;i_mu++) selfenergies[i_mu].Deallocate_Gamma();
     } else if (method==transport_methods::WF) {
@@ -479,13 +476,13 @@ if (worldrank==left_gpu_rank) cout << "TIME FOR WAVEFUNCTION SPARSE SOLVE PHASE 
             double diff_fermil = -(fermi(real(energy),muvec[0]+vbias,parameter_sab->temperature,0)-fermi(real(energy),muvec[0],parameter_sab->temperature,0));
             CPX* SolT = new CPX[solsize*nprol];
             full_transpose(nprol,solsize,Sol,SolT);
-            Ps->psipsidagger_transpose(PsImag,SolT,nprol,+weight*fermil,+weight*diff_fermil*4.0*E_ELECTRON*E_ELECTRON/H_BAR);
+            Ps->psipsidagger_transpose(PsImag,SolT,nprol,+weight*fermil,+weight*diff_fermil);
             delete[] SolT;
             double fermir = fermi(real(energy),muvec[1],parameter_sab->temperature,0)-fermi(real(energy),muvec[0],parameter_sab->temperature,0);
             double diff_fermir = +(fermi(real(energy),muvec[1]+vbias,parameter_sab->temperature,0)-fermi(real(energy),muvec[1],parameter_sab->temperature,0));
             SolT = new CPX[solsize*npror];
             full_transpose(npror,solsize,&Sol[solsize*nprol],SolT);
-            Ps->psipsidagger_transpose(PsImag,SolT,npror,+weight*fermir,+weight*diff_fermir*4.0*E_ELECTRON*E_ELECTRON/H_BAR);
+            Ps->psipsidagger_transpose(PsImag,SolT,npror,+weight*fermir,+weight*diff_fermir);
             delete[] SolT;
         }
 // */
@@ -540,7 +537,6 @@ sabtime=get_time(d_zer);
             double dosl=Ps->psipsidagger(Overlap,Sol,Soll,Solr,nprol,ndof,bandwidth,+weight*fermil);
             double dosr=Ps->psipsidagger(Overlap,&Sol[Ps->size_tot*nprol],&Soll[Ps->size_tot*nprol],&Solr[Ps->size_tot*nprol],npror,ndof,bandwidth,+weight*fermir);
 */
-            dos=dosl+dosr;
 if (!worldrank) cout << "TIME FOR CONSTRUCTION OF S-PATTERN DENSITY MATRIX " << get_time(sabtime) << endl;
             delete[] Soll;
             delete[] Solr;
@@ -563,9 +559,6 @@ if (!worldrank) cout << "TIME FOR CONSTRUCTION OF S-PATTERN DENSITY MATRIX " << 
 if (abs(abs(transml)-abs(transmr))/max(1.0,min(abs(transml),abs(transmr)))>0.1) cout << "CAUTION: TRANSMISSION " << transml << " " << transmr << " AT ENERGY " << real(energy) << " AT POSITION " << evecpos << endl;
 //if (abs(transml)<1.0E-2 && nprol>0 && npror>0) cout << "RED ALERT: ZERO TRANSMISSION IN SPITE OF " << nprol << " AND " << npror << " AT ENERGY " << real(energy) << " AT POSITION " << evecpos << endl;
             transm=transml;
-            double diff_fermi=fermi(real(energy),muvec[0],parameter_sab->temperature,0)-fermi(real(energy),muvec[1],parameter_sab->temperature,0);
-            current=2.0*E_ELECTRON*E_ELECTRON/(2.0*M_PI*H_BAR)*diff_fermi*transm;
-cout << evecpos << " Transmission LEFT TO RIGHT: " << transml << " RIGHT TO LEFT: " << transmr << " FERMI DIFFERENCE: " << diff_fermi << endl;
         }
         delete[] Sol;
         delete H1;

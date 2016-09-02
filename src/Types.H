@@ -469,7 +469,7 @@ struct transport_parameters
 
 struct contact_type
 {
-    int    bandwidth, natoms, atomstart, ndof, start, start_bs, inj_sign, sigmasize, sigmastart, triblockstart;
+    int    bandwidth, natoms, atomstart, ndof, start, start_bs, inj_sign, sigma_natoms, sigmasize, sigmastart, triblockstart;
     double n_ele;
 };
 
