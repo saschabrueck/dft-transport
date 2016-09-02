@@ -37,6 +37,7 @@ TCSR<CPX> *spainjdist;
 int n_propagating;
 /// Propagating phase factors
 CPX *lambdapro;
+double rcond;
 
 private:
 void create_M_matrix(CPX*,int,TCSR<CPX>**,int,CPX);
