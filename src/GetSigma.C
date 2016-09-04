@@ -128,11 +128,11 @@ int BoundarySelfEnergy::Set_master(MPI_Comm matrix_comm,MPI_Comm boundary_comm)
     return 0;
 }
 
-int BoundarySelfEnergy::Cutout(TCSR<CPX> *SumHamC,contact_type pcontact,CPX penergy,transport_methods::transport_method method,MPI_Comm matrix_comm)
+int BoundarySelfEnergy::Cutout(TCSR<CPX> *SumHamC,contact_type pcontact,CPX penergy,transport_methods::transport_method_type transport_method,MPI_Comm matrix_comm)
 {
     energy=penergy;
-    if (method==transport_methods::WF) compute_inj=1;
-    if (method==transport_methods::NEGF) compute_gamma=1;
+    if (transport_method==transport_methods::WF) compute_inj=1;
+    if (transport_method==transport_methods::NEGF) compute_gamma=1;
 
     contact=pcontact;
     int inj_sign=contact.inj_sign;
@@ -252,17 +252,17 @@ void BoundarySelfEnergy::Distribute(TCSR<CPX> *SumHamC,MPI_Comm matrix_comm)
     }
 }
 
-int BoundarySelfEnergy::GetSigma(MPI_Comm boundary_comm,int evecpos,transport_parameters *parameter_sab)
+int BoundarySelfEnergy::GetSigma(MPI_Comm boundary_comm,int evecpos,transport_parameters *transport_params)
 {
     if (imag(energy)) {
-        if (GetSigmaInv(boundary_comm,evecpos,parameter_sab)) return (LOGCERR, EXIT_FAILURE);
+        if (GetSigmaInv(boundary_comm,evecpos,transport_params)) return (LOGCERR, EXIT_FAILURE);
     } else {
-        if (GetSigmaEig(boundary_comm,evecpos,parameter_sab)) return (LOGCERR, EXIT_FAILURE);
+        if (GetSigmaEig(boundary_comm,evecpos,transport_params)) return (LOGCERR, EXIT_FAILURE);
     }
     return 0;
 }
 
-int BoundarySelfEnergy::GetSigmaInv(MPI_Comm boundary_comm,int evecpos,transport_parameters *parameter_sab)
+int BoundarySelfEnergy::GetSigmaInv(MPI_Comm boundary_comm,int evecpos,transport_parameters *transport_params)
 {
     int complexenergypoint=0;
     if (imag(energy)) complexenergypoint=1;
@@ -273,7 +273,7 @@ int BoundarySelfEnergy::GetSigmaInv(MPI_Comm boundary_comm,int evecpos,transport
     int nblocksband=2*bandwidth+1;
     int ntriblock=bandwidth*ndof;
     int triblocksize=ntriblock*ntriblock;
-    int NK=parameter_sab->n_points_inv;
+    int NK=transport_params->n_points_inv;
     int boundary_rank;
     MPI_Comm_rank(boundary_comm,&boundary_rank);
 int worldrank; MPI_Comm_rank(MPI_COMM_WORLD,&worldrank);
@@ -361,7 +361,7 @@ if (!worldrank) cout << "TIME FOR SIGMA SOLVER " << get_time(sabtime) << endl;
     return 0;
 }
 
-int BoundarySelfEnergy::GetSigmaEig(MPI_Comm boundary_comm,int evecpos,transport_parameters *parameter_sab)
+int BoundarySelfEnergy::GetSigmaEig(MPI_Comm boundary_comm,int evecpos,transport_parameters *transport_params)
 {
     double d_one=1.0;
     double d_zer=0.0;
@@ -379,18 +379,18 @@ int BoundarySelfEnergy::GetSigmaEig(MPI_Comm boundary_comm,int evecpos,transport
     int nblocksband=2*bandwidth+1;
     int ntriblock=bandwidth*ndof;
     int triblocksize=ntriblock*ntriblock;
-    int injection_method=parameter_sab->injection_method;
-    double colzerothr=parameter_sab->colzero_threshold;
-    double eps_limit=parameter_sab->eps_limit;
-    if (complexenergypoint) eps_limit=parameter_sab->eps_limit_cc;
-    int neigbeyn=max(1,int(parameter_sab->fac_neigbeyn*ndof));
-    if (complexenergypoint) neigbeyn=max(1,int(parameter_sab->fac_neigbeyn_cc*ndof));
-    double eps_decay=parameter_sab->eps_decay;
-    double eps_eigval_degen=parameter_sab->eps_eigval_degen;
-    double svd_fac=parameter_sab->svd_cutoff;
-    double NQ_beyn=parameter_sab->n_points_beyn;
-    double NCRC_beyn=parameter_sab->NCRC_beyn;
-    int ntasks_beyn=parameter_sab->tasks_per_integration_point;
+    injection_methods::injection_method_type injection_method=transport_params->injection_method;
+    double colzerothr=transport_params->colzero_threshold;
+    double eps_limit=transport_params->eps_limit;
+    if (complexenergypoint) eps_limit=transport_params->eps_limit_cc;
+    int neigbeyn=max(1,int(transport_params->fac_neigbeyn*ndof));
+    if (complexenergypoint) neigbeyn=max(1,int(transport_params->fac_neigbeyn_cc*ndof));
+    double eps_decay=transport_params->eps_decay;
+    double eps_eigval_degen=transport_params->eps_eigval_degen;
+    double svd_fac=transport_params->svd_cutoff;
+    double NQ_beyn=transport_params->n_points_beyn;
+    double NCRC_beyn=transport_params->NCRC_beyn;
+    int ntasks_beyn=transport_params->tasks_per_integration_point;
     int boundary_rank;
     MPI_Comm_rank(boundary_comm,&boundary_rank);
 int worldrank; MPI_Comm_rank(MPI_COMM_WORLD,&worldrank);
@@ -418,7 +418,7 @@ int worldrank; MPI_Comm_rank(MPI_COMM_WORLD,&worldrank);
         eigvecc=new CPX[ndof*2*bandwidth*ndof];
     }
     sabtime=get_time(d_zer);
-    if (injection_method==22) {
+    if (injection_method==injection_methods::BEYN) {
         if (complexenergypoint) {
             InjectionBeyn<CPX> *k_inj = new InjectionBeyn<CPX>(2*bandwidth,1.0/eps_limit,svd_fac,NQ_beyn,NCRC_beyn,ntasks_beyn);
             neigval = k_inj->execute(H,ndof,neigbeyn,lambdavec,eigvecc,inj_sign,boundary_comm);

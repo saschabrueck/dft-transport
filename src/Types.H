@@ -5,23 +5,9 @@ using namespace std;
 
 #include <math.h>
 #include <complex>
-#include <algorithm>
 
 #ifndef PI
 #define PI 3.14159265358979
-#endif
-
-// k in [eV/K]
-#ifndef K_BOLTZMANN
-#define K_BOLTZMANN 8.617332478e-5
-#endif
-
-#ifndef E_ELECTRON
-#define E_ELECTRON 1.6022e-19
-#endif
-
-#ifndef H_BAR
-#define H_BAR 1.0546e-34
 #endif
 
 #ifndef ROWBLOCK
@@ -425,62 +411,6 @@ struct VOLTAGE
     double Tmin;
     double Tmax; 	
 };
-
-struct transport_parameters 
-{
-    int    n_occ;
-    int    n_atoms;
-    int    method;
-    int    injection_method;
-    int    linear_solver;
-    int    rlaxis_integration_method;
-    int    n_abscissae;
-    int    n_kpoint;
-    int    num_interval;
-    int    num_contacts;
-    int    tasks_per_point;
-    int    gpus_per_point;
-    int    NCRC_beyn;
-    int    n_points_beyn;
-    int    n_points_inv;
-    int    tasks_per_integration_point;
-    int    extra_scf;
-    int    cutl;
-    int    cutr;
-    int    obc;
-    int    negf_solver;
-    int    cp2k_scf_iter;
-    double colzero_threshold;
-    double eps_limit;
-    double eps_limit_cc;
-    double eps_decay;
-    double eps_singularity_curvatures;
-    double eps_mu;
-    double eps_eigval_degen;
-    double eps_fermi;
-    double energy_interval;
-    double min_interval;
-    double temperature;
-    double fac_neigbeyn;
-    double fac_neigbeyn_cc;
-    double svd_cutoff;
-    double evoltfactor;
-};
-
-struct contact_type
-{
-    int    bandwidth, natoms, atomstart, ndof, start, start_bs, inj_sign, sigma_natoms, sigmasize, sigmastart, triblockstart;
-    double n_ele;
-};
-
-namespace transport_methods {
-enum transport_method {
-  EQ=0,
-  NEGF=1,
-  GF=2,
-  WF=3,
-};
-} // namespace
 
 #endif
 

@@ -10,6 +10,101 @@
 
 using namespace MYBLAS;
 
+namespace cp2k_methods {
+    enum cp2k_method_type {
+        LOCAL_SCF    = 1,
+        TRANSMISSION = 2,
+        TRANSPORT    = 3,
+    };
+};
+
+namespace lin_solver_methods {
+    enum lin_solver_method_type {
+        SPLITSOLVE = 11,
+        SUPERLU    = 12,
+        MUMPS      = 13,
+        FULL       = 14,
+        BANDED     = 15,
+    };
+};
+
+namespace injection_methods {
+    enum injection_method_type {
+        EVP  = 21,
+        BEYN = 22,
+    };
+};
+
+namespace real_int_methods {
+    enum real_int_method_type {
+        GAUSSCHEBYSHEV = 31,
+        TRAPEZOIDAL    = 32,
+        READFROMFILE   = 33,
+    };
+};
+
+namespace transport_methods {
+    enum transport_method_type {
+        EQ   = 0,
+        NEGF = 1,
+        GF   = 2,
+        WF   = 3,
+    };
+};
+
+
+struct transport_parameters 
+{
+    cp2k_methods::cp2k_method_type             cp2k_method;
+    injection_methods::injection_method_type   injection_method;
+    lin_solver_methods::lin_solver_method_type lin_solver_method;
+    real_int_methods::real_int_method_type     real_int_method;
+    int    n_occ;
+    int    n_atoms;
+    int    n_abscissae;
+    int    n_kpoint;
+    int    num_interval;
+    int    tasks_per_point;
+    int    gpus_per_point;
+    int    NCRC_beyn;
+    int    n_points_beyn;
+    int    n_points_inv;
+    int    tasks_per_integration_point;
+    int    cutl;
+    int    cutr;
+    int    cp2k_scf_iter;
+    int    pexsi_ordering;
+    int    pexsi_row_ordering;
+    int    pexsi_verbosity;
+    int    pexsi_np_symb_fact;
+    bool   negf_solver;
+    bool   extra_scf;
+    bool   obc;
+    double colzero_threshold;
+    double eps_limit;
+    double eps_limit_cc;
+    double eps_decay;
+    double eps_singularity_curvatures;
+    double eps_mu;
+    double eps_eigval_degen;
+    double eps_fermi;
+    double energy_interval;
+    double min_interval;
+    double temperature;
+    double fac_neigbeyn;
+    double fac_neigbeyn_cc;
+    double svd_cutoff;
+    double evoltfactor;
+    double boltzmann_ev;
+    double conduct_quant;
+};
+
+struct contact_type
+{
+    int    bandwidth, natoms, atomstart, ndof, start, start_bs, inj_sign, sigma_natoms, sigmasize, sigmastart, triblockstart;
+    double n_ele;
+};
+
 #define LOGCERR std::cerr << "ERROR IN LINE " << __LINE__ << " OF FILE " << __FILE__ << std::endl
 
 /************************************************************************************************/
@@ -41,30 +136,28 @@ void set_to_zero(int length, T *array)
 template <typename T>
 T fermi(T E,T mu,double temp,int mode)
 {
-    double k_b=K_BOLTZMANN;
     if (mode==0) {
         if (temp<=0.0) {
             temp=1.0E-8;
         }
-        return 1.0/(1.0+exp((E-mu)/(k_b*temp)));
+        return 1.0/(1.0+exp((E-mu)/temp));
     } else if (mode==1) {
         if (temp<=0.0) {
             return 0.0;
         } else {
-            return log(1.0+exp(-(E-mu)/(k_b*temp)));
+            return log(1.0+exp(-(E-mu)/temp));
         }
     } else if (mode==2) {
         if (temp<=0.0) {
             return 0.0;
         } else {
-//            return exp((E-mu)/(k_b*temp))/(k_b*temp)/pow(1.0+exp((E-mu)/(k_b*temp)),2); // FOR abs(E-mu)>10.0 inf/inf^2
-            return 1.0/(k_b*temp)/(2.0+exp((E-mu)/(k_b*temp))+1.0/exp((E-mu)/(k_b*temp)));
+            return 1.0/temp/(2.0+exp((E-mu)/temp)+1.0/exp((E-mu)/temp));
         }
     } else if (mode==3) {
         if (temp<=0.0) {
             return 0.0;
         } else {
-            return exp((E-mu)/(k_b*temp))/(k_b*temp)/(1.0+exp(-(E-mu)/(k_b*temp)));
+            return exp((E-mu)/temp)/temp/(1.0+exp(-(E-mu)/temp));
         }
     } else {
         return 0.0;

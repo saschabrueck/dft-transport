@@ -10,10 +10,6 @@
 #include "WireGenerator.H"
 #include "FEMGrid.H"
 #include "Poisson.H"
-// WRITE IN MATRIX
-#include "CSR.H"
-
-#include "SemiSelfConsistent.H"
 
 extern "C" {
     void yyrestart(FILE *);
@@ -32,7 +28,6 @@ Poisson *OMEN_Poisson_Solver;
 
 int main (int argc, char **argv)
 {
-   int fcomm;
    char *input_file;
    char *output_file;
    char *command_file;
@@ -58,16 +53,12 @@ int main (int argc, char **argv)
    command_file[commandfile_path.size()]=0;
    memcpy(command_file,commandfile_path.c_str(),commandfile_path.size());
 
-   MPI::Intercomm mpi_comm;
-
    MPI::Init(argc, argv);
    MPI::COMM_WORLD.Set_errhandler(MPI::ERRORS_THROW_EXCEPTIONS);
-   mpi_comm = MPI::COMM_WORLD;
-   fcomm = MPI_Comm_c2f(mpi_comm);
 
 #ifdef libcp2k
    cp2k_init_without_mpi();
-   cp2k_create_force_env_comm(&force_env, input_file, output_file, fcomm);
+   cp2k_create_force_env_comm(&force_env, input_file, output_file, MPI_Comm_c2f(MPI::COMM_WORLD));
    cp2k_transport_set_callback(force_env, &c_scf_method);
    cp2k_get_natom(force_env, &natom);
 
@@ -94,77 +85,20 @@ int main (int argc, char **argv)
 //      WireGenerator* Wire = new WireGenerator();
 //      Wire->execute_task(nanowire);
       FEM = new FEMGrid();
-      MPI_Comm newcomm;
-      int iam;
-      MPI_Comm_rank(MPI_COMM_WORLD,&iam);
-      MPI_Comm_split(MPI_COMM_WORLD,iam,iam,&newcomm);
-      FEM->execute_task(Wire,nanowire,1,1,newcomm,MPI::COMM_WORLD);
+      FEM->execute_task(Wire,nanowire,1,1,MPI::COMM_SELF,MPI::COMM_WORLD);
 //      FEM->execute_task(Wire,nanowire);
       OMEN_Poisson_Solver = new Poisson();
       OMEN_Poisson_Solver->init(Wire,nanowire,FEM,1,1,MPI::COMM_WORLD);
 //      OMEN_Poisson_Solver->init(nanowire,FEM);
    }
 
-   int w_size, w_rank;
-   MPI_Comm_size(MPI_COMM_WORLD,&w_size);
-   MPI_Comm_rank(MPI_COMM_WORLD,&w_rank);
-
 #ifdef libcp2k
-   if (!w_rank) std::cout << "Starting CP2K" << std::endl;
    cp2k_calc_energy_force(force_env);
    cp2k_get_potential_energy(force_env, &e_pot);
    cp2k_get_forces(force_env, force, n_el_force);
    cp2k_get_positions(force_env, pos, n_el);
    cp2k_destroy_force_env(force_env);
    cp2k_finalize_without_mpi();
-#else
-   transport_parameters* transport_env_params = new transport_parameters();
-   ifstream paraminfile;
-   paraminfile.exceptions(ifstream::failbit);
-   try {
-      paraminfile.open("TransportParams");
-   }
-   catch (ifstream::failure e) {
-      std::cout << "TransportParams file is missing." << std::endl;
-      return 0;
-   }
-   paraminfile >> transport_env_params->method;
-   paraminfile >> transport_env_params->bandwidth;
-   paraminfile >> transport_env_params->n_cells;
-   paraminfile >> transport_env_params->n_occ;
-   paraminfile >> transport_env_params->n_atoms;
-   paraminfile >> transport_env_params->n_abscissae;
-   paraminfile >> transport_env_params->n_kpoint;
-   paraminfile >> transport_env_params->num_interval;
-   paraminfile >> transport_env_params->num_contacts;
-   paraminfile >> transport_env_params->tasks_per_point;
-   paraminfile >> transport_env_params->colzero_threshold;
-   paraminfile >> transport_env_params->eps_limit;
-   paraminfile >> transport_env_params->eps_decay;
-   paraminfile >> transport_env_params->eps_singularity_curvatures;
-   paraminfile >> transport_env_params->eps_mu;
-   paraminfile >> transport_env_params->eps_eigval_degen;
-   paraminfile >> transport_env_params->energy_interval;
-   paraminfile >> transport_env_params->min_interval;
-   paraminfile >> transport_env_params->temperature;
-   paraminfile.close();
-   TCSR<double>* KohnSham = new TCSR<double>("KohnSham",w_size,w_rank);
-   c_dscal(KohnSham->n_nonzeros,-1.0,KohnSham->nnz,1);
-   TCSR<double>* Overlap;
-   if (FILE *ovlfile = fopen("Overlap","r")) {
-      fclose(ovlfile);
-      Overlap = new TCSR<double>("Overlap",w_size,w_rank);
-   } else {
-      Overlap = new TCSR<double>(KohnSham);
-      c_dscal(Overlap->n_nonzeros,0.0,Overlap->nnz,1);
-      for (int i_diag=0;i_diag<Overlap->size;i_diag++) Overlap->nnz[Overlap->diag_pos[i_diag]]=1.0;
-   }
-   if (Overlap->additionalentries(KohnSham)) return (LOGCERR, EXIT_FAILURE);
-   if (KohnSham->additionalentries(Overlap)) return (LOGCERR, EXIT_FAILURE);
-   semiselfconsistent(Overlap,KohnSham,transport_env_params);
-   delete Overlap;
-   delete KohnSham;
-   delete transport_env_params;
 #endif
 
    if (do_omen_poisson) {
