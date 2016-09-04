@@ -1,4 +1,4 @@
-#ifdef SPLITSOLVE
+#ifdef HAVE_SPLITSOLVE
 #include <stdio.h>
 #include "Types.H"
 #include "cublas_v2.h"

@@ -63,23 +63,20 @@ void c_scf_method(cp2k_transport_parameters cp2k_transport_params, cp2k_csr_inte
 {
     cp2k_csr_interop_type * PImag = NULL;
 #endif
-    MPI::Intercomm Comm;
-    Comm = MPI::COMM_WORLD;
-    int rank = Comm.Get_rank();
-    int mpi_size = Comm.Get_size();
+    int rank,mpi_size;
+    MPI_Comm_size(MPI_COMM_WORLD,&mpi_size);
+    MPI_Comm_rank(MPI_COMM_WORLD,&rank);
+
+    if (!rank) cout << "Starting Transport" << endl;
 
     c_dscal(P->nze_local,0.5,P->nzvals_local,1);
  
     transport_parameters* transport_params = new transport_parameters();
     transport_params->cp2k_scf_iter               = cp2k_transport_params.iscf;
     transport_params->n_occ                       = cp2k_transport_params.n_occ;
-    transport_params->injection_method            = cp2k_transport_params.injection_method;
-    transport_params->linear_solver               = cp2k_transport_params.linear_solver;
-    transport_params->rlaxis_integration_method   = cp2k_transport_params.rlaxis_integration_method;
     transport_params->n_abscissae                 = cp2k_transport_params.n_abscissae;
     transport_params->n_kpoint                    = cp2k_transport_params.n_kpoint;
     transport_params->num_interval                = cp2k_transport_params.num_interval;
-    transport_params->num_contacts                = cp2k_transport_params.num_contacts;
     transport_params->tasks_per_point             = cp2k_transport_params.tasks_per_energy_point;
     transport_params->gpus_per_point              = cp2k_transport_params.gpus_per_point;
     transport_params->colzero_threshold           = cp2k_transport_params.colzero_threshold;
@@ -91,26 +88,27 @@ void c_scf_method(cp2k_transport_parameters cp2k_transport_params, cp2k_csr_inte
     transport_params->eps_eigval_degen            = cp2k_transport_params.eps_eigval_degen;
     transport_params->energy_interval             = cp2k_transport_params.energy_interval;
     transport_params->min_interval                = cp2k_transport_params.min_interval;
-    transport_params->temperature                 = cp2k_transport_params.temperature*cp2k_transport_params.evoltfactor/K_BOLTZMANN;
     transport_params->svd_cutoff                  = cp2k_transport_params.svd_cutoff;
     transport_params->n_points_beyn               = cp2k_transport_params.n_points_beyn;
     transport_params->tasks_per_integration_point = cp2k_transport_params.tasks_per_integration_point;
     transport_params->extra_scf                   = cp2k_transport_params.extra_scf;
+    transport_params->obc                         = cp2k_transport_params.obc_equilibrium;
     transport_params->evoltfactor                 = cp2k_transport_params.evoltfactor;
     transport_params->NCRC_beyn                   = cp2k_transport_params.ncrc_beyn;
     transport_params->n_points_inv                = cp2k_transport_params.n_points_inv;
     transport_params->n_atoms                     = cp2k_transport_params.n_atoms;
+    transport_params->pexsi_ordering              = cp2k_transport_params.ordering;
+    transport_params->pexsi_row_ordering          = cp2k_transport_params.row_ordering;
+    transport_params->pexsi_verbosity             = cp2k_transport_params.verbosity;
+    transport_params->pexsi_np_symb_fact          = cp2k_transport_params.pexsi_np_symb_fact;
+    transport_params->temperature                 = cp2k_transport_params.temperature*cp2k_transport_params.evoltfactor;
+    transport_params->boltzmann_ev                = cp2k_transport_params.boltzmann/cp2k_transport_params.e_charge;
+    transport_params->conduct_quant               = 2.0*cp2k_transport_params.e_charge*cp2k_transport_params.e_charge/(2.0*M_PI*cp2k_transport_params.h_bar);
     transport_params->obc                         = cp2k_transport_params.cutout[0] || cp2k_transport_params.cutout[1];
-    if (cp2k_transport_params.method==1) {
-        transport_params->method                  = 2;//SEMISELF
-    } else if (cp2k_transport_params.method==2) {
-        transport_params->method                  = 4;//TRANSMISSION
-    } else {
-        transport_params->method                  = 3;//TRANSPORT
-    }
-    if (cp2k_transport_params.obc_equilibrium) {
-        transport_params->obc                     = 1;
-    }
+    transport_params->injection_method            = static_cast<injection_methods::injection_method_type>(cp2k_transport_params.injection_method);
+    transport_params->lin_solver_method           = static_cast<lin_solver_methods::lin_solver_method_type>(cp2k_transport_params.linear_solver);
+    transport_params->real_int_method             = static_cast<real_int_methods::real_int_method_type>(cp2k_transport_params.rlaxis_integration_method);
+    transport_params->cp2k_method                 = static_cast<cp2k_methods::cp2k_method_type>(cp2k_transport_params.method);
     if (cp2k_transport_params.eps_fermi<=(numeric_limits<double>::epsilon)()) {
         transport_params->eps_fermi               = (numeric_limits<double>::epsilon)();
     } else {
@@ -126,19 +124,19 @@ void c_scf_method(cp2k_transport_parameters cp2k_transport_params, cp2k_csr_inte
     } else {
         transport_params->fac_neigbeyn_cc         = cp2k_transport_params.n_rand_cc_beyn;
     }
-    transport_params->negf_solver                 = 0;
+    transport_params->negf_solver                 = false;
     if (cp2k_transport_params.qt_formalism==41) {
-        transport_params->negf_solver             = 1;
+        transport_params->negf_solver             = true;
     }
 
-    std::vector<contact_type> contactvec(transport_params->num_contacts);
+    std::vector<contact_type> contactvec(cp2k_transport_params.num_contacts);
     int size_muvec=0;
     int stride = cp2k_transport_params.stride_contacts;
-    for (int i_c=0;i_c<transport_params->num_contacts;i_c++) if (cp2k_transport_params.contacts_data[4+stride*i_c]) size_muvec++;
+    for (uint i_c=0;i_c<contactvec.size();i_c++) if (cp2k_transport_params.contacts_data[4+stride*i_c]) size_muvec++;
     std::vector<double> muvec(size_muvec);
     int i_m=0;
     int i_n=0;
-    for (int i_c=0;i_c<transport_params->num_contacts;i_c++) {
+    for (uint i_c=0;i_c<contactvec.size();i_c++) {
         int i_t;
         if (cp2k_transport_params.contacts_data[4+stride*i_c]) {
             i_t=i_m++;
@@ -153,7 +151,7 @@ void c_scf_method(cp2k_transport_parameters cp2k_transport_params, cp2k_csr_inte
             if (contactvec[i_t].inj_sign==1) {
                 contactvec[i_t].atomstart = cp2k_transport_params.cutout[0];
             } else if (contactvec[i_t].inj_sign==-1) {
-                if (transport_params->method==3) {
+                if (transport_params->cp2k_method==cp2k_methods::TRANSPORT) {
                     contactvec[i_t].atomstart = transport_params->n_atoms/2-contactvec[i_t].natoms;
                 } else {
                     contactvec[i_t].atomstart = transport_params->n_atoms-contactvec[i_t].natoms-cp2k_transport_params.cutout[1];
@@ -224,7 +222,7 @@ void c_scf_method(cp2k_transport_parameters cp2k_transport_params, cp2k_csr_inte
         delete[] pairmatrix_global;
         pairmatrix_global = NULL;
 
-        for (int i=0;i<transport_params->num_contacts;i++) {
+        for (uint i=0;i<contactvec.size();i++) {
             if (contactvec[i].bandwidth<=0) {
                 contactvec[i].bandwidth=0;
                 int block_exists = 1;
@@ -296,7 +294,7 @@ void c_scf_method(cp2k_transport_parameters cp2k_transport_params, cp2k_csr_inte
         }
     }
 
-    for (int i=0;i<transport_params->num_contacts;i++) {
+    for (uint i=0;i<contactvec.size();i++) {
          if (!rank) cout << "Contact BW " << contactvec[i].bandwidth << endl;
          MPI_Bcast(&contactvec[i].bandwidth,1,MPI_INT,0,MPI_COMM_WORLD);
          MPI_Bcast(&contactvec[i].sigma_natoms,1,MPI_INT,0,MPI_COMM_WORLD);
@@ -309,7 +307,7 @@ void c_scf_method(cp2k_transport_parameters cp2k_transport_params, cp2k_csr_inte
     Bsizes[0]-=cp2k_transport_params.cutout[0];
     Bsizes[Bsizes.size()-1]-=cp2k_transport_params.cutout[1];
 
-    for (int i=0;i<transport_params->num_contacts;i++) {
+    for (uint i=0;i<contactvec.size();i++) {
         int atom_start = contactvec[i].atomstart;
         int atom_stop  = atom_start + contactvec[i].natoms;
         contactvec[i].atomstart = atom_start-cp2k_transport_params.cutout[0];
@@ -329,15 +327,15 @@ void c_scf_method(cp2k_transport_parameters cp2k_transport_params, cp2k_csr_inte
     }
 
     int do_double=0;
-    if (transport_params->method==3) do_double=1;
+    if (transport_params->cp2k_method==cp2k_methods::TRANSPORT) do_double=1;
     for (int i=0;i<=do_double;i++) {
         if (do_double) {
             if (!i) {
-                transport_params->obc=1;
+                transport_params->obc=true;
                 transport_params->cutl=0;
                 transport_params->cutr=S.nrows_total/2;
             } else {
-                transport_params->obc=1;
+                transport_params->obc=true;
                 transport_params->cutl=S.nrows_total/2;
                 transport_params->cutr=0;
                 transport_params->cp2k_scf_iter*=-1;
@@ -364,7 +362,7 @@ void c_scf_method(cp2k_transport_parameters cp2k_transport_params, cp2k_csr_inte
 
         //write_matrix(Overlap,KohnSham,wr_cutblocksize,wr_bw,wr_ndof);
         //if (diagscalapack(Overlap,KohnSham,transport_params)) throw std::exception();
-        if (transport_params->method==2) {
+        if (transport_params->cp2k_method==cp2k_methods::LOCAL_SCF) {
             if (semiselfconsistent(S,KS,P,PImag,muvec,contactvec,Bsizes,orb_per_atom,transport_params)) throw std::exception();
         } else {
             Energyvector energyvector;
@@ -447,7 +445,7 @@ void c_scf_method(cp2k_transport_parameters cp2k_transport_params, cp2k_csr_inte
                 mulli[atom_of_bf[i+S.first_row]]+=S.nzvals_local[e]*P->nzvals_local[e];
             }
         }
-        MPI_Allreduce(MPI_IN_PLACE,&mulli[0],S.nrows_total,MPI_DOUBLE,MPI_SUM,MPI_COMM_WORLD);
+        MPI_Allreduce(MPI_IN_PLACE,&mulli[0],cp2k_transport_params.n_atoms,MPI_DOUBLE,MPI_SUM,MPI_COMM_WORLD);
         if (!rank) {
             stringstream mysstream;
             mysstream << "Mulliken_" << cp2k_transport_params.iscf;

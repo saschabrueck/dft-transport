@@ -18,7 +18,7 @@ using namespace std;
 #include "MUMPS.H"
 #endif
 #include "Connection.H"
-#ifdef SPLITSOLVE
+#ifdef HAVE_SPLITSOLVE
 #include "SplitSolve.H"
 #endif
 #include "SuperLU.H"
@@ -26,7 +26,7 @@ using namespace std;
 #include "GetSigma.H"
 #include "Density.H"
 
-int density(TCSR<double> *KohnSham,TCSR<double> *Overlap,TCSR<double> *Ps,TCSR<double> *PsImag,CPX energy,CPX weight,transport_methods::transport_method method,std::vector<double> muvec,std::vector<contact_type> contactvec,double &transm,std::vector<int> propnum,std::vector<int> Bsizes,std::vector<int> orb_per_at,transport_parameters *parameter_sab,int evecpos,MPI_Comm matrix_comm)
+int density(TCSR<double> *KohnSham,TCSR<double> *Overlap,TCSR<double> *Ps,TCSR<double> *PsImag,CPX energy,CPX weight,transport_methods::transport_method_type method,std::vector<double> muvec,std::vector<contact_type> contactvec,double &transm,std::vector<int> propnum,std::vector<int> Bsizes,std::vector<int> orb_per_at,transport_parameters *transport_params,int evecpos,MPI_Comm matrix_comm)
 {
     double d_one = 1.0;
     double d_zer = 0.0;
@@ -38,9 +38,9 @@ int density(TCSR<double> *KohnSham,TCSR<double> *Overlap,TCSR<double> *Ps,TCSR<d
 double sabtime;
 int worldrank; MPI_Comm_rank(MPI_COMM_WORLD,&worldrank);
     int n_mu=muvec.size();
-    int solver_method=parameter_sab->linear_solver;
-    int GPUS_per_point=parameter_sab->gpus_per_point;
-    int run_splitsolve = solver_method==11 && method==transport_methods::WF;
+    lin_solver_methods::lin_solver_method_type solver_method=transport_params->lin_solver_method;
+    int GPUS_per_point=transport_params->gpus_per_point;
+    int run_splitsolve = solver_method==lin_solver_methods::SPLITSOLVE && method==transport_methods::WF;
 int bandwidth=contactvec[0].bandwidth;
 int ndof=contactvec[0].ndof;
 int ncells=Overlap->size_tot/ndof;
@@ -65,7 +65,7 @@ sabtime=get_time(d_zer);
         c_zscal(SumHamC->n_nonzeros,-energy,SumHamC->nnz,1);
         c_daxpy(SumHamC->n_nonzeros,d_one,KohnSham->nnz,1,(double*)SumHamC->nnz,2);
 if (!worldrank) cout << "TIME FOR SumHamC " << get_time(sabtime) << endl;
-        if (!parameter_sab->cutl && !parameter_sab->cutr) {
+        if (!transport_params->cutl && !transport_params->cutr) {
             SumHamC->removepbc(bandwidth,ndof);
         }
 // compute self energies
@@ -93,7 +93,7 @@ sabtime=get_time(d_zer);
 if (!worldrank) cout << "TIME FOR SIGMA CUTOUT " << get_time(sabtime) << endl;
 sabtime=get_time(d_zer);
             if (ipos<n_mu) {
-                if ( selfenergies[ipos].GetSigma(boundary_comm,evecpos,parameter_sab) ) return (LOGCERR, EXIT_FAILURE);
+                if ( selfenergies[ipos].GetSigma(boundary_comm,evecpos,transport_params) ) return (LOGCERR, EXIT_FAILURE);
             }
 if (!worldrank) cout << "TIME FOR SIGMA GETSIGMA " << get_time(sabtime) << endl;
             if (!run_splitsolve) {
@@ -127,7 +127,7 @@ if (!worldrank) cout << "TIME FOR ADDING SIGMA " << get_time(sabtime) << endl;
         delete SumHamC;
     }
     if (method==transport_methods::EQ) {
-        if (solver_method==12 || solver_method==13) {
+        if (solver_method==lin_solver_methods::SUPERLU || solver_method==lin_solver_methods::MUMPS) {
             if (KohnSham->findx!=1 || Overlap->findx!=1) return (LOGCERR, EXIT_FAILURE);
   
             double *HS_nnz_inp = new double[2*Overlap->n_nonzeros]();
@@ -143,13 +143,17 @@ if (!worldrank) cout << "TIME FOR ADDING SIGMA " << get_time(sabtime) << endl;
   
             PPEXSIOptions options;
             PPEXSISetDefaultOptions(&options);
-            options.npSymbFact = 1;
-            options.ordering = 1;
+            options.npSymbFact = transport_params->pexsi_np_symb_fact;
+            options.ordering   = transport_params->pexsi_ordering;
+            options.rowOrdering = transport_params->pexsi_row_ordering;
+            options.verbosity   = transport_params->pexsi_verbosity;
+            int output_index    = -1;
+            if (transport_params->pexsi_verbosity) output_index = worldrank;
       
             PPEXSIPlan plan;
             int nprowcol[2]={0,0};
             MPI_Dims_create(matrix_procs,2,nprowcol);
-            plan = PPEXSIPlanInitialize(matrix_comm,nprowcol[0],nprowcol[1],-1,&info);
+            plan = PPEXSIPlanInitialize(matrix_comm,nprowcol[0],nprowcol[1],output_index,&info);
             if (info) return (LOGCERR, EXIT_FAILURE);
             PPEXSILoadRealSymmetricHSMatrix(plan,options,Overlap->size_tot,n_nonzeros_global,Overlap->n_nonzeros,Overlap->size,Overlap->edge_i,Overlap->index_j,HS_nnz_inp,1,NULL,&info);
             if (info) return (LOGCERR, EXIT_FAILURE);
@@ -164,7 +168,7 @@ if (!worldrank) cout << "TIME FOR ADDING SIGMA " << get_time(sabtime) << endl;
             c_zscal(Overlap->n_nonzeros,-weight/M_PI*CPX(0.0,1.0),(CPX*)HS_nnz_out,1);
             c_daxpy(Overlap->n_nonzeros,1.0,HS_nnz_out,2,Ps->nnz,1);
             delete[] HS_nnz_out;
-        } else if (solver_method==14 || solver_method==15) {
+        } else if (solver_method==lin_solver_methods::FULL || solver_method==lin_solver_methods::BANDED) {
             TCSR<CPX> *SumHamC = new TCSR<CPX>(Overlap->size,Overlap->n_nonzeros,Overlap->findx);
             SumHamC->copy_contain(Overlap,d_one);
             c_zscal(SumHamC->n_nonzeros,-energy,SumHamC->nnz,1);
@@ -173,7 +177,7 @@ if (!worldrank) cout << "TIME FOR ADDING SIGMA " << get_time(sabtime) << endl;
             delete SumHamC;
         } else return (LOGCERR, EXIT_FAILURE);
     } else if (method==transport_methods::GF) {
-        if (solver_method==12 || solver_method==13) {
+        if (solver_method==lin_solver_methods::SUPERLU || solver_method==lin_solver_methods::MUMPS) {
             if (HamSig->findx!=1) return (LOGCERR, EXIT_FAILURE);
   
             double *HS_nnz_inp = new double[2*HamSig->n_nonzeros]();
@@ -185,13 +189,17 @@ if (!worldrank) cout << "TIME FOR ADDING SIGMA " << get_time(sabtime) << endl;
   
             PPEXSIOptions options;
             PPEXSISetDefaultOptions(&options);
-            options.npSymbFact = 1;
-            options.ordering = 1;
+            options.npSymbFact  = transport_params->pexsi_np_symb_fact;
+            options.ordering    = transport_params->pexsi_ordering;
+            options.rowOrdering = transport_params->pexsi_row_ordering;
+            options.verbosity   = transport_params->pexsi_verbosity;
+            int output_index    = -1;
+            if (transport_params->pexsi_verbosity) output_index = worldrank;
       
             PPEXSIPlan plan;
             int nprowcol[2]={0,0};
             MPI_Dims_create(matrix_procs,2,nprowcol);
-            plan = PPEXSIPlanInitialize(matrix_comm,nprowcol[0],nprowcol[1],-1,&info);
+            plan = PPEXSIPlanInitialize(matrix_comm,nprowcol[0],nprowcol[1],output_index,&info);
             if (info) return (LOGCERR, EXIT_FAILURE);
             PPEXSILoadRealSymmetricHSMatrix(plan,options,HamSig->size_tot,n_nonzeros_global,HamSig->n_nonzeros,HamSig->size,HamSig->edge_i,HamSig->index_j,HS_nnz_inp,1,NULL,&info);
             if (info) return (LOGCERR, EXIT_FAILURE);
@@ -205,22 +213,22 @@ if (!worldrank) cout << "TIME FOR ADDING SIGMA " << get_time(sabtime) << endl;
             delete[] HS_nnz_inp;
             Ps->add_real(HamSig,-weight/M_PI*CPX(0.0,1.0));
             delete HamSig;
-        } else if (solver_method==14 || solver_method==15) {
+        } else if (solver_method==lin_solver_methods::FULL || solver_method==lin_solver_methods::BANDED) {
             FullInvert solver(HamSig,Ps,-weight/M_PI*CPX(0.0,1.0),matrix_comm);
             delete HamSig;
         } else return (LOGCERR, EXIT_FAILURE);
     } else if (method==transport_methods::NEGF) {
 sabtime=get_time(d_zer);
         LinearSolver<CPX>* solver;
-        if (solver_method==12) {
+        if (solver_method==lin_solver_methods::SUPERLU) {
             solver = new SuperLU<CPX>(HamSig,matrix_comm);
 #ifdef HAVE_MUMPS
-        } else if (solver_method==13) {
+        } else if (solver_method==lin_solver_methods::MUMPS) {
             solver = new MUMPS<CPX>(HamSig,matrix_comm);
 #endif
-        } else if (solver_method==14) {
+        } else if (solver_method==lin_solver_methods::FULL) {
             solver = new Full<CPX>(HamSig,matrix_comm);
-        } else if (solver_method==15) {
+        } else if (solver_method==lin_solver_methods::BANDED) {
             solver = new Banded<CPX>(HamSig,matrix_comm);
         } else return (LOGCERR, EXIT_FAILURE);
         solver->prepare(&Bmin[0],&Bmax[0],Bmin.size(),Bsize,&orb_per_at[0],10);
@@ -275,13 +283,13 @@ sabtime=get_time(d_zer);
         full_transpose(npror,dist_sol[matrix_rank],&inj[dist_sol[matrix_rank]*nprol],&sol[dist_sol[matrix_rank]*nprol]);
         delete[] inj;
         CPX* SolT = new CPX[solsize*max(nprol,npror)];
-        if (parameter_sab->method==3) {
+        if (transport_params->cp2k_method==cp2k_methods::TRANSPORT) {
             if (muvec[0]>muvec[1]) {
-                double fermil = fermi(real(energy),muvec[0],parameter_sab->temperature,0)-fermi(real(energy),muvec[1],parameter_sab->temperature,0);
+                double fermil = fermi(real(energy),muvec[0],transport_params->temperature,0)-fermi(real(energy),muvec[1],transport_params->temperature,0);
                 full_transpose(nprol,solsize,Sol,SolT);
                 Ps->psipsidagger_transpose(sol,SolT,nprol,-weight/2.0/M_PI*fermil);
             } else {
-                double fermir = fermi(real(energy),muvec[1],parameter_sab->temperature,0)-fermi(real(energy),muvec[0],parameter_sab->temperature,0);
+                double fermir = fermi(real(energy),muvec[1],transport_params->temperature,0)-fermi(real(energy),muvec[0],transport_params->temperature,0);
                 full_transpose(npror,solsize,&Sol[solsize*nprol],SolT);
                 Ps->psipsidagger_transpose(&sol[dist_sol[matrix_rank]*nprol],SolT,npror,-weight/2.0/M_PI*fermir);
             }
@@ -334,18 +342,18 @@ if (abs(abs(transml)-abs(transmr))/max(1.0,min(abs(transml),abs(transmr)))>0.1) 
         delete H1cut;
 sabtime=get_time(d_zer);
         LinearSolver<CPX>* solver;
-        if (solver_method==12) {
+        if (solver_method==lin_solver_methods::SUPERLU) {
             solver = new SuperLU<CPX>(HamSig,matrix_comm);
 #ifdef HAVE_MUMPS
-        } else if (solver_method==13) {
+        } else if (solver_method==lin_solver_methods::MUMPS) {
             solver = new MUMPS<CPX>(HamSig,matrix_comm);
 #endif
-        } else if (solver_method==14) {
+        } else if (solver_method==lin_solver_methods::FULL) {
             solver = new Full<CPX>(HamSig,matrix_comm);
-        } else if (solver_method==15) {
+        } else if (solver_method==lin_solver_methods::BANDED) {
             solver = new Banded<CPX>(HamSig,matrix_comm);
-#ifdef SPLITSOLVE
-        } else if (solver_method==11) {
+#ifdef HAVE_SPLITSOLVE
+        } else if (solver_method==lin_solver_methods::SPLITSOLVE) {
             Bmax.push_back(Bsizes[0]-1);
             for (uint i=1;i<Bsizes.size();i++) Bmax.push_back(Bmax[i-1]+Bsizes[i]);
             Bmin.push_back(0);
@@ -371,7 +379,7 @@ sabtime=get_time(d_zer);
         int right_gpu_rank = matrix_procs-ceil((double)matrix_procs/GPUS_per_point);
 if (worldrank==left_gpu_rank) cout << "TIME FOR WAVEFUNCTION SPARSE DECOMPOSITION PHASE " << get_time(sabtime) << endl;
 MPI_Barrier(matrix_comm);
-        if (solver_method==11) {
+        if (solver_method==lin_solver_methods::SPLITSOLVE) {
             int left_bc_rank  = 0;
             int right_bc_rank = matrix_procs-1;
             int NBC[2]={contactvec[0].ndof*contactvec[0].bandwidth,contactvec[1].ndof*contactvec[1].bandwidth};
@@ -438,13 +446,13 @@ if (nprol!=propnum[0] && propnum[0]>=0) if (!matrix_rank) cout << "WARNING: FOUN
 if (npror!=propnum[1] && propnum[1]>=0) if (!matrix_rank) cout << "WARNING: FOUND " << npror << " OF " << propnum[1] << " MODES AT E=" << real(energy) << " POSITION " << evecpos << " RIGHT" << endl;
 sabtime=get_time(d_zer);
         solver->solve_equation(sol, inj, nprol+npror);
-        if (solver_method!=11 || matrix_rank==left_gpu_rank || matrix_rank==right_gpu_rank) {
+        if (solver_method!=lin_solver_methods::SPLITSOLVE || matrix_rank==left_gpu_rank || matrix_rank==right_gpu_rank) {
             delete[] inj;
         }
         delete solver;
         delete HamSig;
-#ifdef SPLITSOLVE
-        if (solver_method==11 && boundary_id==n_mu) {
+#ifdef HAVE_SPLITSOLVE
+        if (solver_method==lin_solver_methods::SPLITSOLVE && boundary_id==n_mu) {
             cudaFreeHost(M_host);
         }
 #endif
@@ -452,7 +460,7 @@ if (worldrank==left_gpu_rank) cout << "TIME FOR WAVEFUNCTION SPARSE SOLVE PHASE 
         int solsize=Ps->size_tot;
         CPX* Sol = new CPX[solsize*(nprol+npror)];
         for (int icol=0;icol<nprol+npror;icol++) {
-            if (solver_method==11) {
+            if (solver_method==lin_solver_methods::SPLITSOLVE) {
                 if (boundary_id==n_mu) {
                     int solver_rank;
                     MPI_Comm_rank(boundary_comm,&solver_rank);
@@ -463,40 +471,40 @@ if (worldrank==left_gpu_rank) cout << "TIME FOR WAVEFUNCTION SPARSE SOLVE PHASE 
                 MPI_Allgatherv(&sol[dist_sol[matrix_rank]*icol],dist_sol[matrix_rank],MPI_DOUBLE_COMPLEX,&Sol[solsize*icol],dist_sol,displc_sol,MPI_DOUBLE_COMPLEX,matrix_comm);
             }
         }
-        if (solver_method!=11 || boundary_id==n_mu) {
+        if (solver_method!=lin_solver_methods::SPLITSOLVE || boundary_id==n_mu) {
             delete[] sol;
             delete[] dist_sol;
             delete[] displc_sol;
         }
 //maybe i should have a solver comm (pointer to MPI_COMM_NULL after use) and a function sol_alloc and sol_dealloc
 // /*
-        if (parameter_sab->method==4) {
+        if (transport_params->cp2k_method==cp2k_methods::TRANSMISSION) {
             double vbias=0.01;
-            double fermil = fermi(real(energy),muvec[0],parameter_sab->temperature,0)-fermi(real(energy),muvec[1],parameter_sab->temperature,0);
-            double diff_fermil = -(fermi(real(energy),muvec[0]+vbias,parameter_sab->temperature,0)-fermi(real(energy),muvec[0],parameter_sab->temperature,0));
+            double fermil = fermi(real(energy),muvec[0],transport_params->temperature,0)-fermi(real(energy),muvec[1],transport_params->temperature,0);
+            double diff_fermil = -(fermi(real(energy),muvec[0]+vbias,transport_params->temperature,0)-fermi(real(energy),muvec[0],transport_params->temperature,0));
             CPX* SolT = new CPX[solsize*nprol];
             full_transpose(nprol,solsize,Sol,SolT);
             Ps->psipsidagger_transpose(PsImag,SolT,nprol,+weight*fermil,+weight*diff_fermil);
             delete[] SolT;
-            double fermir = fermi(real(energy),muvec[1],parameter_sab->temperature,0)-fermi(real(energy),muvec[0],parameter_sab->temperature,0);
-            double diff_fermir = +(fermi(real(energy),muvec[1]+vbias,parameter_sab->temperature,0)-fermi(real(energy),muvec[1],parameter_sab->temperature,0));
+            double fermir = fermi(real(energy),muvec[1],transport_params->temperature,0)-fermi(real(energy),muvec[0],transport_params->temperature,0);
+            double diff_fermir = +(fermi(real(energy),muvec[1]+vbias,transport_params->temperature,0)-fermi(real(energy),muvec[1],transport_params->temperature,0));
             SolT = new CPX[solsize*npror];
             full_transpose(npror,solsize,&Sol[solsize*nprol],SolT);
             Ps->psipsidagger_transpose(PsImag,SolT,npror,+weight*fermir,+weight*diff_fermir);
             delete[] SolT;
         }
 // */
-        if (parameter_sab->method==3) {
+        if (transport_params->cp2k_method==cp2k_methods::TRANSPORT) {
 sabtime=get_time(d_zer);
 //int minmuarg=std::min_element( vec.begin(), vec.end() ); and then loop over all that are not munmuarg
             if (muvec[0]>muvec[1]) {
-                double fermil = fermi(real(energy),muvec[0],parameter_sab->temperature,0)-fermi(real(energy),muvec[1],parameter_sab->temperature,0);
+                double fermil = fermi(real(energy),muvec[0],transport_params->temperature,0)-fermi(real(energy),muvec[1],transport_params->temperature,0);
                 CPX* SolT = new CPX[solsize*nprol];
                 full_transpose(nprol,solsize,Sol,SolT);
                 Ps->psipsidagger_transpose(PsImag,SolT,nprol,+weight*fermil,+weight*fermil);
                 delete[] SolT;
             } else {
-                double fermir = fermi(real(energy),muvec[1],parameter_sab->temperature,0)-fermi(real(energy),muvec[0],parameter_sab->temperature,0);
+                double fermir = fermi(real(energy),muvec[1],transport_params->temperature,0)-fermi(real(energy),muvec[0],transport_params->temperature,0);
                 CPX* SolT = new CPX[solsize*npror];
                 full_transpose(npror,solsize,&Sol[solsize*nprol],SolT);
                 Ps->psipsidagger_transpose(PsImag,SolT,npror,+weight*fermir,+weight*fermir);
@@ -504,7 +512,7 @@ sabtime=get_time(d_zer);
             }
 if (!worldrank) cout << "TIME FOR CONSTRUCTION OF S-PATTERN DENSITY MATRIX " << get_time(sabtime) << endl;
         }
-        if (parameter_sab->method==2) {
+        if (transport_params->cp2k_method==cp2k_methods::LOCAL_SCF) {
             CPX* Soll = new CPX[solsize*(nprol+npror)]();
             CPX* Solr = new CPX[solsize*(nprol+npror)]();
             for (int ibw=bandwidth+1;ibw<ncells;ibw++) {
@@ -516,8 +524,8 @@ if (!worldrank) cout << "TIME FOR CONSTRUCTION OF S-PATTERN DENSITY MATRIX " << 
                     c_zscal(solsize,pow(lambda[ipro],+1),&Solr[ipro*solsize],1);
                 }
             }
-            double fermil=fermi(real(energy),muvec[0],parameter_sab->temperature,0);
-            double fermir=fermi(real(energy),muvec[1],parameter_sab->temperature,0);
+            double fermil=fermi(real(energy),muvec[0],transport_params->temperature,0);
+            double fermir=fermi(real(energy),muvec[1],transport_params->temperature,0);
 sabtime=get_time(d_zer);
             CPX* SolT = new CPX[solsize*max(nprol,npror)];
             CPX* SollT = new CPX[solsize*max(nprol,npror)];

@@ -4,7 +4,7 @@
 #include "mpi.h"
 #include <iostream>
 #include "Types.H"
-#ifdef SPLITSOLVE
+#ifdef HAVE_SPLITSOLVE
 #include "CWC_utility.H"
 #include "magma.h"
 #endif
@@ -606,7 +606,7 @@ inline void c_zlacpy(char UPLO, int M, int N, CPX* A, int LDA, CPX* B, int LDB)
 
 /*MMC*END***************************************************************************************/
 
-#ifdef SPLITSOLVE
+#ifdef HAVE_SPLITSOLVE
 template <typename T>
 inline void tgemm_dev(void *handle,char transa, char transb, int m, int n, int k, T alpha, T *a,\
 		      int lda, T *b, int ldb, T beta, T *c, int ldc);
@@ -628,7 +628,7 @@ inline void tgemm_dev(void *handle,char transa, char transb, int m, int n, int k
 
 /*magma*****************************************************************************************/
 
-#ifdef SPLITSOLVE
+#ifdef HAVE_SPLITSOLVE
 template <typename T>
 inline void tgetrf_dev(int m,int n,T *a,int lda,int *ipiv,int *info);
 
@@ -771,7 +771,7 @@ inline void zgetrs_nopiv_dev(char transa,int n,int nrhs,CPX *a,int lda,CPX *b,in
 
 /************************************************************************************************/
 
-#ifdef SPLITSOLVE
+#ifdef HAVE_SPLITSOLVE
 template <typename T>
 inline void copy_csr_to_device(int size,int n_nonzeros,int *hedge_i,int *hindex_j,T *hnnz,\
 			       int *dedge_i,int *dindex_j,T *dnnz);

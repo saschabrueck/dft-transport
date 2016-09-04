@@ -6,17 +6,17 @@
 #include "Utilities.H"
 #include "ParallelEig.H"
 
-Singularities::Singularities(transport_parameters *parameter_sab,std::vector<contact_type> pcontactvec)
+Singularities::Singularities(transport_parameters *transport_params,std::vector<contact_type> pcontactvec)
 {
     contactvec=pcontactvec;
 
-    dothederivs=(parameter_sab->rlaxis_integration_method==31);
-    eps_singularities=parameter_sab->eps_singularity_curvatures;
-    eps_mu=parameter_sab->eps_mu;
-    n_k=parameter_sab->n_kpoint;
-    Temp=parameter_sab->temperature;
+    dothederivs=(transport_params->real_int_method==real_int_methods::GAUSSCHEBYSHEV);
+    eps_singularities=transport_params->eps_singularity_curvatures;
+    eps_mu=transport_params->eps_mu;
+    n_k=transport_params->n_kpoint;
+    Temp=transport_params->temperature;
     n_mu=contactvec.size();
-    evfac=parameter_sab->evoltfactor;
+    evfac=transport_params->evoltfactor;
 
     int nprocs;
     MPI_Comm_size(MPI_COMM_WORLD,&nprocs);
@@ -221,7 +221,7 @@ cout << "[" << mu_a << "," << mu << "]" << " / " << n_ele_iter << " FIND" << end
             swap(n_ele_a,n_ele_iter);
         }
 //Bisection
-        while (abs(mu_a-mu_b)>K_BOLTZMANN*Temp && abs(n_ele-n_ele_iter)>eps_mu) {
+        while (abs(mu_a-mu_b)>Temp && abs(n_ele-n_ele_iter)>eps_mu) {
             mu=(mu_a+mu_b)/2.0;
             n_ele_iter=0.0;
             for (int j=0;j<n_k;j++) {
