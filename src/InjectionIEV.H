@@ -8,7 +8,7 @@
 #include <valarray>
 using namespace std;
 #include "ScaLapack.H"
-#include "Arpack.H"
+//#include "Arpack.H"
 #include "GetSigma.H"
 
 class InjectionIEV {

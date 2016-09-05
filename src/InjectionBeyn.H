@@ -15,10 +15,12 @@
 #include "Types.H"
 #include "Utilities.H"
 #include "Blas.H"
-#include "LinearSolver.H"
-#include "Umfpack.H"
-#include "Injection.H"
 #include "ParallelEig.H"
+#include "LinearSolver.H"
+#ifdef HAVE_UMFPACK
+#include "Umfpack.H"
+#endif
+#include "Injection.H"
 
 template<class T>
 class InjectionBeyn : public Injection<T>{
@@ -618,6 +620,7 @@ void InjectionBeyn<T>::create_M_matrix(CPX *M,TCSR<CPX> **A,int NR,CPX z)
 template <class T>
 void InjectionBeyn<T>::solve_Q_sparse(CPX *QM,CPX *QY,int NR,int NM,CPX z,MPI_Comm lin_comm)
 {
+#ifdef HAVE_UMFPACK
     int lin_size,lin_rank;
     MPI_Comm_size(lin_comm,&lin_size);
     MPI_Comm_rank(lin_comm,&lin_rank);
@@ -639,7 +642,7 @@ void InjectionBeyn<T>::solve_Q_sparse(CPX *QM,CPX *QY,int NR,int NM,CPX z,MPI_Co
         c_zscal(NR*NM,z,QY,1);
 
     }
-
+#endif
 }
 
 /************************************************************************************************/

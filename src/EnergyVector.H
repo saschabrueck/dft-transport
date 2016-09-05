@@ -6,19 +6,18 @@
 #define __ENERGYVECTOR
 
 #include "libcp2k.h"
-#include "Types.H"
 
 class Energyvector {
 public:
 Energyvector();
-int Execute(cp2k_csr_interop_type,cp2k_csr_interop_type,cp2k_csr_interop_type*,cp2k_csr_interop_type*,std::vector<double>,std::vector<contact_type>,std::vector<int>,std::vector<int>,double*,double*,transport_parameters*);
+int Execute(cp2k_csr_interop_type,cp2k_csr_interop_type,cp2k_csr_interop_type*,cp2k_csr_interop_type*,std::vector<double>,std::vector<contact_type>,std::vector<int>,std::vector<int>,double*,double*,transport_parameters);
 ~Energyvector();
 
 private:
-int determine_energyvector(std::vector<CPX>&,std::vector<CPX>&,std::vector<transport_methods::transport_method_type>&,std::vector< std::vector<int> >&,cp2k_csr_interop_type,cp2k_csr_interop_type,std::vector<double>&,std::vector<contact_type>,transport_parameters*);
+int determine_energyvector(std::vector<CPX>&,std::vector<CPX>&,std::vector<transport_methods::transport_method_type>&,std::vector< std::vector<int> >&,cp2k_csr_interop_type,cp2k_csr_interop_type,std::vector<double>&,std::vector<contact_type>,transport_parameters);
 int read_real_axis_energies(std::vector<CPX>&,std::vector<CPX>&,std::vector<transport_methods::transport_method_type>&);
-int add_real_axis_energies(double,double,std::vector<CPX>&,std::vector<CPX>&,std::vector<transport_methods::transport_method_type>&,const std::vector< std::vector<double> > &,int,transport_parameters*);
-int add_cmpx_cont_energies(double,double,std::vector<CPX>&,std::vector<CPX>&,std::vector<transport_methods::transport_method_type>&,transport_parameters*);
+int add_real_axis_energies(double,double,std::vector<CPX>&,std::vector<CPX>&,std::vector<transport_methods::transport_method_type>&,const std::vector< std::vector<double> > &,int,transport_parameters);
+int add_cmpx_cont_energies(double,double,std::vector<CPX>&,std::vector<CPX>&,std::vector<transport_methods::transport_method_type>&,transport_parameters);
 int iam, nprocs;
 
 };

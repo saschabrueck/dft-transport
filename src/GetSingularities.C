@@ -6,17 +6,17 @@
 #include "Utilities.H"
 #include "ParallelEig.H"
 
-Singularities::Singularities(transport_parameters *transport_params,std::vector<contact_type> pcontactvec)
+Singularities::Singularities(transport_parameters transport_params,std::vector<contact_type> pcontactvec)
 {
     contactvec=pcontactvec;
 
-    dothederivs=(transport_params->real_int_method==real_int_methods::GAUSSCHEBYSHEV);
-    eps_singularities=transport_params->eps_singularity_curvatures;
-    eps_mu=transport_params->eps_mu;
-    n_k=transport_params->n_kpoint;
-    Temp=transport_params->temperature;
+    dothederivs=(transport_params.real_int_method==real_int_methods::GAUSSCHEBYSHEV);
+    eps_singularities=transport_params.eps_singularity_curvatures;
+    eps_mu=transport_params.eps_mu;
+    n_k=transport_params.n_kpoint;
+    Temp=transport_params.temperature;
     n_mu=contactvec.size();
-    evfac=transport_params->evoltfactor;
+    evfac=transport_params.evoltfactor;
 
     int nprocs;
     MPI_Comm_size(MPI_COMM_WORLD,&nprocs);

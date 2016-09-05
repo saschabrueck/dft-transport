@@ -5,7 +5,7 @@
 #include <limits>
 #include "SemiSelfConsistent.H"
  
-int semiselfconsistent(cp2k_csr_interop_type S,cp2k_csr_interop_type KS,cp2k_csr_interop_type *P,cp2k_csr_interop_type *PImag,std::vector<double> muvec,std::vector<contact_type> contactvec,std::vector<int> Bsizes,std::vector<int> orb_per_atom,transport_parameters *transport_params)
+int semiselfconsistent(cp2k_csr_interop_type S,cp2k_csr_interop_type KS,cp2k_csr_interop_type *P,cp2k_csr_interop_type *PImag,std::vector<double> muvec,std::vector<contact_type> contactvec,std::vector<int> Bsizes,std::vector<int> orb_per_atom,transport_parameters transport_params)
 {
     int iam;MPI_Comm_rank(MPI_COMM_WORLD,&iam);
     int procs;MPI_Comm_size(MPI_COMM_WORLD,&procs);
@@ -13,7 +13,7 @@ int semiselfconsistent(cp2k_csr_interop_type S,cp2k_csr_interop_type KS,cp2k_csr
     int n_mu=muvec.size();
     if (n_mu != 2) return (LOGCERR, EXIT_FAILURE);
 
-    if (FEM->NAtom != transport_params->n_atoms) return (LOGCERR, EXIT_FAILURE);
+    if (FEM->NAtom != transport_params.n_atoms) return (LOGCERR, EXIT_FAILURE);
 
     double *doping_atom = new double[FEM->NAtom];
     for (int ia=0;ia<FEM->NAtom;ia++) {
@@ -181,7 +181,7 @@ rhofile.close();
         c_daxpy(2*FEM->NAtom,mixing_parameter,drho_atom_dV,1,drho_atom_dV_previous,1);
 
         c_dcopy(FEM->NGrid,Vnew,1,Vold,1);
-        double Temp=transport_params->temperature/transport_params->boltzmann_ev;
+        double Temp=transport_params.temperature/transport_params.boltzmann_ev;
         OMEN_Poisson_Solver->solve(Vnew,Vold,rho_atom_previous,drho_atom_dV_previous,1,NULL,FEM,Wire,Temp,&Vg,Vs,Vs,Vd,&residual,parameter->poisson_inner_criterion,parameter->poisson_inner_iteration,1,1,newcomm,MPI_COMM_WORLD,1,MPI_COMM_WORLD,0);
 //        OMEN_Poisson_Solver->solve(Vnew,Vold,rho_atom,drho_atom_dV,1,NULL,FEM,Wire,Temp,&Vg,Vs,Vs,Vd,&residual,parameter->poisson_inner_criterion,parameter->poisson_inner_iteration,1,1,newcomm,MPI_COMM_WORLD,1,MPI_COMM_WORLD,0);
 
