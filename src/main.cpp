@@ -1,9 +1,11 @@
 #include <string.h>
 #include <mpi.h>
 #include <assert.h>
+#include <fstream>
+#include <iostream>
 #include "libcp2k.h"
 
-// OMEN INPUT
+#ifdef HAVE_OMEN_POISSON
 #include "Types.H"
 #include "InputParameter.H"
 #include "Material.H"
@@ -25,6 +27,7 @@ VOLTAGE *voltage;
 WireGenerator* Wire;
 FEMGrid *FEM;
 Poisson *OMEN_Poisson_Solver;
+#endif
 
 int main (int argc, char **argv)
 {
@@ -71,6 +74,7 @@ int main (int argc, char **argv)
    std::fill_n(force, n_el_force, 0);
 #endif
 
+#ifdef HAVE_OMEN_POISSON
    int do_omen_poisson=0;
    if ((yyin = fopen(command_file,"r")) != NULL) do_omen_poisson=1;
    if (do_omen_poisson) {
@@ -91,6 +95,7 @@ int main (int argc, char **argv)
       OMEN_Poisson_Solver->init(Wire,nanowire,FEM,1,1,MPI::COMM_WORLD);
 //      OMEN_Poisson_Solver->init(nanowire,FEM);
    }
+#endif
 
 #ifdef libcp2k
    cp2k_calc_energy_force(force_env);
@@ -101,12 +106,14 @@ int main (int argc, char **argv)
    cp2k_finalize_without_mpi();
 #endif
 
+#ifdef HAVE_OMEN_POISSON
    if (do_omen_poisson) {
       delete OMEN_Poisson_Solver;
       delete FEM;
       delete Wire;
       delete_parameters();
    }
+#endif
 
 #ifdef libcp2k   
    delete [] pos;

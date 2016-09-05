@@ -17,7 +17,7 @@ Energyvector::~Energyvector()
 {
 }
 
-int Energyvector::Execute(cp2k_csr_interop_type Overlap,cp2k_csr_interop_type KohnSham,cp2k_csr_interop_type *P,cp2k_csr_interop_type *PImag,std::vector<double> muvec,std::vector<contact_type> contactvec,std::vector<int> Bsizes,std::vector<int> orb_per_at,double *Vatom,double *rho_atom,transport_parameters *transport_params)
+int Energyvector::Execute(cp2k_csr_interop_type Overlap,cp2k_csr_interop_type KohnSham,cp2k_csr_interop_type *P,cp2k_csr_interop_type *PImag,std::vector<double> muvec,std::vector<contact_type> contactvec,std::vector<int> Bsizes,std::vector<int> orb_per_at,double *Vatom,double *rho_atom,transport_parameters transport_params)
 {
 #ifdef HAVE_SPLITSOLVE
     char gpu_string[255];
@@ -26,26 +26,26 @@ int Energyvector::Execute(cp2k_csr_interop_type Overlap,cp2k_csr_interop_type Ko
     double sabtime;
 sabtime=get_time(0.0);
     MPI_Comm matrix_comm;
-    int cutl=transport_params->cutl;
-    int cutr=transport_params->cutr;
+    int cutl=transport_params.cutl;
+    int cutr=transport_params.cutr;
     std::vector<int> Tsizes;
-    if (transport_params->lin_solver_method==lin_solver_methods::SPLITSOLVE) {
+    if (transport_params.lin_solver_method==lin_solver_methods::SPLITSOLVE) {
         std::vector<int> Bmin(1,0);
         for (uint i=1;i<Bsizes.size();i++) Bmin.push_back(Bmin[i-1]+Bsizes[i-1]);
         std::vector<int> Fsizes;
         for (uint i=0;i<Bsizes.size();i++) Fsizes.push_back(orb_per_at[Bmin[i]+Bsizes[i]]-orb_per_at[Bmin[i]]);
-        Tsizes.assign(transport_params->tasks_per_point,0);
-        double load_max=pow(double((Overlap.nrows_total-cutl-cutr)/transport_params->gpus_per_point),3);
-        int stride=transport_params->tasks_per_point/transport_params->gpus_per_point;
+        Tsizes.assign(transport_params.tasks_per_point,0);
+        double load_max=pow(double((Overlap.nrows_total-cutl-cutr)/transport_params.gpus_per_point),3);
+        int stride=transport_params.tasks_per_point/transport_params.gpus_per_point;
         int iblock=0;
-        for (int igpu=0;igpu<transport_params->gpus_per_point;igpu++) {
+        for (int igpu=0;igpu<transport_params.gpus_per_point;igpu++) {
             int Gsize=0;
             Gsize+=Fsizes[iblock++];
             Gsize+=Fsizes[iblock++];
-            while (pow(double(Gsize+Fsizes[iblock]),3)<=load_max && Fsizes.size()-iblock-1>=2*(transport_params->gpus_per_point-igpu-1) && iblock<Fsizes.size()) {
+            while (pow(double(Gsize+Fsizes[iblock]),3)<=load_max && Fsizes.size()-iblock-1>=2*(transport_params.gpus_per_point-igpu-1) && iblock<Fsizes.size()) {
                 Gsize+=Fsizes[iblock++];
             }
-            if (igpu==transport_params->gpus_per_point-1) {
+            if (igpu==transport_params.gpus_per_point-1) {
                 while (iblock<Fsizes.size()) {
                     Gsize+=Fsizes[iblock++];
                 }
@@ -54,14 +54,14 @@ sabtime=get_time(0.0);
             if (igpu%2) loc++;
             Tsizes[loc]=Gsize;
         }
-    } else if (transport_params->lin_solver_method==lin_solver_methods::SUPERLU || transport_params->lin_solver_method==lin_solver_methods::MUMPS) {
-        int loc_size=int(floor(double(Overlap.nrows_total-cutl-cutr)/double(transport_params->tasks_per_point)));
-        Tsizes.assign(transport_params->tasks_per_point,loc_size);
-        Tsizes[transport_params->tasks_per_point-1]=Overlap.nrows_total-cutl-cutr-(transport_params->tasks_per_point-1)*loc_size;
-    } else if (transport_params->lin_solver_method==lin_solver_methods::FULL || transport_params->lin_solver_method==lin_solver_methods::BANDED) {
-        int loc_size=int(ceil(double(Overlap.nrows_total-cutl-cutr)/double(transport_params->tasks_per_point)));
-        Tsizes.assign(transport_params->tasks_per_point,loc_size);
-        Tsizes[transport_params->tasks_per_point-1]=Overlap.nrows_total-cutl-cutr-(transport_params->tasks_per_point-1)*loc_size;
+    } else if (transport_params.lin_solver_method==lin_solver_methods::SUPERLU || transport_params.lin_solver_method==lin_solver_methods::MUMPS) {
+        int loc_size=int(floor(double(Overlap.nrows_total-cutl-cutr)/double(transport_params.tasks_per_point)));
+        Tsizes.assign(transport_params.tasks_per_point,loc_size);
+        Tsizes[transport_params.tasks_per_point-1]=Overlap.nrows_total-cutl-cutr-(transport_params.tasks_per_point-1)*loc_size;
+    } else if (transport_params.lin_solver_method==lin_solver_methods::FULL || transport_params.lin_solver_method==lin_solver_methods::BANDED) {
+        int loc_size=int(ceil(double(Overlap.nrows_total-cutl-cutr)/double(transport_params.tasks_per_point)));
+        Tsizes.assign(transport_params.tasks_per_point,loc_size);
+        Tsizes[transport_params.tasks_per_point-1]=Overlap.nrows_total-cutl-cutr-(transport_params.tasks_per_point-1)*loc_size;
     } else {
         return (LOGCERR, EXIT_FAILURE);
     }
@@ -75,24 +75,24 @@ sabtime=get_time(0.0);
         OverlapCollect  = OverlapCollectCut;
         KohnShamCollect = KohnShamCollectCut;
     }
-    c_dscal(KohnShamCollect->n_nonzeros,transport_params->evoltfactor,KohnShamCollect->nnz,1);
+    c_dscal(KohnShamCollect->n_nonzeros,transport_params.evoltfactor,KohnShamCollect->nnz,1);
     TCSR<double> *DensReal = new TCSR<double>(OverlapCollect);
     c_dscal(DensReal->n_nonzeros,0.0,DensReal->nnz,1);
     TCSR<double> *DensImag = NULL;
-    if (transport_params->cp2k_method!=cp2k_methods::LOCAL_SCF) {
+    if (transport_params.cp2k_method!=cp2k_methods::LOCAL_SCF) {
         DensImag = new TCSR<double>(OverlapCollect);
         c_dscal(DensImag->n_nonzeros,0.0,DensImag->nnz,1);
     }
 if (!iam) cout << "TIME FOR DISTRIBUTING MATRICES " << get_time(sabtime) << endl;
 
     std::vector<int> atom_of_bf;
-    if (transport_params->cp2k_method==cp2k_methods::LOCAL_SCF) {
+    if (transport_params.cp2k_method==cp2k_methods::LOCAL_SCF) {
         int atom=0;
         for (int ibf=0;ibf<OverlapCollect->size_tot;ibf++) {
             if (ibf==orb_per_at[atom+1]) ++atom;
             atom_of_bf.push_back(atom);
         }
-        if (++atom != transport_params->n_atoms) return (LOGCERR, EXIT_FAILURE);
+        if (++atom != transport_params.n_atoms) return (LOGCERR, EXIT_FAILURE);
         std::vector<double> Vbf;
         for (int ibf=0;ibf<OverlapCollect->size_tot;ibf++) {
             Vbf.push_back(Vatom[atom_of_bf[ibf]]);
@@ -106,8 +106,8 @@ if (!iam) cout << "TIME FOR DISTRIBUTING MATRICES " << get_time(sabtime) << endl
     std::vector< std::vector<int> > propagating_sizes;
     if (determine_energyvector(energyvector,stepvector,methodvector,propagating_sizes,KohnSham,Overlap,muvec,contactvec,transport_params)) return (LOGCERR, EXIT_FAILURE);
     std::vector<double> transmission(energyvector.size(),0.0);
-    int matrix_id = iam/transport_params->tasks_per_point;
-    int n_mat_comm = nprocs/transport_params->tasks_per_point;
+    int matrix_id = iam/transport_params.tasks_per_point;
+    int n_mat_comm = nprocs/transport_params.tasks_per_point;
 sabtime=get_time(0.0);
     unsigned int jpos;
     for (int iseq=0;iseq<int(ceil(double(energyvector.size())/n_mat_comm));iseq++) {
@@ -115,21 +115,21 @@ sabtime=get_time(0.0);
             if (abs(stepvector[jpos])>0.0)
                 if (density(KohnShamCollect,OverlapCollect,DensReal,DensImag,energyvector[jpos],stepvector[jpos],methodvector[jpos],muvec,contactvec,transmission[jpos],propagating_sizes[jpos],Bsizes,orb_per_at,transport_params,jpos,matrix_comm))
                     return (LOGCERR, EXIT_FAILURE);
-        cout << "Finished " << (iseq+1)*100.0/int(ceil(double(energyvector.size())/n_mat_comm)) << "%" << endl;
+        if (!iam) cout << "Finished " << int((iseq+1)*100.0/ceil(double(energyvector.size())/n_mat_comm)) << "%" << endl;
     }
 if (!iam) cout << "TIME FOR DENSITY " << get_time(sabtime) << endl;
     MPI_Allreduce(MPI_IN_PLACE,&transmission[0],energyvector.size(),MPI_DOUBLE,MPI_SUM,MPI_COMM_WORLD);
     if (!iam) {
         stringstream mysstream;
-        mysstream << "Transmission_" << transport_params->cp2k_scf_iter;
+        mysstream << "Transmission_" << transport_params.cp2k_scf_iter;
         ofstream myfile(mysstream.str().c_str());
         myfile.precision(15);
         double current = 0.0;
         for (uint iele=0;iele<energyvector.size();iele++) {
             if (!imag(energyvector[iele])) {
                 myfile << real(energyvector[iele]) << " " << real(stepvector[iele]) << " " << transmission[iele] << endl;
-                double diff_fermi=fermi(real(energyvector[iele]),muvec[0],transport_params->temperature,0)-fermi(real(energyvector[iele]),muvec[1],transport_params->temperature,0);
-                current += transport_params->conduct_quant*diff_fermi*real(stepvector[iele])*(-transmission[iele]);
+                double diff_fermi=fermi(real(energyvector[iele]),muvec[0],transport_params.temperature,0)-fermi(real(energyvector[iele]),muvec[1],transport_params.temperature,0);
+                current += transport_params.conduct_quant*diff_fermi*real(stepvector[iele])*(-transmission[iele]);
             }
         }
         myfile.close();
@@ -137,7 +137,7 @@ if (!iam) cout << "TIME FOR DENSITY " << get_time(sabtime) << endl;
     }
     if (!iam) {
         stringstream mysstream;
-        mysstream << "CurrentFromTransmission_" << transport_params->cp2k_scf_iter;
+        mysstream << "CurrentFromTransmission_" << transport_params.cp2k_scf_iter;
         ofstream myfile(mysstream.str().c_str());
         myfile.precision(15);
         for (int ibias=-600;ibias<=600;ibias++) {
@@ -145,8 +145,8 @@ if (!iam) cout << "TIME FOR DENSITY " << get_time(sabtime) << endl;
             double current = 0.0;
             for (uint iele=0;iele<energyvector.size();iele++) {
                 if (!imag(energyvector[iele])) {
-                    double diff_fermi = fermi(real(energyvector[iele]),muvec[0]+dbias,transport_params->temperature,0)-fermi(real(energyvector[iele]),muvec[0],transport_params->temperature,0);
-                    current += transport_params->conduct_quant*diff_fermi*real(stepvector[iele])*(-transmission[iele]);
+                    double diff_fermi = fermi(real(energyvector[iele]),muvec[0]+dbias,transport_params.temperature,0)-fermi(real(energyvector[iele]),muvec[0],transport_params.temperature,0);
+                    current += transport_params.conduct_quant*diff_fermi*real(stepvector[iele])*(-transmission[iele]);
                 }
             }
             myfile << dbias << " " << current << endl;
@@ -161,7 +161,7 @@ if (!iam) cout << "TIME FOR DENSITY " << get_time(sabtime) << endl;
         delete DensReal;
         DensReal = DensRealCollect;
 #ifdef HAVE_PIMAG
-        if (transport_params->cp2k_method!=cp2k_methods::LOCAL_SCF) {
+        if (transport_params.cp2k_method!=cp2k_methods::LOCAL_SCF) {
             TCSR<double> *DensImagCollect = new TCSR<double>(*PImag,MPI_COMM_WORLD,&Tsizes[0],Tsizes.size(),cutl,cutr,&matrix_comm);
             c_dscal(DensImagCollect->n_nonzeros,double(Tsizes.size())/double(nprocs),DensImagCollect->nnz,1);
             DensImag->copy_shifted(DensImagCollect,0,OverlapCollect->size_tot,cutl,OverlapCollect->size_tot);
@@ -170,22 +170,22 @@ if (!iam) cout << "TIME FOR DENSITY " << get_time(sabtime) << endl;
         }
 #endif
     }
-    if (transport_params->cp2k_method!=cp2k_methods::LOCAL_SCF) {
-        if (!(transport_params->cp2k_method==cp2k_methods::TRANSMISSION && transport_params->extra_scf)) {
+    if (transport_params.cp2k_method!=cp2k_methods::LOCAL_SCF) {
+        if (!(transport_params.cp2k_method==cp2k_methods::TRANSMISSION && transport_params.extra_scf)) {
             DensReal->distribute_back(*P,MPI_COMM_WORLD,&Tsizes[0],Tsizes.size(),cutl,cutr,matrix_comm);
         }
 #ifdef HAVE_PIMAG
         DensImag->distribute_back(*PImag,MPI_COMM_WORLD,&Tsizes[0],Tsizes.size(),cutl,cutr,matrix_comm);
 #endif
     } else {
-        std::vector<double> rho_dist(transport_params->n_atoms,0.0);
+        std::vector<double> rho_dist(transport_params.n_atoms,0.0);
         DensReal->atom_allocate(OverlapCollect,&atom_of_bf[0],&rho_dist[0],2.0);
-        MPI_Allreduce(&rho_dist[0],&rho_atom[0],transport_params->n_atoms,MPI_DOUBLE,MPI_SUM,MPI_COMM_WORLD);
+        MPI_Allreduce(&rho_dist[0],&rho_atom[0],transport_params.n_atoms,MPI_DOUBLE,MPI_SUM,MPI_COMM_WORLD);
     }
     delete KohnShamCollect;
     delete OverlapCollect;
     delete DensReal;
-    if (transport_params->cp2k_method!=cp2k_methods::LOCAL_SCF) {
+    if (transport_params.cp2k_method!=cp2k_methods::LOCAL_SCF) {
         delete DensImag;
     }
     MPI_Comm_free(&matrix_comm);
@@ -193,25 +193,25 @@ if (!iam) cout << "TIME FOR DENSITY " << get_time(sabtime) << endl;
     return 0;
 }
 
-int Energyvector::determine_energyvector(std::vector<CPX> &energyvector,std::vector<CPX> &stepvector,std::vector<transport_methods::transport_method_type> &methodvector,std::vector< std::vector<int> > &propagating_sizes,cp2k_csr_interop_type KohnSham,cp2k_csr_interop_type Overlap,std::vector<double> &muvec,std::vector<contact_type> contactvec,transport_parameters *transport_params)
+int Energyvector::determine_energyvector(std::vector<CPX> &energyvector,std::vector<CPX> &stepvector,std::vector<transport_methods::transport_method_type> &methodvector,std::vector< std::vector<int> > &propagating_sizes,cp2k_csr_interop_type KohnSham,cp2k_csr_interop_type Overlap,std::vector<double> &muvec,std::vector<contact_type> contactvec,transport_parameters transport_params)
 {
     Singularities singularities(transport_params,contactvec);
-    int determine_singularities = !(transport_params->real_int_method!=real_int_methods::GAUSSCHEBYSHEV && transport_params->cp2k_method==cp2k_methods::LOCAL_SCF);
-    int propagating_from_bs = (transport_params->real_int_method==real_int_methods::GAUSSCHEBYSHEV);
+    int determine_singularities = !(transport_params.real_int_method!=real_int_methods::GAUSSCHEBYSHEV && transport_params.cp2k_method==cp2k_methods::LOCAL_SCF);
+    int propagating_from_bs = (transport_params.real_int_method==real_int_methods::GAUSSCHEBYSHEV);
     double bands_start;
     if (determine_singularities) {
 double sabtime=get_time(0.0);
         if ( singularities.Execute(KohnSham,Overlap) ) return (LOGCERR, EXIT_FAILURE);
-        if (transport_params->cp2k_method!=cp2k_methods::LOCAL_SCF) for (uint i_mu=0;i_mu<muvec.size();i_mu++) muvec[i_mu]=singularities.determine_fermi(contactvec[i_mu].n_ele,i_mu);
+        if (transport_params.cp2k_method!=cp2k_methods::LOCAL_SCF) for (uint i_mu=0;i_mu<muvec.size();i_mu++) muvec[i_mu]=singularities.determine_fermi(contactvec[i_mu].n_ele,i_mu);
         bands_start=singularities.energy_gs;
 if (!iam) cout << "TIME FOR SINGULARITIES " << get_time(sabtime) << endl;
-        int follow_bands = (transport_params->real_int_method==real_int_methods::GAUSSCHEBYSHEV);
+        int follow_bands = (transport_params.real_int_method==real_int_methods::GAUSSCHEBYSHEV);
         int debugout = 0;
-        for (uint i_mu=0;i_mu<contactvec.size();i_mu++) singularities.write_bandstructure(i_mu,transport_params->cp2k_scf_iter,follow_bands,debugout);
+        for (uint i_mu=0;i_mu<contactvec.size();i_mu++) singularities.write_bandstructure(i_mu,transport_params.cp2k_scf_iter,follow_bands,debugout);
     }
  
-    double Temp=transport_params->temperature;
-    double delta_eps_fermi=-log(transport_params->eps_fermi)*Temp;
+    double Temp=transport_params.temperature;
+    double delta_eps_fermi=-log(transport_params.eps_fermi)*Temp;
     double muvec_min=*min_element(muvec.begin(),muvec.end());
     double muvec_max=*max_element(muvec.begin(),muvec.end());
     double muvec_avg=accumulate(muvec.begin(),muvec.end(),0.0)/muvec.size();
@@ -221,16 +221,16 @@ if (!iam) cout << "TIME FOR SINGULARITIES " << get_time(sabtime) << endl;
 if (!iam) cout << "Fermi level difference " << muvec_max-muvec_min << endl;
 
 // all localized states with lowest fermi level corresponding to occupation of localized states in bandgap
-    if (transport_params->cp2k_method==cp2k_methods::LOCAL_SCF) {
-        transport_params->n_abscissae=0;
+    if (transport_params.cp2k_method==cp2k_methods::LOCAL_SCF) {
+        transport_params.n_abscissae=0;
 //      double energy_vb=*max_element(singularities.energies_vb.begin(),singularities.energies_vb.end());
         double energy_cb=*min_element(singularities.energies_cb.begin(),singularities.energies_cb.end());
         if (add_real_axis_energies(energy_cb,nonequi_end,energyvector,stepvector,methodvector,singularities.energies_extremum,muvec.size(),transport_params)) return (LOGCERR, EXIT_FAILURE);
-    } else if (transport_params->cp2k_method==cp2k_methods::TRANSPORT) {
+    } else if (transport_params.cp2k_method==cp2k_methods::TRANSPORT) {
         if (add_cmpx_cont_energies(bands_start,muvec_min,energyvector,stepvector,methodvector,transport_params)) return (LOGCERR, EXIT_FAILURE);
         if (add_real_axis_energies(nonequi_start,nonequi_end,energyvector,stepvector,methodvector,singularities.energies_extremum,muvec.size(),transport_params)) return (LOGCERR, EXIT_FAILURE);
-    } else if (transport_params->cp2k_method==cp2k_methods::TRANSMISSION) {
-        if (!transport_params->extra_scf) {
+    } else if (transport_params.cp2k_method==cp2k_methods::TRANSMISSION) {
+        if (!transport_params.extra_scf) {
             if (add_cmpx_cont_energies(bands_start,muvec_avg,energyvector,stepvector,methodvector,transport_params)) return (LOGCERR, EXIT_FAILURE);
         } else {
             if (add_real_axis_energies(nonequi_start,nonequi_end,energyvector,stepvector,methodvector,singularities.energies_extremum,muvec.size(),transport_params)) return (LOGCERR, EXIT_FAILURE);
@@ -263,7 +263,7 @@ if (!iam) cout << "TIME FOR PROPAGATING MODES " << get_time(sabtime) << endl;
         }
         if (!iam && contactvec.size()>muvec.size()) {
             stringstream mysstream;
-            mysstream << "CurrentFromBandstructure_" << transport_params->cp2k_scf_iter;
+            mysstream << "CurrentFromBandstructure_" << transport_params.cp2k_scf_iter;
             ofstream myfile(mysstream.str().c_str());
             myfile.precision(15);
             double cb_max = *max_element(singularities.energies_cb.begin(),singularities.energies_cb.end());
@@ -272,8 +272,8 @@ if (!iam) cout << "TIME FOR PROPAGATING MODES " << get_time(sabtime) << endl;
                 double current = 0.0;
                 for (uint iele=0;iele<energyvector.size();iele++) {
                     if (!imag(energyvector[iele]) && real(energyvector[iele])>cb_max) {
-                        double diff_fermi = fermi(real(energyvector[iele]),muvec[0]+dbias,transport_params->temperature,0)-fermi(real(energyvector[iele]),muvec[0],transport_params->temperature,0);
-                        current += transport_params->conduct_quant*diff_fermi*real(stepvector[iele])*propagating_sizes[iele][contactvec.size()-1];
+                        double diff_fermi = fermi(real(energyvector[iele]),muvec[0]+dbias,transport_params.temperature,0)-fermi(real(energyvector[iele]),muvec[0],transport_params.temperature,0);
+                        current += transport_params.conduct_quant*diff_fermi*real(stepvector[iele])*propagating_sizes[iele][contactvec.size()-1];
                     }
                 }
                 myfile << dbias << " " << current << endl;
@@ -317,14 +317,14 @@ int Energyvector::read_real_axis_energies(std::vector<CPX> &energyvector,std::ve
     return 0;
 }
 
-int Energyvector::add_real_axis_energies(double nonequi_start,double nonequi_end,std::vector<CPX> &energyvector,std::vector<CPX> &stepvector,std::vector<transport_methods::transport_method_type> &methodvector,const std::vector< std::vector<double> > &energies_extremum,int muvec_size,transport_parameters *transport_params)
+int Energyvector::add_real_axis_energies(double nonequi_start,double nonequi_end,std::vector<CPX> &energyvector,std::vector<CPX> &stepvector,std::vector<transport_methods::transport_method_type> &methodvector,const std::vector< std::vector<double> > &energies_extremum,int muvec_size,transport_parameters transport_params)
 {
-    if (transport_params->real_int_method==real_int_methods::READFROMFILE) {
+    if (transport_params.real_int_method==real_int_methods::READFROMFILE) {
         if (read_real_axis_energies(energyvector,stepvector,methodvector)) return (LOGCERR, EXIT_FAILURE);
-    } else if (transport_params->real_int_method==real_int_methods::TRAPEZOIDAL) {
-        int num_trapez=int(abs(nonequi_end-nonequi_start)/transport_params->energy_interval)+1;
+    } else if (transport_params.real_int_method==real_int_methods::TRAPEZOIDAL) {
+        int num_trapez=int(abs(nonequi_end-nonequi_start)/transport_params.energy_interval)+1;
         for (int istep=0;istep<num_trapez;istep++) {
-            energyvector.push_back(nonequi_start+istep*transport_params->energy_interval);
+            energyvector.push_back(nonequi_start+istep*transport_params.energy_interval);
         }
         if (num_trapez==1) {
             stepvector.push_back(1.0);
@@ -335,12 +335,12 @@ int Energyvector::add_real_axis_energies(double nonequi_start,double nonequi_end
             }
             stepvector.push_back((energyvector[energyvector.size()-1]-energyvector[energyvector.size()-2])/2.0);
         }
-        if (transport_params->negf_solver) {
+        if (transport_params.negf_solver) {
             methodvector.resize(energyvector.size(),transport_methods::NEGF);
         } else {
             methodvector.resize(energyvector.size(),transport_methods::WF);
         }
-    } else if (transport_params->real_int_method==real_int_methods::GAUSSCHEBYSHEV) {
+    } else if (transport_params.real_int_method==real_int_methods::GAUSSCHEBYSHEV) {
         std::vector<double> energylist;
         int n_energies;
         if (!iam) {
@@ -356,15 +356,15 @@ int Energyvector::add_real_axis_energies(double nonequi_start,double nonequi_end
         MPI_Bcast(&n_energies,1,MPI_INT,0,MPI_COMM_WORLD);
         energylist.resize(n_energies);
         MPI_Bcast(&energylist[0],n_energies,MPI_DOUBLE,0,MPI_COMM_WORLD);
-        int num_trapez=int(abs(nonequi_end-nonequi_start)/transport_params->energy_interval)+1;
-        if (num_trapez<n_energies*transport_params->num_interval) return (LOGCERR, EXIT_FAILURE);
-        double smallest_energy_distance=transport_params->min_interval;
+        int num_trapez=int(abs(nonequi_end-nonequi_start)/transport_params.energy_interval)+1;
+        if (num_trapez<n_energies*transport_params.num_interval) return (LOGCERR, EXIT_FAILURE);
+        double smallest_energy_distance=transport_params.min_interval;
         if (!iam) cout<<"Smallest enery distance "<<smallest_energy_distance<<endl;
-        if (!iam) cout<<"Max number of points per small interval "<<transport_params->num_interval<<endl;
-        if (!iam) cout<<"Average distance for big intervals "<<transport_params->energy_interval<<endl;
+        if (!iam) cout<<"Max number of points per small interval "<<transport_params.num_interval<<endl;
+        if (!iam) cout<<"Average distance for big intervals "<<transport_params.energy_interval<<endl;
         if (!iam) cout<<"Singularities in range "<< n_energies-2 << endl;
         for (uint i_energies=1;i_energies<energylist.size();i_energies++) {
-            int num_points_per_interval=max(transport_params->num_interval,int(ceil(abs(energylist[i_energies]-energylist[i_energies-1])/transport_params->energy_interval)));
+            int num_points_per_interval=max(transport_params.num_interval,int(ceil(abs(energylist[i_energies]-energylist[i_energies-1])/transport_params.energy_interval)));
             while ((energylist[i_energies]-energylist[i_energies-1])/2.0*(1.0-cos(M_PI/(2.0*num_points_per_interval)))<smallest_energy_distance && num_points_per_interval>1)
 //          while ((energylist[i_energies]-energylist[i_energies-1])/2.0*(1.0-tanh(M_PI/2.0*sinh(3.0)))<smallest_energy_distance && num_points_per_interval>1)
                 --num_points_per_interval;
@@ -372,7 +372,7 @@ int Energyvector::add_real_axis_energies(double nonequi_start,double nonequi_end
                 Quadrature quadrature(quadrature_types::GC,energylist[i_energies-1],energylist[i_energies],num_points_per_interval);
                 energyvector.insert(energyvector.end(),quadrature.abscissae.begin(),quadrature.abscissae.end());
                 stepvector.insert(stepvector.end(),quadrature.weights.begin(),quadrature.weights.end());
-                if (transport_params->negf_solver) {
+                if (transport_params.negf_solver) {
                     methodvector.resize(energyvector.size(),transport_methods::NEGF);
                 } else {
                     methodvector.resize(energyvector.size(),transport_methods::WF);
@@ -383,10 +383,10 @@ int Energyvector::add_real_axis_energies(double nonequi_start,double nonequi_end
     return 0;
 }
 
-int Energyvector::add_cmpx_cont_energies(double start,double mu,std::vector<CPX> &energyvector,std::vector<CPX> &stepvector,std::vector<transport_methods::transport_method_type> &methodvector,transport_parameters *transport_params)
+int Energyvector::add_cmpx_cont_energies(double start,double mu,std::vector<CPX> &energyvector,std::vector<CPX> &stepvector,std::vector<transport_methods::transport_method_type> &methodvector,transport_parameters transport_params)
 {
-    double Temp=transport_params->temperature;
-    int num_points_on_contour=transport_params->n_abscissae;
+    double Temp=transport_params.temperature;
+    int num_points_on_contour=transport_params.n_abscissae;
     enum choose_method {do_pexsi,do_pole_summation,do_contour,do_line};
     choose_method method=do_pexsi;
     if (method==do_pexsi) {
@@ -432,7 +432,7 @@ int Energyvector::add_cmpx_cont_energies(double start,double mu,std::vector<CPX>
         energyvector.insert(energyvector.end(),quadrature.abscissae.begin(),quadrature.abscissae.end());
         stepvector.insert(stepvector.end(),quadrature.weights.begin(),quadrature.weights.end());
     }
-    if (transport_params->cp2k_method==cp2k_methods::TRANSMISSION && !transport_params->obc) {
+    if (transport_params.cp2k_method==cp2k_methods::TRANSMISSION && !transport_params.obc) {
         methodvector.resize(energyvector.size(),transport_methods::EQ);
     } else {
         methodvector.resize(energyvector.size(),transport_methods::GF);
