@@ -22,6 +22,7 @@ INCQHU        = -I$(LIB_TOP)/QHULL/src/
 INCAMD        = -I$(LIB_TOP)/AMD/Include/
 INCUFC        = -I$(LIB_TOP)/UFconfig/
 INCUMF        = -I$(LIB_TOP)/UMFPACK/Include/
+#INCPEX        = -I$(LIB_TOP)/pexsi_v0.9.2/build/include/
 INCPEX        = -I$(LIB_TOP)/pexsi_v0.9.0/include/
 INCMAG        = -I$(LIB_TOP)/magma-1.6.2p4_libsci_cuda7/include/
 
@@ -31,6 +32,7 @@ AZTECLIB      = $(LIB_TOP)/AZTEC/lib/libaztec.a
 QHULLLIB      = $(LIB_TOP)/QHULL/src/libqhull.a
 AMDLIB        = $(LIB_TOP)/AMD/Lib/libamd.a
 UMFPACKLIB    = $(LIB_TOP)/UMFPACK/Lib/libumfpack.a
+#PEXSILIB      = $(LIB_TOP)/pexsi_v0.9.2/build/lib/libpexsi_daint_v0.9.2.a
 PEXSILIB      = $(LIB_TOP)/pexsi_v0.9.0/src/libpexsi_daint.a
 MAGMALIB      = $(LIB_TOP)/magma-1.6.2p4_libsci_cuda7/lib/libmagma.a
 
@@ -39,9 +41,9 @@ LINLIN = $(LIB_TOP)/CSelInv/EXAMPLES/C2Finterface.o $(LIB_TOP)/CSelInv/LIB/libcs
 DMALLOC = -L/apps/common/ddt/6.0-Suse-11/lib/64/ -ldmallocthcxx -z muldefs
 
 LFLAGS = -L$(LIB_TOP)/cp2k/lib/CRAY-XC30-gfortran-pexsi/popt/
-DFLAGS = -DAdd_ -Dlibcp2k -DHAVE_MUMPS -DSPLITSOLVE
-LIBS = $(UMFPACKLIB) $(AMDLIB) $(AZTECLIB) $(QHULLLIB) $(ARPACKLIB) $(PEXSILIB) $(MAGMALIB) \
-	-lcp2k /project/ch5/alazzaro/libsmm/affinity/sandybridge_gcc_4.9.0/lib/libsmm_dnn_cray.gnu.a \
+DFLAGS = -DAdd_ -Dlibcp2k -DHAVE_MUMPS -DHAVE_SUPERLU -DHAVE_PEXSI -DHAVE_SPLITSOLVE -DHAVE_OMEN_POISSON
+LIBS = -lcp2k /project/ch5/alazzaro/libsmm/affinity/sandybridge_gcc_4.9.0/lib/libsmm_dnn_cray.gnu.a \
+	$(UMFPACKLIB) $(AMDLIB) $(AZTECLIB) $(QHULLLIB) $(ARPACKLIB) $(PEXSILIB) $(MAGMALIB) \
 	-lzmumps -lsuperlu_dist -lptscotch -lptscotcherr -lscotch \
 	-lcuda -lcudart -lcublas -lcufft -lcusparse \
 	-lsci_gnu_mp -lm -lrt -fopenmp -lgfortran -lstdc++

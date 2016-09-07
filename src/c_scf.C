@@ -65,6 +65,10 @@ void c_scf_method(cp2k_transport_parameters cp2k_transport_params, cp2k_csr_inte
 {
     cp2k_csr_interop_type * PImag = NULL;
 #endif
+#ifdef HAVE_SPLITSOLVE
+    char gpu_string[255];
+    set_gpu(0,gpu_string);
+#endif
     int rank,mpi_size;
     MPI_Comm_size(MPI_COMM_WORLD,&mpi_size);
     MPI_Comm_rank(MPI_COMM_WORLD,&rank);
