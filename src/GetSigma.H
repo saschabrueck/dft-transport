@@ -19,9 +19,9 @@ void Finalize();
 int Set_master(MPI_Comm,MPI_Comm);
 int Cutout(TCSR<CPX>*,contact_type,CPX,transport_methods::transport_method_type,MPI_Comm);
 void Distribute(TCSR<CPX>*,MPI_Comm);
-int GetSigma(MPI_Comm,int,transport_parameters);
-int GetSigmaEig(MPI_Comm,int,transport_parameters);
-int GetSigmaInv(MPI_Comm,int,transport_parameters);
+int GetSigma(MPI_Comm,transport_parameters);
+int GetSigmaEig(MPI_Comm,transport_parameters);
+int GetSigmaInv(MPI_Comm,transport_parameters);
 
 /// Self Energy
 CPX *sigma;
@@ -38,6 +38,8 @@ int n_propagating;
 /// Propagating phase factors
 CPX *lambdapro;
 double rcond;
+int n_dec;
+int eigval_degeneracy;
 
 private:
 void create_M_matrix(CPX*,int,TCSR<CPX>**,int,CPX);

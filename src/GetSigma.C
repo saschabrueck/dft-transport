@@ -4,7 +4,6 @@
 #include <time.h>
 #include <stdlib.h>
 #include <stdio.h>
-#include <limits>
 #include <valarray>
 using namespace std;
 #include "ScaLapack.H"
@@ -21,7 +20,9 @@ BoundarySelfEnergy::BoundarySelfEnergy()
     spainjdist = NULL;
     lambdapro = NULL;
     n_propagating=-1;
-    rcond=0.0;
+    rcond=1.0;
+    n_dec=-1;
+    eigval_degeneracy=-1;
 
     master_rank=-1;
 
@@ -211,6 +212,11 @@ void BoundarySelfEnergy::Distribute(TCSR<CPX> *SumHamC,MPI_Comm matrix_comm)
         start+=-(bandwidth-1)*ndof;
     }
 
+    MPI_Bcast(&n_propagating,1,MPI_INT,master_rank,matrix_comm);
+    MPI_Bcast(&rcond,1,MPI_DOUBLE,master_rank,matrix_comm);
+    MPI_Bcast(&n_dec,1,MPI_INT,master_rank,matrix_comm);
+    MPI_Bcast(&eigval_degeneracy,1,MPI_INT,master_rank,matrix_comm);
+
     if (compute_gamma) {
         gamma = new CPX[ntriblock*ntriblock];
         if (iam==master_rank) {
@@ -235,7 +241,6 @@ void BoundarySelfEnergy::Distribute(TCSR<CPX> *SumHamC,MPI_Comm matrix_comm)
     }
 
     if (compute_inj) {
-        MPI_Bcast(&n_propagating,1,MPI_INT,master_rank,matrix_comm);
         if (iam!=master_rank) {
             lambdapro = new CPX[n_propagating];
         }
@@ -252,17 +257,17 @@ void BoundarySelfEnergy::Distribute(TCSR<CPX> *SumHamC,MPI_Comm matrix_comm)
     }
 }
 
-int BoundarySelfEnergy::GetSigma(MPI_Comm boundary_comm,int evecpos,transport_parameters transport_params)
+int BoundarySelfEnergy::GetSigma(MPI_Comm boundary_comm,transport_parameters transport_params)
 {
     if (imag(energy)) {
-        if (GetSigmaInv(boundary_comm,evecpos,transport_params)) return (LOGCERR, EXIT_FAILURE);
+        if (GetSigmaInv(boundary_comm,transport_params)) return (LOGCERR, EXIT_FAILURE);
     } else {
-        if (GetSigmaEig(boundary_comm,evecpos,transport_params)) return (LOGCERR, EXIT_FAILURE);
+        if (GetSigmaEig(boundary_comm,transport_params)) return (LOGCERR, EXIT_FAILURE);
     }
     return 0;
 }
 
-int BoundarySelfEnergy::GetSigmaInv(MPI_Comm boundary_comm,int evecpos,transport_parameters transport_params)
+int BoundarySelfEnergy::GetSigmaInv(MPI_Comm boundary_comm,transport_parameters transport_params)
 {
     int complexenergypoint=0;
     if (imag(energy)) complexenergypoint=1;
@@ -361,7 +366,7 @@ if (!worldrank) cout << "TIME FOR SIGMA SOLVER " << get_time(sabtime) << endl;
     return 0;
 }
 
-int BoundarySelfEnergy::GetSigmaEig(MPI_Comm boundary_comm,int evecpos,transport_parameters transport_params)
+int BoundarySelfEnergy::GetSigmaEig(MPI_Comm boundary_comm,transport_parameters transport_params)
 {
     double d_one=1.0;
     double d_zer=0.0;
@@ -528,9 +533,8 @@ int worldrank; MPI_Comm_rank(MPI_COMM_WORLD,&worldrank);
         delete[] eigvecc;
 if (!worldrank) cout << "TIME FOR EIGENVALUE SOLVER " << get_time(sabtime) << endl;
  /*
-cout<<worldrank<<" AT "<<real(energy)<<" NPROTRA "<<nprotra<<" NPROREF "<<nproref<<" NDECTRA "<<ndectra<<" NDECREF "<<ndecref<<" SIGN "<<inj_sign<<endl;
 stringstream mysstream;
-mysstream << "AllEigvals" << evecpos << "_" << inj_sign;
+mysstream << "AllEigvals" << worldrank;
 ofstream myfile(mysstream.str().c_str());
 myfile.precision(15);
 for (int iele=0;iele<nproref+ndecref;iele++) {
@@ -545,6 +549,8 @@ myfile.close();
         delete[] H;
         H = NULL;
         if (nprotra!=nproref) return (LOGCERR, EXIT_FAILURE);
+        n_propagating=nprotra;
+        n_dec=ndecref;
         int neigbas=nproref+ndecref;
         CPX *VT=new CPX[neigbas*ntriblock];
         CPX *matcpx=new CPX[ntriblock*neigbas];
@@ -581,7 +587,6 @@ if (!worldrank) cout << "TIME FOR MATRIX MATRIX MULTIPLICATIONS FOR INVERSE OF G
         if (iinfo) return (LOGCERR, EXIT_FAILURE);
         delete[] cworkcond;
         delete[] dworkcond;
-        if (rcond<numeric_limits<double>::epsilon()) return (LOGCERR, EXIT_FAILURE);
         sigma = new CPX[triblocksize];
         CPX* RCOR = new CPX[ntriblock*neigbas];
         int inversion_small_multmult = 0;
@@ -688,7 +693,6 @@ if (!worldrank) cout << "TIME FOR SYMMETRIZATION " << get_time(sabtime) << endl;
 
         if (compute_inj) {
             sabtime=get_time(d_zer);
-            n_propagating=nprotra;
             c_dscal(nprotra*ntriblock,-d_one,((double*)Vref)+1,2);
 //          swap(Vref,Vtra);
 //          swap(lambdaref,lambdatra);
@@ -706,8 +710,7 @@ if (!worldrank) cout << "TIME FOR SYMMETRIZATION " << get_time(sabtime) << endl;
 */
                     }
                 }
-if (degeneracy>1) cout << "DEGENERACY " << degeneracy << " ON " << evecpos << endl;
-//              if (degeneracy>2) return (LOGCERR, EXIT_FAILURE);
+                if (degeneracy>2) eigval_degeneracy=i;
             }
             inj = new CPX[ntriblock*nprotra];
             lambdapro = new CPX[nprotra];
