@@ -29,7 +29,7 @@ using namespace std;
 #include "GetSigma.H"
 #include "Density.H"
 
-int density(TCSR<double> *KohnSham,TCSR<double> *Overlap,TCSR<double> *Ps,TCSR<double> *PsImag,CPX energy,CPX weight,transport_methods::transport_method_type method,std::vector<double> muvec,std::vector<contact_type> contactvec,double &transm,std::vector<int> propnum,std::vector<int> Bsizes,std::vector<int> orb_per_at,transport_parameters transport_params,int evecpos,MPI_Comm matrix_comm)
+int density(TCSR<double> *KohnSham,TCSR<double> *Overlap,TCSR<double> *Ps,TCSR<double> *PsImag,CPX energy,CPX weight,transport_methods::transport_method_type method,std::vector<double> muvec,std::vector<contact_type> contactvec,std::vector<result_type> &resultvec,std::vector<int> Bsizes,std::vector<int> orb_per_at,transport_parameters transport_params,MPI_Comm matrix_comm)
 {
     double d_one = 1.0;
     double d_zer = 0.0;
@@ -96,7 +96,7 @@ sabtime=get_time(d_zer);
 if (!worldrank) cout << "TIME FOR SIGMA CUTOUT " << get_time(sabtime) << endl;
 sabtime=get_time(d_zer);
             if (ipos<n_mu) {
-                if ( selfenergies[ipos].GetSigma(boundary_comm,evecpos,transport_params) ) return (LOGCERR, EXIT_FAILURE);
+                if ( selfenergies[ipos].GetSigma(boundary_comm,transport_params) ) return (LOGCERR, EXIT_FAILURE);
             }
 if (!worldrank) cout << "TIME FOR SIGMA GETSIGMA " << get_time(sabtime) << endl;
             if (!run_splitsolve) {
@@ -112,6 +112,12 @@ if (!worldrank) cout << "TIME FOR SIGMA DISTRIBUTE " << get_time(sabtime) << end
         }
 //add sigma to sumhamc
         if (!run_splitsolve) {
+            for (uint i_mu=0;i_mu<muvec.size();i_mu++) {
+                resultvec[i_mu].npro=selfenergies[i_mu].n_propagating;
+                resultvec[i_mu].ndec=selfenergies[i_mu].n_dec;
+                resultvec[i_mu].eigval_degeneracy=selfenergies[i_mu].eigval_degeneracy;
+                resultvec[i_mu].rcond=selfenergies[i_mu].rcond;
+            }
 sabtime=get_time(d_zer);
             TCSR<CPX> **HamSigVec = new TCSR<CPX>*[n_mu+1];
             CPX *HamSigSigns = new CPX[n_mu+1];
@@ -340,9 +346,8 @@ sabtime=get_time(d_zer);
         MPI_Allreduce(&transmr_loc,&transmr,1,MPI_DOUBLE,MPI_SUM,matrix_comm);
 if (!worldrank) cout << "TIME FOR TRANSMISSION " << get_time(sabtime) << endl;
         if (!matrix_rank) {
-if (abs(abs(transml)-abs(transmr))/max(1.0,min(abs(transml),abs(transmr)))>0.1) cout << "CAUTION: TRANSMISSION " << transml << " " << transmr << " AT ENERGY " << real(energy) << " AT POSITION " << evecpos << endl;
-//if (abs(transml)<1.0E-2 && nprol>0 && npror>0) cout << "RED ALERT: ZERO TRANSMISSION IN SPITE OF " << nprol << " AND " << npror << " AT ENERGY " << real(energy) << " AT POSITION " << evecpos << endl;
-            transm=transml;
+            resultvec[0].transm=transml;
+            resultvec[1].transm=transmr;
         }
         for (int i_mu=0;i_mu<n_mu;i_mu++) selfenergies[i_mu].Deallocate_Gamma();
     } else if (method==transport_methods::WF) {
@@ -453,8 +458,6 @@ MPI_Barrier(matrix_comm);
             for (int i_mu=0;i_mu<n_mu;i_mu++) selfenergies[i_mu].Deallocate_Injection();
             sol = new CPX[dist_sol[matrix_rank]*(nprol+npror)]();
         }
-if (nprol!=propnum[0] && propnum[0]>=0) if (!matrix_rank) cout << "WARNING: FOUND " << nprol << " OF " << propnum[0] << " MODES AT E=" << real(energy) << " POSITION " << evecpos << " LEFT" << endl;
-if (npror!=propnum[1] && propnum[1]>=0) if (!matrix_rank) cout << "WARNING: FOUND " << npror << " OF " << propnum[1] << " MODES AT E=" << real(energy) << " POSITION " << evecpos << " RIGHT" << endl;
 sabtime=get_time(d_zer);
         solver->solve_equation(sol, inj, nprol+npror);
         if (solver_method!=lin_solver_methods::SPLITSOLVE || matrix_rank==left_gpu_rank || matrix_rank==right_gpu_rank) {
@@ -544,17 +547,17 @@ sabtime=get_time(d_zer);
             full_transpose(nprol,solsize,Sol,SolT);
             full_transpose(nprol,solsize,Soll,SollT);
             full_transpose(nprol,solsize,Solr,SolrT);
-            double dosl=Ps->psipsidagger_transpose(Overlap,SolT,SollT,SolrT,nprol,ndof,bandwidth,+weight*fermil);
+            resultvec[0].dos=Ps->psipsidagger_transpose(Overlap,SolT,SollT,SolrT,nprol,ndof,bandwidth,+weight*fermil);
             full_transpose(npror,solsize,&Sol[solsize*nprol],SolT);
             full_transpose(npror,solsize,&Soll[solsize*nprol],SollT);
             full_transpose(npror,solsize,&Solr[solsize*nprol],SolrT);
-            double dosr=Ps->psipsidagger_transpose(Overlap,SolT,SollT,SolrT,npror,ndof,bandwidth,+weight*fermir);
+            resultvec[1].dos=Ps->psipsidagger_transpose(Overlap,SolT,SollT,SolrT,npror,ndof,bandwidth,+weight*fermir);
             delete[] SolT;
             delete[] SollT;
             delete[] SolrT;
 /*
-            double dosl=Ps->psipsidagger(Overlap,Sol,Soll,Solr,nprol,ndof,bandwidth,+weight*fermil);
-            double dosr=Ps->psipsidagger(Overlap,&Sol[Ps->size_tot*nprol],&Soll[Ps->size_tot*nprol],&Solr[Ps->size_tot*nprol],npror,ndof,bandwidth,+weight*fermir);
+            Ps->psipsidagger(Overlap,Sol,Soll,Solr,nprol,ndof,bandwidth,+weight*fermil);
+            Ps->psipsidagger(Overlap,&Sol[Ps->size_tot*nprol],&Soll[Ps->size_tot*nprol],&Solr[Ps->size_tot*nprol],npror,ndof,bandwidth,+weight*fermir);
 */
 if (!worldrank) cout << "TIME FOR CONSTRUCTION OF S-PATTERN DENSITY MATRIX " << get_time(sabtime) << endl;
             delete[] Soll;
@@ -564,20 +567,17 @@ if (!worldrank) cout << "TIME FOR CONSTRUCTION OF S-PATTERN DENSITY MATRIX " << 
 // transmission
         if (!matrix_rank) {
             CPX *vecoutdof=new CPX[ntriblock];
-            double transml=d_zer;
+            resultvec[0].transm=d_zer;
             for (int ipro=0;ipro<nprol;ipro++) {
                 H1->mat_vec_mult(&Sol[Ps->size_tot*ipro+(tra_block+1)*ntriblock],vecoutdof,1);
-                transml+=4*M_PI*imag(c_zdotc(ntriblock,&Sol[Ps->size_tot*ipro+tra_block*ntriblock],1,vecoutdof,1));
+                 resultvec[0].transm+=4*M_PI*imag(c_zdotc(ntriblock,&Sol[Ps->size_tot*ipro+tra_block*ntriblock],1,vecoutdof,1));
             }
-            double transmr=d_zer;
+            resultvec[1].transm=d_zer;
             for (int ipro=nprol;ipro<nprol+npror;ipro++) {
                 H1->mat_vec_mult(&Sol[Ps->size_tot*ipro+(tra_block+1)*ntriblock],vecoutdof,1);
-                transmr+=4*M_PI*imag(c_zdotc(ntriblock,&Sol[Ps->size_tot*ipro+tra_block*ntriblock],1,vecoutdof,1));
+                resultvec[1].transm+=4*M_PI*imag(c_zdotc(ntriblock,&Sol[Ps->size_tot*ipro+tra_block*ntriblock],1,vecoutdof,1));
             }
             delete[] vecoutdof;
-if (abs(abs(transml)-abs(transmr))/max(1.0,min(abs(transml),abs(transmr)))>0.1) cout << "CAUTION: TRANSMISSION " << transml << " " << transmr << " AT ENERGY " << real(energy) << " AT POSITION " << evecpos << endl;
-//if (abs(transml)<1.0E-2 && nprol>0 && npror>0) cout << "RED ALERT: ZERO TRANSMISSION IN SPITE OF " << nprol << " AND " << npror << " AT ENERGY " << real(energy) << " AT POSITION " << evecpos << endl;
-            transm=transml;
         }
         delete[] Sol;
         delete H1;

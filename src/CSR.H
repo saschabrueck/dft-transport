@@ -16,7 +16,7 @@ namespace cp2k_methods {
         TRANSMISSION = 2,
         TRANSPORT    = 3,
     };
-};
+}
 
 namespace lin_solver_methods {
     enum lin_solver_method_type {
@@ -26,14 +26,14 @@ namespace lin_solver_methods {
         FULL       = 14,
         BANDED     = 15,
     };
-};
+}
 
 namespace injection_methods {
     enum injection_method_type {
         EVP  = 21,
         BEYN = 22,
     };
-};
+}
 
 namespace real_int_methods {
     enum real_int_method_type {
@@ -41,7 +41,7 @@ namespace real_int_methods {
         TRAPEZOIDAL    = 32,
         READFROMFILE   = 33,
     };
-};
+}
 
 namespace transport_methods {
     enum transport_method_type {
@@ -50,8 +50,7 @@ namespace transport_methods {
         GF   = 2,
         WF   = 3,
     };
-};
-
+}
 
 struct transport_parameters 
 {
@@ -103,6 +102,12 @@ struct contact_type
 {
     int    bandwidth, natoms, atomstart, ndof, start, start_bs, inj_sign, sigma_natoms, sigmasize, sigmastart, triblockstart;
     double n_ele;
+};
+
+struct result_type
+{
+    int npro,ndec,eigval_degeneracy;
+    double transm,dos,rcond;
 };
 
 #define LOGCERR std::cerr << "ERROR IN LINE " << __LINE__ << " OF FILE " << __FILE__ << std::endl
@@ -256,7 +261,7 @@ public:
     void add_real(TCSR<CPX>*,CPX);
     void copy_shifted(TCSR<T>*,int,int,int,int);
     void copy_pbc_cell(contact_type,int,int,MPI_Comm);
-    void add_pot(TCSR<T>*,T*);
+    void add_pot(TCSR<T>*,int*,T*);
     void Bcast(int,MPI_Comm);
     void scatter(TCSR<T>*,int,MPI_Comm);
     void reduce(int,MPI_Comm);
@@ -2190,11 +2195,13 @@ void TCSR<T>::copy_pbc_cell(contact_type contact,int strinum,int strirange,MPI_C
 /************************************************************************************************/
 
 template <class T>
-void TCSR<T>::add_pot(TCSR<T> *mat,T *vec)
+void TCSR<T>::add_pot(TCSR<T> *mat,int *atom_of_bf,T *vec)
 {
     for(int i=0;i<size;i++) {
+        int atom_i=atom_of_bf[i+first_row];
         for(int e=edge_i[i]-findx;e<edge_i[i+1]-findx;e++) {
-            nnz[e]+=(vec[i+first_row]+vec[index_j[e]-findx])/2*mat->nnz[e];
+            int atom_j=atom_of_bf[index_j[e]-findx];
+            nnz[e]+=(vec[atom_i]+vec[atom_j])/2.0*mat->nnz[e];
         }
     }
 }

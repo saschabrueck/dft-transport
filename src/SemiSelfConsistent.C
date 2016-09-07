@@ -138,6 +138,7 @@ rhofile.close();
         }
         double sabtime=get_time(0.0);
         Energyvector energyvector;
+        c_dscal(2*FEM->NAtom,0.0,rho_atom,1);
         if (energyvector.Execute(S,KS,P,PImag,muvec,contactvec,Bsizes,orb_per_atom,Vatom,rho_atom,transport_params)) return (LOGCERR, EXIT_FAILURE);
         if (!iam) cout << "TIME FOR SCHROEDINGER " << get_time(sabtime) << endl;
 
