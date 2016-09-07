@@ -26,35 +26,20 @@ int Energyvector::Execute(cp2k_csr_interop_type Overlap,cp2k_csr_interop_type Ko
     std::vector< std::vector<int> > propagating_sizes;
     if (determine_energyvector(energyvector,stepvector,energyvector_real,stepvector_real,propagating_sizes,KohnSham,Overlap,muvec,contactvec,transport_params)) return (LOGCERR, EXIT_FAILURE);
     if (!iam) cout << "Size of Energyvectors " << energyvector.size() << " " << energyvector_real.size() << endl;
-    std::vector<transport_methods::transport_method_type> methodvector;
-    if (transport_params.obc) {
-        methodvector.assign(energyvector.size(),transport_methods::GF);
-    } else {
-        methodvector.assign(energyvector.size(),transport_methods::EQ);
-    }
-    std::vector<transport_methods::transport_method_type> methodvector_real;
-    if (transport_params.negf_solver) {
-        methodvector_real.assign(energyvector_real.size(),transport_methods::NEGF);
-    } else {
-        methodvector_real.assign(energyvector_real.size(),transport_methods::WF);
-    }
+
     distribution_methods::distribution_method_type distribution_method = distribution_methods::CEILING_DISTRIBUTION;
     if (transport_params.lin_solver_method==lin_solver_methods::SPLITSOLVE) distribution_method = distribution_methods::SPLITSOLVE_DISTRIBUTION;
     if (transport_params.lin_solver_method==lin_solver_methods::SUPERLU || transport_params.lin_solver_method==lin_solver_methods::MUMPS) distribution_method = distribution_methods::FLOOR_DISTRIBUTION;
 
-    energyvector.insert(energyvector.end(),energyvector_real.begin(),energyvector_real.end());
-    stepvector.insert(stepvector.end(),stepvector_real.begin(),stepvector_real.end());
-    methodvector.insert(methodvector.end(),methodvector_real.begin(),methodvector_real.end());
-
-    if (distribute_and_execute(energyvector,stepvector,methodvector,propagating_sizes,distribution_method,Overlap,KohnSham,P,PImag,muvec,contactvec,Bsizes,orb_per_at,Vatom,rho_atom,transport_params)) return (LOGCERR, EXIT_FAILURE);
+    if (distribute_and_execute(energyvector,stepvector,energyvector_real,stepvector_real,propagating_sizes,distribution_method,transport_params.tasks_per_point,Overlap,KohnSham,P,PImag,muvec,contactvec,Bsizes,orb_per_at,Vatom,rho_atom,transport_params)) return (LOGCERR, EXIT_FAILURE);
 
     return 0;
 }
 
-int Energyvector::distribute_and_execute(std::vector<CPX> energyvector,std::vector<CPX> stepvector,std::vector<transport_methods::transport_method_type> methodvector,std::vector< std::vector<int> > propagating_sizes,distribution_methods::distribution_method_type distribution_method,cp2k_csr_interop_type Overlap,cp2k_csr_interop_type KohnSham,cp2k_csr_interop_type *P,cp2k_csr_interop_type *PImag,std::vector<double> muvec,std::vector<contact_type> contactvec,std::vector<int> Bsizes,std::vector<int> orb_per_at,double *Vatom,double *rho_atom,transport_parameters transport_params)
+int Energyvector::distribute_and_execute(std::vector<CPX> energyvector,std::vector<CPX> stepvector,std::vector<CPX> energyvector_real,std::vector<CPX> stepvector_real,std::vector< std::vector<int> > propagating_sizes,distribution_methods::distribution_method_type distribution_method,int tasks_per_point,cp2k_csr_interop_type Overlap,cp2k_csr_interop_type KohnSham,cp2k_csr_interop_type *P,cp2k_csr_interop_type *PImag,std::vector<double> muvec,std::vector<contact_type> contactvec,std::vector<int> Bsizes,std::vector<int> orb_per_at,double *Vatom,double *rho_atom,transport_parameters transport_params)
 {
 double sabtime;
-    std::vector<int> Tsizes = get_tsizes(distribution_method,Overlap.nrows_total-transport_params.cutl-transport_params.cutr,Bsizes,orb_per_at,transport_params.gpus_per_point,transport_params.tasks_per_point);
+    std::vector<int> Tsizes = get_tsizes(distribution_method,Overlap.nrows_total-transport_params.cutl-transport_params.cutr,Bsizes,orb_per_at,transport_params.gpus_per_point,tasks_per_point);
 sabtime=get_time(0.0);
     MPI_Comm matrix_comm;
     TCSR<double> *OverlapCollect  = new TCSR<double>(Overlap ,MPI_COMM_WORLD,&Tsizes[0],Tsizes.size(),transport_params.cutl,transport_params.cutr,&matrix_comm);
@@ -88,24 +73,40 @@ if (!iam) cout << "TIME FOR DISTRIBUTING MATRICES " << get_time(sabtime) << endl
         KohnShamCollect->add_pot(OverlapCollect,&atom_of_bf[0],Vatom);
     }
 
-    std::vector<double> transmission(energyvector.size(),0.0);
+sabtime=get_time(0.0);
+    std::vector<double> transmission(energyvector_real.size(),0.0);
     int matrix_size,matrix_rank;
     MPI_Comm_size(matrix_comm,&matrix_size);
     MPI_Comm_rank(matrix_comm,&matrix_rank);
     int matrix_id = iam/matrix_size;
     int n_mat_comm = nprocs/matrix_size;
-sabtime=get_time(0.0);
     int transmission_warning=0;
     int propagating_warning=0;
     int degeneracy_warning=0;
-    unsigned int jpos;
+    energyvector.insert(energyvector.end(),energyvector_real.begin(),energyvector_real.end());
+    stepvector.insert(stepvector.end(),stepvector_real.begin(),stepvector_real.end());
     for (int iseq=0;iseq<int(ceil(double(energyvector.size())/n_mat_comm));iseq++) {
-        if ( (jpos=matrix_id+iseq*n_mat_comm)<energyvector.size()) {
+        int jpos=matrix_id+iseq*n_mat_comm;
+        int propos=jpos-(energyvector.size()-energyvector_real.size());
+        if (jpos<int(energyvector.size())) {
             if (abs(stepvector[jpos])>0.0) {
                 std::vector<result_type> resvec(muvec.size());
-                if (density(KohnShamCollect,OverlapCollect,DensReal,DensImag,energyvector[jpos],stepvector[jpos],methodvector[jpos],muvec,contactvec,resvec,Bsizes,orb_per_at,transport_params,matrix_comm)) return (LOGCERR, EXIT_FAILURE);
-                if (!matrix_rank && jpos>=transport_params.n_abscissae) {
-                    int propos=jpos-transport_params.n_abscissae;
+                transport_methods::transport_method_type method;
+                if (propos>=0) {
+                    if (transport_params.negf_solver) {
+                        method=transport_methods::NEGF;
+                    } else {
+                        method=transport_methods::WF;
+                    }
+                } else {
+                    if (transport_params.obc) {
+                        method=transport_methods::GF;
+                    } else {
+                        method=transport_methods::EQ;
+                    }
+                }
+                if (density(KohnShamCollect,OverlapCollect,DensReal,DensImag,energyvector[jpos],stepvector[jpos],method,muvec,contactvec,resvec,Bsizes,orb_per_at,transport_params,matrix_comm)) return (LOGCERR, EXIT_FAILURE);
+                if (!matrix_rank && propos>=0) {
                     for (uint i_mu=0;i_mu<muvec.size();i_mu++) {
                         if (resvec[i_mu].npro!=propagating_sizes[propos][i_mu]) propagating_warning++;
                         if (resvec[i_mu].eigval_degeneracy>=0) degeneracy_warning++;
@@ -114,7 +115,7 @@ sabtime=get_time(0.0);
                     bool transmission_difference=abs(abs(resvec[0].transm)-abs(resvec[1].transm))/max(1.0,min(abs(resvec[0].transm),abs(resvec[1].transm)))<0.1;
                     bool transmission_magnitude=abs(resvec[0].transm)<*max_element(propagating_sizes[propos].begin(),propagating_sizes[propos].end())*10.0;
                     if (transmission_difference && transmission_magnitude) {
-                        transmission[jpos]=resvec[0].transm;
+                        transmission[propos]=resvec[0].transm;
                     } else {
                         transmission_warning++;
                     }
@@ -130,8 +131,8 @@ if (!iam) cout << "TIME FOR DENSITY " << get_time(sabtime) << endl;
     if (!iam) if (propagating_warning) cout << "WARNING: DEVIATION IN NUMBER OF BANDS FOR " << int(propagating_warning*100.0/energyvector.size()/muvec.size()) << "%" << " OF THE ENERGY POINTS" << endl;
     MPI_Allreduce(MPI_IN_PLACE,&degeneracy_warning,1,MPI_INT,MPI_SUM,MPI_COMM_WORLD);
     if (!iam) if (degeneracy_warning) cout << "WARNING: DEGENERACY OF THE EIGENVECTORS FOR " << int(degeneracy_warning*100.0/energyvector.size()/muvec.size()) << "%" << " OF THE ENERGY POINTS" << endl;
-    MPI_Allreduce(MPI_IN_PLACE,&transmission[0],energyvector.size(),MPI_DOUBLE,MPI_SUM,MPI_COMM_WORLD);
-    write_transmission_current(energyvector,stepvector,transmission,muvec,transport_params);
+    MPI_Allreduce(MPI_IN_PLACE,&transmission[0],energyvector_real.size(),MPI_DOUBLE,MPI_SUM,MPI_COMM_WORLD);
+    if (energyvector_real.size()) write_transmission_current(energyvector_real,stepvector_real,transmission,muvec,transport_params);
 
     if (transport_params.cutl || transport_params.cutr) {
         TCSR<double> *DensRealCollect = new TCSR<double>(*P,MPI_COMM_WORLD,&Tsizes[0],Tsizes.size(),transport_params.cutl,transport_params.cutr,&matrix_comm);
@@ -187,11 +188,11 @@ std::vector<int> Energyvector::get_tsizes(distribution_methods::distribution_met
             int Gsize=0;
             Gsize+=Fsizes[iblock++];
             Gsize+=Fsizes[iblock++];
-            while (pow(double(Gsize+Fsizes[iblock]),3)<=load_max && Fsizes.size()-iblock-1>=2*(gpus_per_point-igpu-1) && iblock<Fsizes.size()) {
+            while (pow(double(Gsize+Fsizes[iblock]),3)<=load_max && int(Fsizes.size())-iblock-1>=2*(gpus_per_point-igpu-1) && iblock<int(Fsizes.size())) {
                 Gsize+=Fsizes[iblock++];
             }
             if (igpu==gpus_per_point-1) {
-                while (iblock<Fsizes.size()) {
+                while (iblock<int(Fsizes.size())) {
                     Gsize+=Fsizes[iblock++];
                 }
             }
@@ -258,7 +259,7 @@ int Energyvector::determine_energyvector(std::vector<CPX> &energyvector_cc,std::
     Singularities singularities(transport_params,contactvec);
     int determine_singularities = !(transport_params.real_int_method!=real_int_methods::GAUSSCHEBYSHEV && transport_params.cp2k_method==cp2k_methods::LOCAL_SCF);
     int propagating_from_bs = (transport_params.real_int_method==real_int_methods::GAUSSCHEBYSHEV);
-    double bands_start;
+    double bands_start=-1.0E6;
     if (determine_singularities) {
 double sabtime=get_time(0.0);
         if ( singularities.Execute(KohnSham,Overlap) ) return (LOGCERR, EXIT_FAILURE);
