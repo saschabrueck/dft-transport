@@ -19,17 +19,13 @@ Energyvector::~Energyvector()
 
 int Energyvector::Execute(cp2k_csr_interop_type Overlap,cp2k_csr_interop_type KohnSham,cp2k_csr_interop_type *P,cp2k_csr_interop_type *PImag,std::vector<double> muvec,std::vector<contact_type> contactvec,std::vector<int> Bsizes,std::vector<int> orb_per_at,double *Vatom,double *rho_atom,transport_parameters transport_params)
 {
-#ifdef HAVE_SPLITSOLVE
-    char gpu_string[255];
-    set_gpu(0,gpu_string);
-#endif
-double sabtime;
     std::vector<CPX> energyvector;
     std::vector<CPX> energyvector_real;
     std::vector<CPX> stepvector;
     std::vector<CPX> stepvector_real;
     std::vector< std::vector<int> > propagating_sizes;
     if (determine_energyvector(energyvector,stepvector,energyvector_real,stepvector_real,propagating_sizes,KohnSham,Overlap,muvec,contactvec,transport_params)) return (LOGCERR, EXIT_FAILURE);
+    if (!iam) cout << "Size of Energyvectors " << energyvector.size() << " " << energyvector_real.size() << endl;
     std::vector<transport_methods::transport_method_type> methodvector;
     if (transport_params.obc) {
         methodvector.assign(energyvector.size(),transport_methods::GF);
@@ -42,16 +38,23 @@ double sabtime;
     } else {
         methodvector_real.assign(energyvector_real.size(),transport_methods::WF);
     }
-    energyvector.insert(energyvector.end(),energyvector_real.begin(),energyvector_real.end());
-    stepvector.insert(stepvector.end(),stepvector_real.begin(),stepvector_real.end());
-    methodvector.insert(methodvector.end(),methodvector_real.begin(),methodvector_real.end());
-    if (!iam) cout << "Size of Energyvector " << energyvector.size() << endl;
-
     distribution_methods::distribution_method_type distribution_method = distribution_methods::CEILING_DISTRIBUTION;
     if (transport_params.lin_solver_method==lin_solver_methods::SPLITSOLVE) distribution_method = distribution_methods::SPLITSOLVE_DISTRIBUTION;
     if (transport_params.lin_solver_method==lin_solver_methods::SUPERLU || transport_params.lin_solver_method==lin_solver_methods::MUMPS) distribution_method = distribution_methods::FLOOR_DISTRIBUTION;
-    std::vector<int> Tsizes = get_tsizes(distribution_method,Overlap.nrows_total-transport_params.cutl-transport_params.cutr,Bsizes,orb_per_at,transport_params.gpus_per_point,transport_params.tasks_per_point);
 
+    energyvector.insert(energyvector.end(),energyvector_real.begin(),energyvector_real.end());
+    stepvector.insert(stepvector.end(),stepvector_real.begin(),stepvector_real.end());
+    methodvector.insert(methodvector.end(),methodvector_real.begin(),methodvector_real.end());
+
+    if (distribute_and_execute(energyvector,stepvector,methodvector,propagating_sizes,distribution_method,Overlap,KohnSham,P,PImag,muvec,contactvec,Bsizes,orb_per_at,Vatom,rho_atom,transport_params)) return (LOGCERR, EXIT_FAILURE);
+
+    return 0;
+}
+
+int Energyvector::distribute_and_execute(std::vector<CPX> energyvector,std::vector<CPX> stepvector,std::vector<transport_methods::transport_method_type> methodvector,std::vector< std::vector<int> > propagating_sizes,distribution_methods::distribution_method_type distribution_method,cp2k_csr_interop_type Overlap,cp2k_csr_interop_type KohnSham,cp2k_csr_interop_type *P,cp2k_csr_interop_type *PImag,std::vector<double> muvec,std::vector<contact_type> contactvec,std::vector<int> Bsizes,std::vector<int> orb_per_at,double *Vatom,double *rho_atom,transport_parameters transport_params)
+{
+double sabtime;
+    std::vector<int> Tsizes = get_tsizes(distribution_method,Overlap.nrows_total-transport_params.cutl-transport_params.cutr,Bsizes,orb_per_at,transport_params.gpus_per_point,transport_params.tasks_per_point);
 sabtime=get_time(0.0);
     MPI_Comm matrix_comm;
     TCSR<double> *OverlapCollect  = new TCSR<double>(Overlap ,MPI_COMM_WORLD,&Tsizes[0],Tsizes.size(),transport_params.cutl,transport_params.cutr,&matrix_comm);
@@ -336,7 +339,7 @@ if (!iam) cout << "TIME FOR PROPAGATING MODES " << get_time(sabtime) << endl;
             }
             myfile.close();
         }
-        if (!iam && contactvec.size()>muvec.size()) {
+        if (!iam && contactvec.size()==muvec.size()+1) {
             ofstream myfile("TransmissionFromBandstructure");
             myfile.precision(15);
             double cb_max = *max_element(singularities.energies_cb.begin(),singularities.energies_cb.end());
