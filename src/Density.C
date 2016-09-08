@@ -41,9 +41,8 @@ int density(TCSR<double> *KohnSham,TCSR<double> *Overlap,TCSR<double> *Ps,TCSR<d
 double sabtime;
 int worldrank; MPI_Comm_rank(MPI_COMM_WORLD,&worldrank);
     int n_mu=muvec.size();
-    lin_solver_methods::lin_solver_method_type solver_method=transport_params.lin_solver_method;
     int GPUS_per_point=transport_params.gpus_per_point;
-    int run_splitsolve = solver_method==lin_solver_methods::SPLITSOLVE && method==transport_methods::WF;
+    bool run_splitsolve = transport_params.lin_solver_method==lin_solver_methods::SPLITSOLVE && method==transport_methods::WF;
 int bandwidth=contactvec[0].bandwidth;
 int ndof=contactvec[0].ndof;
 int ncells=Overlap->size_tot/ndof;
@@ -136,7 +135,7 @@ if (!worldrank) cout << "TIME FOR ADDING SIGMA " << get_time(sabtime) << endl;
         delete SumHamC;
     }
     if (method==transport_methods::EQ) {
-        if (solver_method==lin_solver_methods::FULL || solver_method==lin_solver_methods::BANDED) {
+        if (transport_params.inv_solver_method==inv_solver_methods::FULL) {
             TCSR<CPX> *SumHamC = new TCSR<CPX>(Overlap->size,Overlap->n_nonzeros,Overlap->findx);
             SumHamC->copy_contain(Overlap,d_one);
             c_zscal(SumHamC->n_nonzeros,-energy,SumHamC->nnz,1);
@@ -144,7 +143,7 @@ if (!worldrank) cout << "TIME FOR ADDING SIGMA " << get_time(sabtime) << endl;
             FullInvert solver(SumHamC,Ps,-weight/M_PI*CPX(0.0,1.0),matrix_comm);
             delete SumHamC;
 #ifdef HAVE_PEXSI
-        } else if (solver_method==lin_solver_methods::SUPERLU || solver_method==lin_solver_methods::MUMPS) {
+        } else if (transport_params.inv_solver_method==inv_solver_methods::PEXSI) {
             if (KohnSham->findx!=1 || Overlap->findx!=1) return (LOGCERR, EXIT_FAILURE);
   
             double *HS_nnz_inp = new double[2*Overlap->n_nonzeros]();
@@ -188,11 +187,11 @@ if (!worldrank) cout << "TIME FOR ADDING SIGMA " << get_time(sabtime) << endl;
 #endif
         } else return (LOGCERR, EXIT_FAILURE);
     } else if (method==transport_methods::GF) {
-        if (solver_method==lin_solver_methods::FULL || solver_method==lin_solver_methods::BANDED) {
+        if (transport_params.inv_solver_method==inv_solver_methods::FULL) {
             FullInvert solver(HamSig,Ps,-weight/M_PI*CPX(0.0,1.0),matrix_comm);
             delete HamSig;
 #ifdef HAVE_PEXSI
-        } else if (solver_method==lin_solver_methods::SUPERLU || solver_method==lin_solver_methods::MUMPS) {
+        } else if (transport_params.inv_solver_method==inv_solver_methods::PEXSI) {
             if (HamSig->findx!=1) return (LOGCERR, EXIT_FAILURE);
   
             double *HS_nnz_inp = new double[2*HamSig->n_nonzeros]();
@@ -233,17 +232,17 @@ if (!worldrank) cout << "TIME FOR ADDING SIGMA " << get_time(sabtime) << endl;
     } else if (method==transport_methods::NEGF) {
 sabtime=get_time(d_zer);
         LinearSolver<CPX>* solver;
-        if (solver_method==lin_solver_methods::FULL) {
+        if (transport_params.lin_solver_method==lin_solver_methods::FULL) {
             solver = new Full<CPX>(HamSig,matrix_comm);
 #ifdef HAVE_SUPERLU
-        } else if (solver_method==lin_solver_methods::SUPERLU) {
+        } else if (transport_params.lin_solver_method==lin_solver_methods::SUPERLU) {
             solver = new SuperLU<CPX>(HamSig,matrix_comm);
 #endif
 #ifdef HAVE_MUMPS
-        } else if (solver_method==lin_solver_methods::MUMPS) {
+        } else if (transport_params.lin_solver_method==lin_solver_methods::MUMPS) {
             solver = new MUMPS<CPX>(HamSig,matrix_comm);
 #endif
-        } else if (solver_method==lin_solver_methods::BANDED) {
+        } else if (transport_params.lin_solver_method==lin_solver_methods::BANDED) {
             solver = new Banded<CPX>(HamSig,matrix_comm);
         } else return (LOGCERR, EXIT_FAILURE);
         solver->prepare(&Bmin[0],&Bmax[0],Bmin.size(),Bsize,&orb_per_at[0],10);
@@ -356,20 +355,20 @@ if (!worldrank) cout << "TIME FOR TRANSMISSION " << get_time(sabtime) << endl;
         delete H1cut;
 sabtime=get_time(d_zer);
         LinearSolver<CPX>* solver;
-        if (solver_method==lin_solver_methods::FULL) {
+        if (transport_params.lin_solver_method==lin_solver_methods::FULL) {
             solver = new Full<CPX>(HamSig,matrix_comm);
 #ifdef HAVE_SUPERLU
-        } else if (solver_method==lin_solver_methods::SUPERLU) {
+        } else if (transport_params.lin_solver_method==lin_solver_methods::SUPERLU) {
             solver = new SuperLU<CPX>(HamSig,matrix_comm);
 #endif
 #ifdef HAVE_MUMPS
-        } else if (solver_method==lin_solver_methods::MUMPS) {
+        } else if (transport_params.lin_solver_method==lin_solver_methods::MUMPS) {
             solver = new MUMPS<CPX>(HamSig,matrix_comm);
 #endif
-        } else if (solver_method==lin_solver_methods::BANDED) {
+        } else if (transport_params.lin_solver_method==lin_solver_methods::BANDED) {
             solver = new Banded<CPX>(HamSig,matrix_comm);
 #ifdef HAVE_SPLITSOLVE
-        } else if (solver_method==lin_solver_methods::SPLITSOLVE) {
+        } else if (transport_params.lin_solver_method==lin_solver_methods::SPLITSOLVE) {
             Bmax.push_back(Bsizes[0]-1);
             for (uint i=1;i<Bsizes.size();i++) Bmax.push_back(Bmax[i-1]+Bsizes[i]);
             Bmin.push_back(0);
@@ -395,7 +394,7 @@ sabtime=get_time(d_zer);
         int right_gpu_rank = matrix_procs-ceil((double)matrix_procs/GPUS_per_point);
 if (worldrank==left_gpu_rank) cout << "TIME FOR WAVEFUNCTION SPARSE DECOMPOSITION PHASE " << get_time(sabtime) << endl;
 MPI_Barrier(matrix_comm);
-        if (solver_method==lin_solver_methods::SPLITSOLVE) {
+        if (transport_params.lin_solver_method==lin_solver_methods::SPLITSOLVE) {
             int left_bc_rank  = 0;
             int right_bc_rank = matrix_procs-1;
             int NBC[2]={contactvec[0].ndof*contactvec[0].bandwidth,contactvec[1].ndof*contactvec[1].bandwidth};
@@ -460,13 +459,13 @@ MPI_Barrier(matrix_comm);
         }
 sabtime=get_time(d_zer);
         solver->solve_equation(sol, inj, nprol+npror);
-        if (solver_method!=lin_solver_methods::SPLITSOLVE || matrix_rank==left_gpu_rank || matrix_rank==right_gpu_rank) {
+        if (transport_params.lin_solver_method!=lin_solver_methods::SPLITSOLVE || matrix_rank==left_gpu_rank || matrix_rank==right_gpu_rank) {
             delete[] inj;
         }
         delete solver;
         delete HamSig;
 #ifdef HAVE_SPLITSOLVE
-        if (solver_method==lin_solver_methods::SPLITSOLVE && boundary_id==n_mu) {
+        if (transport_params.lin_solver_method==lin_solver_methods::SPLITSOLVE && boundary_id==n_mu) {
             cudaFreeHost(M_host);
         }
 #endif
@@ -474,7 +473,7 @@ if (worldrank==left_gpu_rank) cout << "TIME FOR WAVEFUNCTION SPARSE SOLVE PHASE 
         int solsize=Ps->size_tot;
         CPX* Sol = new CPX[solsize*(nprol+npror)];
         for (int icol=0;icol<nprol+npror;icol++) {
-            if (solver_method==lin_solver_methods::SPLITSOLVE) {
+            if (transport_params.lin_solver_method==lin_solver_methods::SPLITSOLVE) {
                 if (boundary_id==n_mu) {
                     int solver_rank;
                     MPI_Comm_rank(boundary_comm,&solver_rank);
@@ -485,7 +484,7 @@ if (worldrank==left_gpu_rank) cout << "TIME FOR WAVEFUNCTION SPARSE SOLVE PHASE 
                 MPI_Allgatherv(&sol[dist_sol[matrix_rank]*icol],dist_sol[matrix_rank],MPI_DOUBLE_COMPLEX,&Sol[solsize*icol],dist_sol,displc_sol,MPI_DOUBLE_COMPLEX,matrix_comm);
             }
         }
-        if (solver_method!=lin_solver_methods::SPLITSOLVE || boundary_id==n_mu) {
+        if (transport_params.lin_solver_method!=lin_solver_methods::SPLITSOLVE || boundary_id==n_mu) {
             delete[] sol;
             delete[] dist_sol;
             delete[] displc_sol;

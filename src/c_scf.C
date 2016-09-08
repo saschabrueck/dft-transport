@@ -92,10 +92,11 @@ void c_scf_method(cp2k_transport_parameters cp2k_transport_params, cp2k_csr_inte
         transport_parameters transport_params;
         transport_params.cp2k_scf_iter               = cp2k_transport_params.iscf;
         transport_params.n_occ                       = cp2k_transport_params.n_occ;
-        transport_params.n_abscissae                 = cp2k_transport_params.n_abscissae;
+        transport_params.n_abscissae                 = cp2k_transport_params.num_pole;
         transport_params.n_kpoint                    = cp2k_transport_params.n_kpoint;
         transport_params.num_interval                = cp2k_transport_params.num_interval;
         transport_params.tasks_per_point             = cp2k_transport_params.tasks_per_energy_point;
+        transport_params.tasks_per_point_cc          = cp2k_transport_params.tasks_per_pole;
         transport_params.gpus_per_point              = cp2k_transport_params.gpus_per_point;
         transport_params.colzero_threshold           = cp2k_transport_params.colzero_threshold;
         transport_params.eps_limit                   = cp2k_transport_params.eps_limit;
@@ -124,6 +125,7 @@ void c_scf_method(cp2k_transport_parameters cp2k_transport_params, cp2k_csr_inte
         transport_params.obc                         = cp2k_transport_params.obc_equilibrium || cp2k_transport_params.cutout[0] || cp2k_transport_params.cutout[1];
         transport_params.injection_method            = static_cast<injection_methods::injection_method_type>(cp2k_transport_params.injection_method);
         transport_params.lin_solver_method           = static_cast<lin_solver_methods::lin_solver_method_type>(cp2k_transport_params.linear_solver);
+        transport_params.inv_solver_method           = static_cast<inv_solver_methods::inv_solver_method_type>(cp2k_transport_params.matrixinv_method);
         transport_params.real_int_method             = static_cast<real_int_methods::real_int_method_type>(cp2k_transport_params.rlaxis_integration_method);
         transport_params.cp2k_method                 = static_cast<cp2k_methods::cp2k_method_type>(cp2k_transport_params.method);
         if (cp2k_transport_params.eps_fermi<=(numeric_limits<double>::epsilon)()) {

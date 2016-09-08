@@ -25,6 +25,17 @@ namespace lin_solver_methods {
         MUMPS      = 13,
         FULL       = 14,
         BANDED     = 15,
+        PARDISO    = 16,
+        UMFPACK    = 17,
+    };
+}
+
+namespace inv_solver_methods {
+    enum inv_solver_method_type {
+        FULL    = 101,
+        PEXSI   = 102,
+        PARDISO = 103,
+        RGF     = 104,
     };
 }
 
@@ -57,6 +68,7 @@ struct transport_parameters
     cp2k_methods::cp2k_method_type             cp2k_method;
     injection_methods::injection_method_type   injection_method;
     lin_solver_methods::lin_solver_method_type lin_solver_method;
+    inv_solver_methods::inv_solver_method_type inv_solver_method;
     real_int_methods::real_int_method_type     real_int_method;
     int    n_occ;
     int    n_atoms;
@@ -64,6 +76,7 @@ struct transport_parameters
     int    n_kpoint;
     int    num_interval;
     int    tasks_per_point;
+    int    tasks_per_point_cc;
     int    gpus_per_point;
     int    NCRC_beyn;
     int    n_points_beyn;

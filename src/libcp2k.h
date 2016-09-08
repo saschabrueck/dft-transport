@@ -161,7 +161,8 @@ typedef struct {
     int     injection_method;
     int     rlaxis_integration_method;
     int     linear_solver;
-    int     n_abscissae;
+    int     matrixinv_method;
+    int     num_pole;
     int     ordering;
     int     row_ordering;
     int     verbosity;
@@ -171,6 +172,7 @@ typedef struct {
     int     num_contacts;
     int     stride_contacts;
     int     tasks_per_energy_point;
+    int     tasks_per_pole;
     int     gpus_per_point;
     int     n_points_beyn;
     int     ncrc_beyn;
