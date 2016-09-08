@@ -27,11 +27,31 @@ int Energyvector::Execute(cp2k_csr_interop_type Overlap,cp2k_csr_interop_type Ko
     if (determine_energyvector(energyvector,stepvector,energyvector_real,stepvector_real,propagating_sizes,KohnSham,Overlap,muvec,contactvec,transport_params)) return (LOGCERR, EXIT_FAILURE);
     if (!iam) cout << "Size of Energyvectors " << energyvector.size() << " " << energyvector_real.size() << endl;
 
-    distribution_methods::distribution_method_type distribution_method = distribution_methods::CEILING_DISTRIBUTION;
-    if (transport_params.lin_solver_method==lin_solver_methods::SPLITSOLVE) distribution_method = distribution_methods::SPLITSOLVE_DISTRIBUTION;
-    if (transport_params.lin_solver_method==lin_solver_methods::SUPERLU || transport_params.lin_solver_method==lin_solver_methods::MUMPS) distribution_method = distribution_methods::FLOOR_DISTRIBUTION;
+    distribution_methods::distribution_method_type distribution_method_cc = distribution_methods::NO_DISTRIBUTION;
+    if (energyvector.size()) {
+        if (transport_params.inv_solver_method==inv_solver_methods::FULL)         distribution_method_cc = distribution_methods::CEILING_DISTRIBUTION;
+        else if (transport_params.inv_solver_method==inv_solver_methods::PEXSI)   distribution_method_cc = distribution_methods::FLOOR_DISTRIBUTION;
+        else if (transport_params.inv_solver_method==inv_solver_methods::PARDISO) distribution_method_cc = distribution_methods::MASTER_DISTRIBUTION;
+        else if (transport_params.inv_solver_method==inv_solver_methods::RGF)     distribution_method_cc = distribution_methods::MASTER_DISTRIBUTION;
+        else return (LOGCERR, EXIT_FAILURE);
+    }
 
-    if (distribute_and_execute(energyvector,stepvector,energyvector_real,stepvector_real,propagating_sizes,distribution_method,transport_params.tasks_per_point,Overlap,KohnSham,P,PImag,muvec,contactvec,Bsizes,orb_per_at,Vatom,rho_atom,transport_params)) return (LOGCERR, EXIT_FAILURE);
+    distribution_methods::distribution_method_type distribution_method = distribution_methods::NO_DISTRIBUTION;
+    if (energyvector_real.size()) {
+        distribution_method = distribution_methods::CEILING_DISTRIBUTION;
+        if (transport_params.lin_solver_method==lin_solver_methods::SPLITSOLVE) distribution_method = distribution_methods::SPLITSOLVE_DISTRIBUTION;
+        if (transport_params.lin_solver_method==lin_solver_methods::PARDISO)    distribution_method = distribution_methods::MASTER_DISTRIBUTION;
+        if (transport_params.lin_solver_method==lin_solver_methods::UMFPACK)    distribution_method = distribution_methods::MASTER_DISTRIBUTION;
+        if (transport_params.lin_solver_method==lin_solver_methods::SUPERLU && distribution_method_cc==distribution_methods::FLOOR_DISTRIBUTION) distribution_method = distribution_methods::FLOOR_DISTRIBUTION;
+        if (transport_params.lin_solver_method==lin_solver_methods::MUMPS   && distribution_method_cc==distribution_methods::FLOOR_DISTRIBUTION) distribution_method = distribution_methods::FLOOR_DISTRIBUTION;
+    }
+
+    if (transport_params.tasks_per_point==transport_params.tasks_per_point_cc && distribution_method==distribution_method_cc) {
+        if (distribute_and_execute(energyvector,stepvector,energyvector_real,stepvector_real,propagating_sizes,distribution_method,transport_params.tasks_per_point,Overlap,KohnSham,P,PImag,muvec,contactvec,Bsizes,orb_per_at,Vatom,rho_atom,transport_params)) return (LOGCERR, EXIT_FAILURE);
+    } else {
+        if (energyvector.size()) if (distribute_and_execute(energyvector,stepvector,std::vector<CPX>(),std::vector<CPX>(),propagating_sizes,distribution_method_cc,transport_params.tasks_per_point_cc,Overlap,KohnSham,P,PImag,muvec,contactvec,Bsizes,orb_per_at,Vatom,rho_atom,transport_params)) return (LOGCERR, EXIT_FAILURE);
+        if (energyvector_real.size()) if (distribute_and_execute(std::vector<CPX>(),std::vector<CPX>(),energyvector_real,stepvector_real,propagating_sizes,distribution_method,transport_params.tasks_per_point,Overlap,KohnSham,P,PImag,muvec,contactvec,Bsizes,orb_per_at,Vatom,rho_atom,transport_params)) return (LOGCERR, EXIT_FAILURE);
+    }
 
     return 0;
 }
@@ -40,6 +60,7 @@ int Energyvector::distribute_and_execute(std::vector<CPX> energyvector,std::vect
 {
 double sabtime;
     std::vector<int> Tsizes = get_tsizes(distribution_method,Overlap.nrows_total-transport_params.cutl-transport_params.cutr,Bsizes,orb_per_at,transport_params.gpus_per_point,tasks_per_point);
+    if (!Tsizes.size()) return (LOGCERR, EXIT_FAILURE);
 sabtime=get_time(0.0);
     MPI_Comm matrix_comm;
     TCSR<double> *OverlapCollect  = new TCSR<double>(Overlap ,MPI_COMM_WORLD,&Tsizes[0],Tsizes.size(),transport_params.cutl,transport_params.cutr,&matrix_comm);

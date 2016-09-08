@@ -9,6 +9,7 @@
 
 namespace distribution_methods {
     enum distribution_method_type {
+        NO_DISTRIBUTION,
         SPLITSOLVE_DISTRIBUTION,
         FLOOR_DISTRIBUTION,
         CEILING_DISTRIBUTION,
