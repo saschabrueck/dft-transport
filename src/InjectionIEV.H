@@ -6,7 +6,6 @@
 #include <stdio.h>
 #include <limits>
 #include <valarray>
-using namespace std;
 #include "ScaLapack.H"
 //#include "Arpack.H"
 #include "GetSigma.H"
