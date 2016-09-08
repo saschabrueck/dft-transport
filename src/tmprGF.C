@@ -18,13 +18,14 @@ namespace tmprGF {
  *       in CSR format
  *  \post The input matrix has been replaced by its inverse
  */
-void sparse_invert(TCSR<CPX> *matrix, std::vector<int> Bmax) {
+void sparse_invert(TCSR<CPX> *matrix, std::vector<int> Bsizes) {
 
-  std::vector<int> Bmin(Bmax.size(), 0);
-
-  for (unsigned int i = 0; i < Bmin.size() - 1; ++i) {
-    Bmin[i + 1] = Bmax[i] + 1;
-  }
+  std::vector<int> Bmin;
+  std::vector<int> Bmax;
+  Bmax.push_back(Bsizes[0]-1);
+  for (uint i=1;i<Bsizes.size();i++) Bmax.push_back(Bmax[i-1]+Bsizes[i]);
+  Bmin.push_back(0);
+  for (uint i=1;i<Bsizes.size();i++) Bmin.push_back(Bmax[i-1]+1);
 
   // calculate memory requirements and positions:
   int num_blocks = Bmin.size();

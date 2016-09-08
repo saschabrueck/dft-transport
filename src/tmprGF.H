@@ -9,7 +9,7 @@
 
 namespace tmprGF {
 
-void sparse_invert(TCSR<CPX> *matrix, std::vector<int> Bmax);
+void sparse_invert(TCSR<CPX> *matrix, std::vector<int> Bsizes);
 
 }
 

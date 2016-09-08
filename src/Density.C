@@ -6,7 +6,6 @@
 #include <stdio.h>
 #include <limits>
 #include <algorithm>
-using namespace std;
 #include "ScaLapack.H"
 #include "tmprGF.H"
 #include "FullInvert.H"
@@ -25,6 +24,9 @@ using namespace std;
 #endif
 #ifdef HAVE_PEXSI
 #include "c_pexsi_interface.h"
+#endif
+#ifdef HAVE_PARDISO_SELINV
+#include "Pardiso.H"
 #endif
 #include "GetSigma.H"
 #include "Density.H"
@@ -142,6 +144,20 @@ if (!worldrank) cout << "TIME FOR ADDING SIGMA " << get_time(sabtime) << endl;
             c_daxpy(SumHamC->n_nonzeros,d_one,KohnSham->nnz,1,(double*)SumHamC->nnz,2);
             FullInvert solver(SumHamC,Ps,-weight/M_PI*CPX(0.0,1.0),matrix_comm);
             delete SumHamC;
+#ifdef HAVE_PARDISO_SELINV
+        } else if (transport_params.inv_solver_method==inv_solver_methods::PARDISO) {
+            if (KohnSham->findx!=1 || Overlap->findx!=1) return (LOGCERR, EXIT_FAILURE);
+            TCSR<CPX> *SumHamC = new TCSR<CPX>(Overlap->size,Overlap->n_nonzeros,Overlap->findx);
+            SumHamC->copy_contain(Overlap,d_one);
+            c_zscal(SumHamC->n_nonzeros,-energy,SumHamC->nnz,1);
+            c_daxpy(SumHamC->n_nonzeros,d_one,KohnSham->nnz,1,(double*)SumHamC->nnz,2);
+            if (!matrix_rank) {
+                Pardiso::sparse_invert(SumHamC);
+            }
+            c_zscal(Overlap->n_nonzeros,-weight/M_PI*CPX(0.0,1.0),SumHamC->nnz,1);
+            c_daxpy(Overlap->n_nonzeros,1.0,(double*)SumHamC->nnz,2,Ps->nnz,1);
+            delete SumHamC;
+#endif
 #ifdef HAVE_PEXSI
         } else if (transport_params.inv_solver_method==inv_solver_methods::PEXSI) {
             if (KohnSham->findx!=1 || Overlap->findx!=1) return (LOGCERR, EXIT_FAILURE);
@@ -190,6 +206,21 @@ if (!worldrank) cout << "TIME FOR ADDING SIGMA " << get_time(sabtime) << endl;
         if (transport_params.inv_solver_method==inv_solver_methods::FULL) {
             FullInvert solver(HamSig,Ps,-weight/M_PI*CPX(0.0,1.0),matrix_comm);
             delete HamSig;
+        } else if (transport_params.inv_solver_method==inv_solver_methods::RGF) {
+            if (!matrix_rank) {
+                tmprGF::sparse_invert(HamSig,Bsizes);
+            }
+            Ps->add_real(HamSig,-weight/M_PI*CPX(0.0,1.0));
+            delete HamSig;
+#ifdef HAVE_PARDISO_SELINV
+        } else if (transport_params.inv_solver_method==inv_solver_methods::PARDISO) {
+            if (HamSig->findx!=1) return (LOGCERR, EXIT_FAILURE);
+            if (!matrix_rank) {
+                Pardiso::sparse_invert(HamSig);
+            }
+            Ps->add_real(HamSig,-weight/M_PI*CPX(0.0,1.0));
+            delete HamSig;
+#endif
 #ifdef HAVE_PEXSI
         } else if (transport_params.inv_solver_method==inv_solver_methods::PEXSI) {
             if (HamSig->findx!=1) return (LOGCERR, EXIT_FAILURE);

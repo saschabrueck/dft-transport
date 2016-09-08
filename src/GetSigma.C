@@ -5,7 +5,6 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <valarray>
-using namespace std;
 #include "ScaLapack.H"
 #include "InjectionBeyn.H"
 #include "InjectionIEV.H"

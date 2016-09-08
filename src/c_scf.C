@@ -389,7 +389,7 @@ void c_scf_method(cp2k_transport_parameters cp2k_transport_params, cp2k_csr_inte
 
     }
 
-     if (cndof_pbc) {
+    if (cndof_pbc) {
         int size_tot=S.nrows_total;
         int offset=0;
         int cndof=cndof_pbc;
