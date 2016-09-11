@@ -90,7 +90,7 @@ void c_scf_method(cp2k_transport_parameters cp2k_transport_params, cp2k_csr_inte
     int cbw_mid=0;
     for (int system=0;system<=int(static_cast<cp2k_methods::cp2k_method_type>(cp2k_transport_params.method)==cp2k_methods::TRANSPORT);system++) {
         transport_parameters transport_params;
-        transport_params.cp2k_scf_iter               = cp2k_transport_params.iscf;
+        transport_params.cp2k_scf_iter               = (1-2*system)*cp2k_transport_params.iscf;
         transport_params.n_occ                       = cp2k_transport_params.n_occ;
         transport_params.n_abscissae                 = cp2k_transport_params.num_pole;
         transport_params.n_kpoint                    = cp2k_transport_params.n_kpoint;
@@ -122,7 +122,6 @@ void c_scf_method(cp2k_transport_parameters cp2k_transport_params, cp2k_csr_inte
         transport_params.boltzmann_ev                = cp2k_transport_params.boltzmann/cp2k_transport_params.e_charge;
         transport_params.conduct_quant               = 2.0*cp2k_transport_params.e_charge*cp2k_transport_params.e_charge/(2.0*M_PI*cp2k_transport_params.h_bar);
         transport_params.extra_scf                   = cp2k_transport_params.extra_scf;
-        transport_params.obc                         = cp2k_transport_params.obc_equilibrium || cp2k_transport_params.cutout[0] || cp2k_transport_params.cutout[1];
         transport_params.injection_method            = static_cast<injection_methods::injection_method_type>(cp2k_transport_params.injection_method);
         transport_params.lin_solver_method           = static_cast<lin_solver_methods::lin_solver_method_type>(cp2k_transport_params.linear_solver);
         transport_params.inv_solver_method           = static_cast<inv_solver_methods::inv_solver_method_type>(cp2k_transport_params.matrixinv_method);
@@ -147,18 +146,41 @@ void c_scf_method(cp2k_transport_parameters cp2k_transport_params, cp2k_csr_inte
         if (cp2k_transport_params.qt_formalism==41) {
             transport_params.negf_solver             = true;
         }
- 
+
+        int cutout[2]={0,0};
+        if (transport_params.cp2k_method==cp2k_methods::TRANSPORT) {
+            cutout[1-system]=transport_params.n_atoms/2;
+        } else {
+            cutout[0]=cp2k_transport_params.cutout[0];
+            cutout[1]=cp2k_transport_params.cutout[1];
+        }
+        transport_params.obc                         = cp2k_transport_params.obc_equilibrium || cutout[0] || cutout[1];
+
         std::vector<contact_type> contactvec(cp2k_transport_params.num_contacts);
-        int size_muvec=0;
+        int num_p=0;
+        int num_m=0;
         int stride = cp2k_transport_params.stride_contacts;
-        for (uint i_c=0;i_c<contactvec.size();i_c++) if (cp2k_transport_params.contacts_data[4+stride*i_c]) size_muvec++;
-        std::vector<double> muvec(size_muvec);
+        for (uint i_c=0;i_c<contactvec.size();i_c++) {
+            if (cp2k_transport_params.contacts_data[4+stride*i_c]) {
+                if (cp2k_transport_params.contacts_data[3+stride*i_c]==+1) {
+                    num_p++;
+                } else {
+                    num_m++;
+                }
+            }
+        }
+        std::vector<double> muvec(num_p+num_m);
+        int i_p=0;
         int i_m=0;
         int i_n=0;
         for (uint i_c=0;i_c<contactvec.size();i_c++) {
             int i_t;
             if (cp2k_transport_params.contacts_data[4+stride*i_c]) {
-                i_t=i_m++;
+                if (cp2k_transport_params.contacts_data[4+stride*i_c]==+1) {
+                    i_t=i_p++;
+                } else {
+                    i_t=num_p+i_m++;
+                }
             } else {
                 i_t=muvec.size()+i_n++;
             }
@@ -167,15 +189,22 @@ void c_scf_method(cp2k_transport_parameters cp2k_transport_params, cp2k_csr_inte
             contactvec[i_t].natoms    = cp2k_transport_params.contacts_data[2+stride*i_c];
             contactvec[i_t].atomstart = cp2k_transport_params.contacts_data[1+stride*i_c];
             if (contactvec[i_t].atomstart<0) {
-                if (contactvec[i_t].inj_sign==1) {
-                    contactvec[i_t].atomstart = cp2k_transport_params.cutout[0];
+                if (contactvec[i_t].inj_sign==+1) {
+                    contactvec[i_t].atomstart = cutout[0];
                 } else if (contactvec[i_t].inj_sign==-1) {
-                    if (transport_params.cp2k_method==cp2k_methods::TRANSPORT) {
-                        contactvec[i_t].atomstart = transport_params.n_atoms/2-contactvec[i_t].natoms;
-                    } else {
-                        contactvec[i_t].atomstart = transport_params.n_atoms-contactvec[i_t].natoms-cp2k_transport_params.cutout[1];
-                    }
+                    contactvec[i_t].atomstart = transport_params.n_atoms-contactvec[i_t].natoms-cutout[1];
                 }
+            }
+        }
+        if (transport_params.cp2k_method==cp2k_methods::TRANSPORT) {
+            if (system) {
+                swap(contactvec[0].natoms,contactvec[1].natoms);
+                swap(contactvec[0].bandwidth,contactvec[1].bandwidth);
+            }
+            contactvec[0].atomstart = cutout[0];
+            contactvec[1].atomstart = transport_params.n_atoms-contactvec[1].natoms-cutout[1];
+            for (uint i=muvec.size();i<contactvec.size();i++) {
+                contactvec[i].atomstart+=cutout[0];
             }
         }
 
@@ -278,15 +307,15 @@ void c_scf_method(cp2k_transport_parameters cp2k_transport_params, cp2k_csr_inte
                     if (contactvec[i].inj_sign==-1) contactvec[i].sigma_natoms = tridiag_start-mincol;
                 }
             }
- 
+
             std::vector<int> tridiag_blocks_start;
-            tridiag_blocks_start.push_back(cp2k_transport_params.cutout[0]);
+            tridiag_blocks_start.push_back(cutout[0]);
             tridiag_blocks_start.push_back(contactvec[0].atomstart+contactvec[0].sigma_natoms);
             int tridiag_end = contactvec[1].atomstart+contactvec[1].natoms-contactvec[1].sigma_natoms;
             int maxcol = 0;
             while (tridiag_blocks_start[num_tridiag_blocks] < tridiag_end) {
                 for (int irow=tridiag_blocks_start[num_tridiag_blocks-1];irow<tridiag_blocks_start[num_tridiag_blocks];irow++) {
-                    int colend = transport_params.n_atoms-cp2k_transport_params.cutout[1];
+                    int colend = transport_params.n_atoms-cutout[1];
                     if (irow<contactvec[0].bandwidth*contactvec[0].natoms) {
                         colend = contactvec[0].atomstart+2*contactvec[0].bandwidth*contactvec[0].natoms;
                     }
@@ -318,62 +347,35 @@ void c_scf_method(cp2k_transport_parameters cp2k_transport_params, cp2k_csr_inte
         Bsizes.resize(num_tridiag_blocks);
         MPI_Bcast(&Bsizes[0],num_tridiag_blocks,MPI_INT,0,MPI_COMM_WORLD);
  
-        Bsizes[0]-=cp2k_transport_params.cutout[0];
-        Bsizes[Bsizes.size()-1]-=cp2k_transport_params.cutout[1];
+        Bsizes[0]-=cutout[0];
+        Bsizes[Bsizes.size()-1]-=cutout[1];
  
         for (uint i=0;i<contactvec.size();i++) {
             int atom_start = contactvec[i].atomstart;
             int atom_stop  = atom_start + contactvec[i].natoms;
-            contactvec[i].atomstart = atom_start-cp2k_transport_params.cutout[0];
-            contactvec[i].start     = std::accumulate(&cp2k_transport_params.nsgf[cp2k_transport_params.cutout[0]],&cp2k_transport_params.nsgf[atom_start],0);
+            contactvec[i].atomstart = atom_start-cutout[0];
+            contactvec[i].start     = std::accumulate(&cp2k_transport_params.nsgf[cutout[0]],&cp2k_transport_params.nsgf[atom_start],0);
             contactvec[i].start_bs  = std::accumulate(&cp2k_transport_params.nsgf[0],&cp2k_transport_params.nsgf[atom_start],0);
             contactvec[i].ndof      = std::accumulate(&cp2k_transport_params.nsgf[atom_start],&cp2k_transport_params.nsgf[atom_stop],0);
             contactvec[i].n_ele     = std::accumulate(&cp2k_transport_params.zeff[atom_start],&cp2k_transport_params.zeff[atom_stop],0.0);
         }
  
-        transport_params.cutl = std::accumulate(&cp2k_transport_params.nsgf[0],&cp2k_transport_params.nsgf[cp2k_transport_params.cutout[0]],0);
-        transport_params.cutr = std::accumulate(&cp2k_transport_params.nsgf[cp2k_transport_params.n_atoms-cp2k_transport_params.cutout[1]],&cp2k_transport_params.nsgf[cp2k_transport_params.n_atoms],0);
+        transport_params.cutl = std::accumulate(&cp2k_transport_params.nsgf[0],&cp2k_transport_params.nsgf[cutout[0]],0);
+        transport_params.cutr = std::accumulate(&cp2k_transport_params.nsgf[cp2k_transport_params.n_atoms-cutout[1]],&cp2k_transport_params.nsgf[cp2k_transport_params.n_atoms],0);
  
-        transport_params.n_atoms = transport_params.n_atoms-cp2k_transport_params.cutout[0]-cp2k_transport_params.cutout[1];
-        std::vector<int> orb_per_atom(1,0);
-        for (int i=0;i<transport_params.n_atoms;i++) {
-            orb_per_atom.push_back(orb_per_atom[i]+cp2k_transport_params.nsgf[cp2k_transport_params.cutout[0]+i]);
-        }
-
-        if (transport_params.cp2k_method==cp2k_methods::TRANSPORT) {
-            transport_params.obc=true;
-            cndof_mid=contactvec[1].ndof;
-            cbw_mid=contactvec[1].bandwidth;
-            if (!system) {
-                transport_params.cutl=0;
-                transport_params.cutr=S.nrows_total/2;
-            } else {
-                transport_params.cutl=S.nrows_total/2;
-                transport_params.cutr=0;
-                transport_params.cp2k_scf_iter*=-1;
-                if (contactvec[0].inj_sign==+1) {
-                    contactvec[0].inj_sign=-1;
-                    contactvec[0].start   =S.nrows_total/2-contactvec[0].ndof;
-                    contactvec[0].start_bs=S.nrows_total-contactvec[0].ndof;
-                    contactvec[1].inj_sign=+1;
-                    contactvec[1].start   =0;
-                    contactvec[1].start_bs=S.nrows_total/2;
-                } else if (contactvec[0].inj_sign==-1) {
-                    contactvec[0].inj_sign=+1;
-                    contactvec[0].start   =0;
-                    contactvec[0].start_bs=S.nrows_total/2;
-                    contactvec[1].inj_sign=-1;
-                    contactvec[1].start   =S.nrows_total/2-contactvec[1].ndof;
-                    contactvec[1].start_bs=S.nrows_total-contactvec[1].ndof;
-                } else throw std::exception();
-                if (contactvec.size()>muvec.size()) {
-                    contactvec[2].start_bs+=S.nrows_total/2;
-                }
-            }
-        }
-        if (!transport_params.extra_scf && transport_params.obc) {
+        if (!transport_params.extra_scf && transport_params.obc && !system) {
             cndof_pbc=contactvec[0].ndof;
             cbw_pbc=contactvec[0].bandwidth;
+        }
+        if (system) {
+            cndof_mid=contactvec[0].ndof;
+            cbw_mid=contactvec[0].bandwidth;
+        }
+
+        transport_params.n_atoms = transport_params.n_atoms-cutout[0]-cutout[1];
+        std::vector<int> orb_per_atom(1,0);
+        for (int i=0;i<transport_params.n_atoms;i++) {
+            orb_per_atom.push_back(orb_per_atom[i]+cp2k_transport_params.nsgf[cutout[0]+i]);
         }
 
         //write_matrix(Overlap,KohnSham,wr_cutblocksize,wr_bw,wr_ndof);

@@ -137,6 +137,7 @@ if (!worldrank) cout << "TIME FOR ADDING SIGMA " << get_time(sabtime) << endl;
         delete SumHamC;
     }
     if (method==transport_methods::EQ) {
+sabtime=get_time(d_zer);
         if (transport_params.inv_solver_method==inv_solver_methods::FULL) {
             TCSR<CPX> *SumHamC = new TCSR<CPX>(Overlap->size,Overlap->n_nonzeros,Overlap->findx);
             SumHamC->copy_contain(Overlap,d_one);
@@ -202,13 +203,21 @@ if (!worldrank) cout << "TIME FOR ADDING SIGMA " << get_time(sabtime) << endl;
             delete[] HS_nnz_out;
 #endif
         } else return (LOGCERR, EXIT_FAILURE);
+if (!worldrank) cout << "TIME FOR EQ INVERSION " << get_time(sabtime) << endl;
     } else if (method==transport_methods::GF) {
+sabtime=get_time(d_zer);
         if (transport_params.inv_solver_method==inv_solver_methods::FULL) {
             FullInvert solver(HamSig,Ps,-weight/M_PI*CPX(0.0,1.0),matrix_comm);
             delete HamSig;
         } else if (transport_params.inv_solver_method==inv_solver_methods::RGF) {
+            Bmax.push_back(Bsizes[0]-1);
+            for (uint i=1;i<Bsizes.size();i++) Bmax.push_back(Bmax[i-1]+Bsizes[i]);
+            Bmin.push_back(0);
+            for (uint i=1;i<Bsizes.size();i++) Bmin.push_back(Bmax[i-1]+1);
+            std::vector<int> Fsizes;
+            for (uint i=0;i<Bsizes.size();i++) Fsizes.push_back(orb_per_at[Bmin[i]+Bsizes[i]]-orb_per_at[Bmin[i]]);
             if (!matrix_rank) {
-                tmprGF::sparse_invert(HamSig,Bsizes);
+                tmprGF::sparse_invert(HamSig,Fsizes);
             }
             Ps->add_real(HamSig,-weight/M_PI*CPX(0.0,1.0));
             delete HamSig;
@@ -260,6 +269,7 @@ if (!worldrank) cout << "TIME FOR ADDING SIGMA " << get_time(sabtime) << endl;
             delete HamSig;
 #endif
         } else return (LOGCERR, EXIT_FAILURE);
+if (!worldrank) cout << "TIME FOR GF INVERSION " << get_time(sabtime) << endl;
     } else if (method==transport_methods::NEGF) {
 sabtime=get_time(d_zer);
         LinearSolver<CPX>* solver;

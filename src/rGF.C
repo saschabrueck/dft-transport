@@ -630,7 +630,7 @@ void rGF::calculate_GR(int block, std::vector<int> Bmin, std::vector<int> Bmax,
   // NOTE: LDA is effectively the stride of the matrix A in BLAS (result_size
   // in our case)
   c_zgemm('N', 'T', result_size, precursor_size, result_size, CPX(1.0, 0.0),
-          gR, result_size, GR_block, result_size, CPX(0.0, 0.0), GRNNp1,
+          gR, result_size, GR_block, precursor_size, CPX(0.0, 0.0), GRNNp1,
           result_size);
   /*filename.str(""); filename << "tests/rGF/B_" << block << ".csv";
   write_mat_c(GRNNp1, precursor_size, result_size, filename.str());*/
