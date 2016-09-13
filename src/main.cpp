@@ -56,12 +56,11 @@ int main (int argc, char **argv)
    command_file[commandfile_path.size()]=0;
    memcpy(command_file,commandfile_path.c_str(),commandfile_path.size());
 
-   MPI::Init(argc, argv);
-   MPI::COMM_WORLD.Set_errhandler(MPI::ERRORS_THROW_EXCEPTIONS);
+   MPI_Init(&argc,&argv);
 
 #ifdef libcp2k
    cp2k_init_without_mpi();
-   cp2k_create_force_env_comm(&force_env, input_file, output_file, MPI_Comm_c2f(MPI::COMM_WORLD));
+   cp2k_create_force_env_comm(&force_env, input_file, output_file, MPI_Comm_c2f(MPI_COMM_WORLD));
    cp2k_transport_set_callback(force_env, &c_scf_method);
    cp2k_get_natom(force_env, &natom);
 
@@ -85,14 +84,14 @@ int main (int argc, char **argv)
       Material* material = new Material(parameter->mat_name,parameter->table_file,nanowire->read_hamiltonian,parameter->mat_binary_x,parameter->strain_model,parameter->Temp);
       material->initialize(nanowire->sc_dist_dep);
       Wire = new WireGenerator(parameter->lattype,0);
-      Wire->execute_task(nanowire,material,0,MPI::COMM_WORLD);
+      Wire->execute_task(nanowire,material,0,MPI_COMM_WORLD);
 //      WireGenerator* Wire = new WireGenerator();
 //      Wire->execute_task(nanowire);
       FEM = new FEMGrid();
-      FEM->execute_task(Wire,nanowire,1,1,MPI::COMM_SELF,MPI::COMM_WORLD);
+      FEM->execute_task(Wire,nanowire,1,1,MPI_COMM_SELF,MPI_COMM_WORLD);
 //      FEM->execute_task(Wire,nanowire);
       OMEN_Poisson_Solver = new Poisson();
-      OMEN_Poisson_Solver->init(Wire,nanowire,FEM,1,1,MPI::COMM_WORLD);
+      OMEN_Poisson_Solver->init(Wire,nanowire,FEM,1,1,MPI_COMM_WORLD);
 //      OMEN_Poisson_Solver->init(nanowire,FEM);
    }
 #endif
@@ -123,6 +122,6 @@ int main (int argc, char **argv)
    delete [] output_file;
    delete [] command_file;
 
-   MPI::Finalize();
+   MPI_Finalize();
    return 0;
 }
