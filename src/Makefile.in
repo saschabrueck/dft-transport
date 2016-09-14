@@ -6,32 +6,22 @@ endif
 
 include $(ARCH)
 
-INP_DIR = ../inputfiles/files
-
-LDFLAGS = $(LFLAGS) $(DFLAGS)
+SOLVERS = @pardiso_dflag@ @mumps_dflag@ @superlu_dflag@ @pexsi_dflag@ @splitsolve_dflag@ @fem_poisson_dflag@
+LDFLAGS = $(LFLAGS) $(DFLAGS) $(SOLVERS) 
 
 MAIN = main.cpp
 SOURCES_CPP = pole.cpp
-EXCLUDE_C_LIST = @pardiso@ 
-SOURCES_C = $(shell find . $(shell printf "! -name %s " $(EXCLUDE_C_LIST)) -name "*.C")
-SOURCES_c = y.tab.c lex.yy.c
+EXCLUDE_C_LIST = @pardiso@ @semi_self_consistent@ 
+SOURCES_C = $(filter-out $(EXCLUDE_C_LIST), $(wildcard *.C))
+EXCLUDE_c_LIST = @parsers@ 
+SOURCES_c = $(filter-out $(EXCLUDE_c_LIST), $(wildcard *.c))
 OBJECTS = $(SOURCES_CPP:.cpp=.o) $(SOURCES_C:.C=.o) $(SOURCES_c:.c=.o)
 EXECUTABLE = transport
-
-# *********************************************************************
-MYMAIN = mymain.cc
-MYEXECUTABLE = mymain
-SOURCES_CPP_MYMAIN =
-EXCLUDE_C_LIST_MYMAIN = @pardiso@ InputParameter.C SemiSelfConsistent.C 
-SOURCES_C_MYMAIN = $(shell find . $(shell printf "! -name %s " $(EXCLUDE_C_LIST_MYMAIN)) -name "*.C")
-SOURCES_c_MYMAIN =
-OBJECTS_MYMAIN = $(SOURCES_CPP_MYMAIN:.cpp=.o) $(SOURCES_C_MYMAIN:.C=.o) $(SOURCES_c_MYMAIN:.c=.o)
-# *********************************************************************
 
 all: $(SOURCES_CPP) $(SOURCES_C) $(SOURCES_c) $(EXECUTABLE)
 
 $(EXECUTABLE): $(MAIN:.cpp=.o) $(OBJECTS)
-	$(CPP) $(CXXFLAGS) $(INCLUDES) -o $@ $(MAIN:.cpp=.o) $(OBJECTS) @pardiso_so@ $(LDFLAGS) $(LIBS)
+	$(CPP) $(CXXFLAGS) $(INCLUDES) -o $@ $(MAIN:.cpp=.o) $(OBJECTS) $(LDFLAGS) $(LIBS)
 
 .cpp.o:
 	$(CPP) $(CXXFLAGS) $(INCLUDES) $(LDFLAGS) -c $< -o $@
@@ -51,11 +41,6 @@ y.tab.c: parser.y
 lex.yy.c: parser.lex y.tab.c
 	$(LEX) $<
 
-# *********************************************************************
-$(MYEXECUTABLE): $(MYMAIN:.cc=.o) $(OBJECTS_MYMAIN)
-	$(CPP) $(CXXFLAGS) $(INCLUDES) -o $@ $(MYMAIN:.cc=.o) $(OBJECTS_MYMAIN) @pardiso_so@ $(LINLIN) $(LDFLAGS) $(LIBS)
-# *********************************************************************
-
 .PHONY: clean
 clean:
-	rm -rf *.o lex.yy.c y.tab.c $(EXECUTABLE) $(MYEXECUTABLE) $(INP_DIR)/*.out csr.*
+	rm -rf *.o lex.yy.c y.tab.c $(EXECUTABLE) 
