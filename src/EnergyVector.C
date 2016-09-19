@@ -140,12 +140,12 @@ sabtime=get_time(0.0);
                 if (density(KohnShamCollect,OverlapCollect,DensReal,DensImag,energyvector[jpos],stepvector[jpos],method,muvec,contactvec,resvec,Bsizes,orb_per_at,transport_params,matrix_comm)) return (LOGCERR, EXIT_FAILURE);
                 if (!matrix_rank && propos>=0) {
                     for (uint i_mu=0;i_mu<muvec.size();i_mu++) {
-                        if (resvec[i_mu].npro!=propagating_sizes[propos][i_mu]) propagating_warning++;
+                        if (resvec[i_mu].npro!=propagating_sizes[propos][i_mu] && transport_params.real_int_method==real_int_methods::GAUSSCHEBYSHEV) propagating_warning++;
                         if (resvec[i_mu].eigval_degeneracy>=0) degeneracy_warning++;
                         if (resvec[i_mu].rcond<numeric_limits<double>::epsilon()) return (LOGCERR, EXIT_FAILURE);
                     }
                     bool transmission_difference=abs(abs(resvec[0].transm)-abs(resvec[1].transm))/max(1.0,min(abs(resvec[0].transm),abs(resvec[1].transm)))<0.1;
-                    bool transmission_magnitude=abs(resvec[0].transm)<*max_element(propagating_sizes[propos].begin(),propagating_sizes[propos].end())*10.0;
+                    bool transmission_magnitude=abs(resvec[0].transm)<*max_element(propagating_sizes[propos].begin(),propagating_sizes[propos].end())*10.0 || transport_params.real_int_method!=real_int_methods::GAUSSCHEBYSHEV;
                     if (transmission_difference && transmission_magnitude) {
                         transmission[propos]=resvec[0].transm;
                     } else {
