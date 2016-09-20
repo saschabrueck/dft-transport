@@ -258,7 +258,7 @@ void BoundarySelfEnergy::Distribute(TCSR<CPX> *SumHamC,MPI_Comm matrix_comm)
 
 int BoundarySelfEnergy::GetSigma(MPI_Comm boundary_comm,transport_parameters transport_params)
 {
-    if (imag(energy)) {
+    if (imag(energy) && transport_params.n_points_inv) {
         if (GetSigmaInv(boundary_comm,transport_params)) return (LOGCERR, EXIT_FAILURE);
     } else {
         if (GetSigmaEig(boundary_comm,transport_params)) return (LOGCERR, EXIT_FAILURE);
@@ -371,7 +371,7 @@ int BoundarySelfEnergy::GetSigmaEig(MPI_Comm boundary_comm,transport_parameters 
     double d_zer=0.0;
     CPX z_one=CPX(d_one,d_zer);
     CPX z_zer=CPX(d_zer,d_zer);
-    double sabtime;
+double sabtime;
     int iinfo=0;
 // set parameters
     int complexenergypoint=0;
@@ -421,7 +421,7 @@ int worldrank; MPI_Comm_rank(MPI_COMM_WORLD,&worldrank);
         lambdavec=new CPX[2*bandwidth*ndof];
         eigvecc=new CPX[ndof*2*bandwidth*ndof];
     }
-    sabtime=get_time(d_zer);
+sabtime=get_time(d_zer);
     if (injection_method==injection_methods::BEYN) {
         if (complexenergypoint) {
             InjectionBeyn<CPX> *k_inj = new InjectionBeyn<CPX>(2*bandwidth,1.0/eps_limit,svd_fac,NQ_beyn,NCRC_beyn,ntasks_beyn);
@@ -446,6 +446,8 @@ int worldrank; MPI_Comm_rank(MPI_COMM_WORLD,&worldrank);
             delete[] KScpx;
         }
     }
+if (!worldrank) cout << "TIME FOR EIGENVALUE SOLVER " << get_time(sabtime) << endl;
+sabtime=get_time(d_zer);
     if (!boundary_rank) {
 // DETERMINE TYPE OF EIGENVALUE/VECTOR
         int *dectravec=new int[neigval];
@@ -530,7 +532,7 @@ int worldrank; MPI_Comm_rank(MPI_COMM_WORLD,&worldrank);
         delete[] prorefvec;
         delete[] lambdavec;
         delete[] eigvecc;
-if (!worldrank) cout << "TIME FOR EIGENVALUE SOLVER " << get_time(sabtime) << endl;
+if (!worldrank) cout << "TIME FOR EIGENVALUE VELOCITY AND NORM " << get_time(sabtime) << endl;
  /*
 stringstream mysstream;
 mysstream << "AllEigvals" << worldrank;

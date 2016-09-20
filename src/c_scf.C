@@ -83,6 +83,7 @@ void c_scf_method(cp2k_transport_parameters cp2k_transport_params, cp2k_csr_inte
             atom_of_bf.push_back(a);
         }
     }
+    atom_of_bf.push_back(cp2k_transport_params.n_atoms);
  
     int cndof_pbc=0;
     int cndof_mid=0;
@@ -217,18 +218,21 @@ void c_scf_method(cp2k_transport_parameters cp2k_transport_params, cp2k_csr_inte
         }
  
         std::vector<std::vector<int>> pairlist(natoms_local[rank]);
-        for (int i=0;i<S.nrows_local;i++) {
-            int a=atom_of_bf[S.first_row+i]-atom_of_bf[S.first_row];
-            for (int e=S.rowptr_local[i]-1;e<S.rowptr_local[i+1]-1;e++) {
-                pairlist[a].push_back(atom_of_bf[S.colind_local[e]-1]+1);
-            }
-        }
+        int i_bf=0;
         int maxpair=0;
         for (uint a=0;a<pairlist.size();a++) {
+            for (int i=0;i<cp2k_transport_params.nsgf[natoms_start[rank]+a];i++) {
+                for (int e=S.rowptr_local[i_bf]-1;e<S.rowptr_local[i_bf+1]-1;e++) {
+                    pairlist[a].push_back(atom_of_bf[S.colind_local[e]-1]+1);
+                }
+                i_bf++;
+                pairlist[a].erase(unique(pairlist[a].begin(),pairlist[a].end()),pairlist[a].end());
+            }
             sort(pairlist[a].begin(),pairlist[a].end());
             pairlist[a].erase(unique(pairlist[a].begin(),pairlist[a].end()),pairlist[a].end());
             maxpair=max(maxpair,int(pairlist[a].size()));
         }
+        if (i_bf!=S.nrows_local) throw std::exception();
         MPI_Allreduce(MPI_IN_PLACE,&maxpair,1,MPI_INT,MPI_MAX,MPI_COMM_WORLD);
  
         int *pairmatrix_local = new int[maxpair*pairlist.size()]();
