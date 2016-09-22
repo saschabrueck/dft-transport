@@ -167,9 +167,6 @@ rhofile.close();
         }
         density_old=density_new;
 
-        MPI_Comm newcomm;
-        MPI_Comm_split(MPI_COMM_WORLD,iam,iam,&newcomm);
-
 //        double mixing_parameter = 0.8;
         double mixing_parameter = 1.0;
         if (i_iter==1) {
@@ -183,8 +180,8 @@ rhofile.close();
 
         c_dcopy(FEM->NGrid,Vnew,1,Vold,1);
         double Temp=transport_params.temperature/transport_params.boltzmann_ev;
-        OMEN_Poisson_Solver->solve(Vnew,Vold,rho_atom_previous,drho_atom_dV_previous,1,NULL,FEM,Wire,Temp,&Vg,Vs,Vs,Vd,&residual,parameter->poisson_inner_criterion,parameter->poisson_inner_iteration,1,1,newcomm,MPI_COMM_WORLD,1,MPI_COMM_WORLD,0);
-//        OMEN_Poisson_Solver->solve(Vnew,Vold,rho_atom,drho_atom_dV,1,NULL,FEM,Wire,Temp,&Vg,Vs,Vs,Vd,&residual,parameter->poisson_inner_criterion,parameter->poisson_inner_iteration,1,1,newcomm,MPI_COMM_WORLD,1,MPI_COMM_WORLD,0);
+        OMEN_Poisson_Solver->solve(Vnew,Vold,rho_atom_previous,drho_atom_dV_previous,1,NULL,FEM,Wire,Temp,&Vg,Vs,Vs,Vd,&residual,parameter->poisson_inner_criterion,parameter->poisson_inner_iteration,1,1,MPI_COMM_SELF,MPI_COMM_WORLD,1,MPI_COMM_WORLD,0);
+//        OMEN_Poisson_Solver->solve(Vnew,Vold,rho_atom,drho_atom_dV,1,NULL,FEM,Wire,Temp,&Vg,Vs,Vs,Vd,&residual,parameter->poisson_inner_criterion,parameter->poisson_inner_iteration,1,1,MPI_COMM_SELF,MPI_COMM_WORLD,1,MPI_COMM_WORLD,0);
 
 
 if(!iam){
