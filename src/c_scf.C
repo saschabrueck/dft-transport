@@ -114,7 +114,6 @@ void c_scf_method(cp2k_transport_parameters cp2k_transport_params, cp2k_csr_inte
         transport_params.evoltfactor                 = cp2k_transport_params.evoltfactor;
         transport_params.NCRC_beyn                   = cp2k_transport_params.ncrc_beyn;
         transport_params.n_points_inv                = cp2k_transport_params.n_points_inv;
-        transport_params.n_atoms                     = cp2k_transport_params.n_atoms;
         transport_params.pexsi_ordering              = cp2k_transport_params.ordering;
         transport_params.pexsi_row_ordering          = cp2k_transport_params.row_ordering;
         transport_params.pexsi_verbosity             = cp2k_transport_params.verbosity;
@@ -150,7 +149,7 @@ void c_scf_method(cp2k_transport_parameters cp2k_transport_params, cp2k_csr_inte
 
         int cutout[2]={0,0};
         if (transport_params.cp2k_method==cp2k_methods::TRANSPORT) {
-            cutout[1-system]=transport_params.n_atoms/2;
+            cutout[1-system]=cp2k_transport_params.n_atoms/2;
         } else {
             cutout[0]=cp2k_transport_params.cutout[0];
             cutout[1]=cp2k_transport_params.cutout[1];
@@ -193,7 +192,7 @@ void c_scf_method(cp2k_transport_parameters cp2k_transport_params, cp2k_csr_inte
                 if (contactvec[i_t].inj_sign==+1) {
                     contactvec[i_t].atomstart = cutout[0];
                 } else if (contactvec[i_t].inj_sign==-1) {
-                    contactvec[i_t].atomstart = transport_params.n_atoms-contactvec[i_t].natoms-cutout[1];
+                    contactvec[i_t].atomstart = cp2k_transport_params.n_atoms-contactvec[i_t].natoms-cutout[1];
                 }
             }
         }
@@ -203,7 +202,7 @@ void c_scf_method(cp2k_transport_parameters cp2k_transport_params, cp2k_csr_inte
                 swap(contactvec[0].bandwidth,contactvec[1].bandwidth);
             }
             contactvec[0].atomstart = cutout[0];
-            contactvec[1].atomstart = transport_params.n_atoms-contactvec[1].natoms-cutout[1];
+            contactvec[1].atomstart = cp2k_transport_params.n_atoms-contactvec[1].natoms-cutout[1];
             for (uint i=muvec.size();i<contactvec.size();i++) {
                 contactvec[i].atomstart+=cutout[0];
             }
@@ -211,7 +210,7 @@ void c_scf_method(cp2k_transport_parameters cp2k_transport_params, cp2k_csr_inte
 
         std::vector<int> natoms_start(mpi_size);
         MPI_Allgather(&atom_of_bf[S.first_row],1,MPI_INT,&natoms_start[0],1,MPI_INT,MPI_COMM_WORLD);
-        natoms_start.push_back(transport_params.n_atoms);
+        natoms_start.push_back(cp2k_transport_params.n_atoms);
         std::vector<int> natoms_local;
         for (int i=0;i<mpi_size;i++) {
             natoms_local.push_back(natoms_start[i+1]-natoms_start[i]);
@@ -248,7 +247,7 @@ void c_scf_method(cp2k_transport_parameters cp2k_transport_params, cp2k_csr_inte
         }
         int *pairmatrix_global=NULL;
         if (!rank) {
-            pairmatrix_global = new int[maxpair*transport_params.n_atoms];
+            pairmatrix_global = new int[maxpair*cp2k_transport_params.n_atoms];
         }
         MPI_Gatherv(pairmatrix_local,natoms_local[rank],MPI_INT,pairmatrix_global,&natoms_local[0],&natoms_start[0],MPI_INT,0,MPI_COMM_WORLD);
         delete[] pairmatrix_local;
@@ -256,13 +255,13 @@ void c_scf_method(cp2k_transport_parameters cp2k_transport_params, cp2k_csr_inte
         std::vector<int> Bsizes;
         int num_tridiag_blocks = 1;
         if (!rank) {
-            std::vector<bool> adjmat(transport_params.n_atoms*transport_params.n_atoms);
-            for (int a=0;a<transport_params.n_atoms;a++) {
+            std::vector<bool> adjmat(cp2k_transport_params.n_atoms*cp2k_transport_params.n_atoms);
+            for (int a=0;a<cp2k_transport_params.n_atoms;a++) {
                 for (int i=0;i<maxpair;i++) {
                     int b=pairmatrix_global[a*maxpair+i]-1;
                     if (b+1) {
-                        adjmat[b*transport_params.n_atoms+a]=true;
-                        adjmat[a*transport_params.n_atoms+b]=true;
+                        adjmat[b*cp2k_transport_params.n_atoms+a]=true;
+                        adjmat[a*cp2k_transport_params.n_atoms+b]=true;
                     }
                 }
             }
@@ -279,7 +278,7 @@ void c_scf_method(cp2k_transport_parameters cp2k_transport_params, cp2k_csr_inte
                             int icol_start = contactvec[i].atomstart+contactvec[i].inj_sign*(contactvec[i].bandwidth+1)*contactvec[i].natoms;
                             int icol_end = contactvec[i].atomstart+contactvec[i].natoms+contactvec[i].inj_sign*(contactvec[i].bandwidth+1)*contactvec[i].natoms;
                             for (int icol=icol_start;icol<icol_end;icol++) {
-                                if (adjmat[icol*transport_params.n_atoms+irow]) {
+                                if (adjmat[icol*cp2k_transport_params.n_atoms+irow]) {
                                     block_exists = 1;
                                     contactvec[i].bandwidth++;
                                     break;
@@ -295,13 +294,13 @@ void c_scf_method(cp2k_transport_parameters cp2k_transport_params, cp2k_csr_inte
                 if (optimize_sigma_size) {
                     int tridiag_start = contactvec[i].atomstart;
                     if (contactvec[i].inj_sign==-1) tridiag_start = contactvec[i].atomstart-(contactvec[i].bandwidth-1)*contactvec[i].natoms;
-                    int mincol = transport_params.n_atoms;
+                    int mincol = cp2k_transport_params.n_atoms;
                     int maxcol = 0;
                     for (int irow=tridiag_start;irow<tridiag_start+contactvec[i].bandwidth*contactvec[i].natoms;irow++) {
                         int icol_start = tridiag_start+contactvec[i].inj_sign*contactvec[i].bandwidth*contactvec[i].natoms;
                         int icol_end = tridiag_start+contactvec[i].bandwidth*contactvec[i].natoms+contactvec[i].inj_sign*contactvec[i].bandwidth*contactvec[i].natoms;
                         for (int icol=icol_start;icol<icol_end;icol++) {
-                            if (adjmat[icol*transport_params.n_atoms+irow]) {
+                            if (adjmat[icol*cp2k_transport_params.n_atoms+irow]) {
                                 if (icol < mincol) mincol = icol;
                                 if (icol > maxcol) maxcol = icol;
                             }
@@ -319,12 +318,12 @@ void c_scf_method(cp2k_transport_parameters cp2k_transport_params, cp2k_csr_inte
             int maxcol = 0;
             while (tridiag_blocks_start[num_tridiag_blocks] < tridiag_end) {
                 for (int irow=tridiag_blocks_start[num_tridiag_blocks-1];irow<tridiag_blocks_start[num_tridiag_blocks];irow++) {
-                    int colend = transport_params.n_atoms-cutout[1];
+                    int colend = cp2k_transport_params.n_atoms-cutout[1];
                     if (irow<contactvec[0].bandwidth*contactvec[0].natoms) {
                         colend = contactvec[0].atomstart+2*contactvec[0].bandwidth*contactvec[0].natoms;
                     }
                     for (int icol=irow;icol<colend;icol++) {
-                        if (adjmat[icol*transport_params.n_atoms+irow]) {
+                        if (adjmat[icol*cp2k_transport_params.n_atoms+irow]) {
                             if (icol > maxcol) {
                                 maxcol = icol;
                             }
@@ -335,7 +334,7 @@ void c_scf_method(cp2k_transport_parameters cp2k_transport_params, cp2k_csr_inte
                 tridiag_blocks_start.push_back(maxcol+1);
             }
             tridiag_blocks_start[0] = 0;
-            tridiag_blocks_start[num_tridiag_blocks] = transport_params.n_atoms;
+            tridiag_blocks_start[num_tridiag_blocks] = cp2k_transport_params.n_atoms;
             for (int i=0;i<num_tridiag_blocks;i++) {
                 Bsizes.push_back(tridiag_blocks_start[i+1]-tridiag_blocks_start[i]);
             }
@@ -376,9 +375,8 @@ void c_scf_method(cp2k_transport_parameters cp2k_transport_params, cp2k_csr_inte
             cbw_mid=contactvec[0].bandwidth;
         }
 
-        transport_params.n_atoms = transport_params.n_atoms-cutout[0]-cutout[1];
         std::vector<int> orb_per_atom(1,0);
-        for (int i=0;i<transport_params.n_atoms;i++) {
+        for (int i=0;i<cp2k_transport_params.n_atoms-cutout[0]-cutout[1];i++) {
             orb_per_atom.push_back(orb_per_atom[i]+cp2k_transport_params.nsgf[cutout[0]+i]);
         }
 

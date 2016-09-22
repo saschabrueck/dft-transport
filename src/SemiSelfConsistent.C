@@ -13,7 +13,7 @@ int semiselfconsistent(cp2k_csr_interop_type S,cp2k_csr_interop_type KS,cp2k_csr
     int n_mu=muvec.size();
     if (n_mu != 2) return (LOGCERR, EXIT_FAILURE);
 
-    if (FEM->NAtom != transport_params.n_atoms) return (LOGCERR, EXIT_FAILURE);
+    if (FEM->NAtom != orb_per_atom.size()-1) return (LOGCERR, EXIT_FAILURE);
 
     double *doping_atom = new double[FEM->NAtom];
     for (int ia=0;ia<FEM->NAtom;ia++) {

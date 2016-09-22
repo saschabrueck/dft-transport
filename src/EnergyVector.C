@@ -95,15 +95,8 @@ sabtime=get_time(0.0);
     }
 if (!iam) cout << "TIME FOR DISTRIBUTING MATRICES " << get_time(sabtime) << endl;
 
-    std::vector<int> atom_of_bf;
     if (transport_params.cp2k_method==cp2k_methods::LOCAL_SCF) {
-        int atom=0;
-        for (int ibf=0;ibf<OverlapCollect->size_tot;ibf++) {
-            if (ibf==orb_per_at[atom+1]) ++atom;
-            atom_of_bf.push_back(atom);
-        }
-        if (++atom != transport_params.n_atoms) return (LOGCERR, EXIT_FAILURE);
-        KohnShamCollect->add_pot(OverlapCollect,&atom_of_bf[0],Vatom);
+        KohnShamCollect->add_pot(OverlapCollect,&orb_per_at[0],Vatom);
     }
 
 sabtime=get_time(0.0);
@@ -191,8 +184,8 @@ if (!iam) cout << "TIME FOR DENSITY " << get_time(sabtime) << endl;
         DensImag->distribute_back(*PImag,MPI_COMM_WORLD,&Tsizes[0],Tsizes.size(),transport_params.cutl,transport_params.cutr,matrix_comm);
 #endif
     } else {
-        DensReal->atom_allocate(OverlapCollect,&atom_of_bf[0],rho_atom,2.0);
-        MPI_Allreduce(MPI_IN_PLACE,rho_atom,transport_params.n_atoms,MPI_DOUBLE,MPI_SUM,MPI_COMM_WORLD);
+        DensReal->atom_allocate(OverlapCollect,&orb_per_at[0],rho_atom,2.0);
+        MPI_Allreduce(MPI_IN_PLACE,rho_atom,orb_per_at.size()-1,MPI_DOUBLE,MPI_SUM,MPI_COMM_WORLD);
     }
     delete KohnShamCollect;
     delete OverlapCollect;
