@@ -75,6 +75,7 @@ double sabtime;
 sabtime=get_time(0.0);
     MPI_Comm matrix_comm;
     TCSR<double> *OverlapCollect  = new TCSR<double>(Overlap ,MPI_COMM_WORLD,&Tsizes[0],Tsizes.size(),transport_params.cutl,transport_params.cutr,&matrix_comm);
+    MPI_Comm_free(&matrix_comm);
     TCSR<double> *KohnShamCollect = new TCSR<double>(KohnSham,MPI_COMM_WORLD,&Tsizes[0],Tsizes.size(),transport_params.cutl,transport_params.cutr,&matrix_comm);
     if (transport_params.cutl || transport_params.cutr) {
         TCSR<double> *OverlapCollectCut  = new TCSR<double>(OverlapCollect ,0,OverlapCollect->size_tot,transport_params.cutl,OverlapCollect->size_tot);
