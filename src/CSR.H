@@ -284,7 +284,7 @@ public:
     void psipsidagger(double*,int,double);
     void psipsidagger_transpose(CPX*,int,CPX);
     void psipsidagger_transpose(CPX*,CPX*,int,CPX);
-    void psipsidagger_transpose(TCSR<double>*,CPX*,int,CPX,CPX);
+    double psipsidagger_transpose(TCSR<double>*,TCSR<double>*,CPX*,int,CPX);
     void psipsidagger_transpose(double*,int,double);
     double psipsidagger(TCSR<double>*,CPX*,CPX*,CPX*,int,int,int,CPX);
     double psipsidagger_transpose(TCSR<double>*,CPX*,CPX*,CPX*,int,int,int,CPX);
@@ -2431,16 +2431,20 @@ inline void TCSR<double>::psipsidagger_transpose(CPX* psi_loc,CPX* psi,int nkval
 /************************************************************************************************/
 
 template <>
-inline void TCSR<double>::psipsidagger_transpose(TCSR<double>* mat,CPX* psi,int nkval,CPX factor, CPX factorI)
+inline double TCSR<double>::psipsidagger_transpose(TCSR<double>* matS,TCSR<double>* matI,CPX* psi,int nkval,CPX factor)
 {
     int i,e;
+    CPX z;
+    double result=0.0;
     for(i=0;i<size;i++){
         for(e=edge_i[i]-findx;e<edge_i[i+1]-findx;e++){
-            CPX res=c_zdotc(nkval,&psi[(index_j[e]-findx)*nkval],1,&psi[(first_row+i)*nkval],1);
-            nnz[e]+=real(factor*res);
-            mat->nnz[e]+=imag(factorI*res);
+            z=c_zdotc(nkval,&psi[(index_j[e]-findx)*nkval],1,&psi[(first_row+i)*nkval],1);
+            result+=matS->nnz[e]*real(z);
+            nnz[e]+=real(factor*z);
+            matI->nnz[e]+=imag(factor*z);
         }
     }
+    return result;
 }
 
 /************************************************************************************************/
