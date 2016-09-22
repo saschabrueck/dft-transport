@@ -71,7 +71,6 @@ struct transport_parameters
     inv_solver_methods::inv_solver_method_type inv_solver_method;
     real_int_methods::real_int_method_type     real_int_method;
     int    n_occ;
-    int    n_atoms;
     int    n_abscissae;
     int    n_kpoint;
     int    num_interval;
@@ -2208,8 +2207,14 @@ void TCSR<T>::copy_pbc_cell(contact_type contact,int strinum,int strirange,MPI_C
 /************************************************************************************************/
 
 template <class T>
-void TCSR<T>::add_pot(TCSR<T> *mat,int *atom_of_bf,T *vec)
+void TCSR<T>::add_pot(TCSR<T> *mat,int *n_of_el,T *vec)
 {
+    int* atom_of_bf=new int[size_tot];
+    int atom=0;
+    for (int i=0;i<size_tot;i++) {
+        if (i==n_of_el[atom+1]) ++atom;
+        atom_of_bf[i]=atom;
+    }
     for(int i=0;i<size;i++) {
         int atom_i=atom_of_bf[i+first_row];
         for(int e=edge_i[i]-findx;e<edge_i[i+1]-findx;e++) {
@@ -2217,6 +2222,7 @@ void TCSR<T>::add_pot(TCSR<T> *mat,int *atom_of_bf,T *vec)
             nnz[e]+=(vec[atom_i]+vec[atom_j])/2.0*mat->nnz[e];
         }
     }
+    delete[] atom_of_bf;
 }
 
 /************************************************************************************************/
@@ -2511,14 +2517,21 @@ inline double TCSR<double>::psipsidagger_transpose(TCSR<double>* mat,CPX* psi,CP
 /************************************************************************************************/
 
 template <class T>
-void TCSR<T>::atom_allocate(TCSR<T>* mat,int* atom_of_bf,T* result,T factor)
+void TCSR<T>::atom_allocate(TCSR<T>* mat,int* n_of_el,T* result,T factor)
 {
     int i,e;
+    int* atom_of_bf=new int[size_tot];
+    int atom=0;
+    for (i=0;i<size_tot;i++) {
+        if (i==n_of_el[atom+1]) ++atom;
+        atom_of_bf[i]=atom;
+    }
     for(i=0;i<size;i++){
         for(e=edge_i[i]-findx;e<edge_i[i+1]-findx;e++){
             result[atom_of_bf[first_row+i]]+=factor*nnz[e]*mat->nnz[e];
         }
     }
+    delete[] atom_of_bf;
 }
 
 /************************************************************************************************/
