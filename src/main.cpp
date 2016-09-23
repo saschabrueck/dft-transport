@@ -1,5 +1,6 @@
 #include <string.h>
 #include <mpi.h>
+#include <vector>
 #include <assert.h>
 #include <fstream>
 #include <iostream>
