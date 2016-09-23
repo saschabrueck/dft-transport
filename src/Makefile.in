@@ -26,9 +26,6 @@ $(EXECUTABLE): $(MAIN:.cpp=.o) $(OBJECTS)
 .cpp.o:
 	$(CPP) $(CXXFLAGS) $(INCLUDES) $(LDFLAGS) -c $< -o $@
 
-.cc.o:
-	$(CPP) $(CXXFLAGS) $(INCLUDES) $(LDFLAGS) -c $< -o $@
-
 .C.o:
 	$(CPP) $(CXXFLAGS) $(INCLUDES) $(LDFLAGS) -c $< -o $@
 
