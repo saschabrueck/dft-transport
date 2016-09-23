@@ -1,9 +1,6 @@
-#include <string.h>
 #include <mpi.h>
 #include <vector>
 #include <assert.h>
-#include <fstream>
-#include <iostream>
 #include "libcp2k.h"
 
 #ifdef HAVE_OMEN_POISSON
