@@ -563,3 +563,124 @@ int Singularities::determine_velocities(TCSR<double> **H,TCSR<double> **S,double
 
     return 0;
 }
+
+void Singularities::copy_full_to_cp2k_csr(cp2k_csr_interop_type& cp2kCSRmat,double* Pf,int start_i_to,int start_j_to,int length_i,int length_j)
+{
+    for(int r=0;r<cp2kCSRmat.nrows_local;r++){
+        int i=r+cp2kCSRmat.first_row-start_i_to;
+        if(i>=0 && i<length_i){
+            for(int e=cp2kCSRmat.rowptr_local[r]-1;e<cp2kCSRmat.rowptr_local[r+1]-1;e++){
+                int j=cp2kCSRmat.colind_local[e]-1-start_j_to;
+                if(j>=0 && j<length_j){
+                    cp2kCSRmat.nzvals_local[e]=Pf[i+j*length_i];
+                }
+            }
+        }
+    }
+}
+
+int Singularities::DensityFromBS(cp2k_csr_interop_type KohnSham,cp2k_csr_interop_type Overlap,cp2k_csr_interop_type* Density,std::vector<double> muvec)
+{
+    std::vector<double> k(n_k);
+    for (int i=1;i<n_k;i++) k[i]=i*M_PI/(n_k-1);
+    int seq_per_cpu=int(ceil(double(n_k)/master_ranks.size()));
+    int kpos;
+    for (int i_mu=0;i_mu<n_mu;i_mu++) {
+        int inj_sign=contactvec[i_mu].inj_sign;
+        int start=contactvec[i_mu].start_bs;
+        int bandwidth=contactvec[i_mu].bandwidth;
+        int ndof=contactvec[i_mu].ndof;
+        TCSR<double> **H = new TCSR<double>*[2*bandwidth+1];
+        TCSR<double> **S = new TCSR<double>*[2*bandwidth+1];
+        for (int ibw=0;ibw<=bandwidth;ibw++) {
+            TCSR<double> *Hcut = new TCSR<double>(KohnSham,start,ndof,start+inj_sign*ibw*ndof,ndof);
+            TCSR<double> *Scut = new TCSR<double>(Overlap ,start,ndof,start+inj_sign*ibw*ndof,ndof);
+            H[bandwidth+inj_sign*ibw] = new TCSR<double>(Hcut,&master_ranks[0],master_ranks.size(),MPI_COMM_WORLD);
+            S[bandwidth+inj_sign*ibw] = new TCSR<double>(Scut,&master_ranks[0],master_ranks.size(),MPI_COMM_WORLD);
+            c_dscal(H[bandwidth+inj_sign*ibw]->n_nonzeros,evfac,H[bandwidth+inj_sign*ibw]->nnz,1);
+            delete Hcut;
+            delete Scut;
+        }
+        for (int ibw=1;ibw<=bandwidth;ibw++) {
+            H[bandwidth-inj_sign*ibw] = new TCSR<double>(H[bandwidth+inj_sign*ibw]);
+            H[bandwidth-inj_sign*ibw]->sparse_transpose(H[bandwidth+inj_sign*ibw]);
+            S[bandwidth-inj_sign*ibw] = new TCSR<double>(S[bandwidth+inj_sign*ibw]);
+            S[bandwidth-inj_sign*ibw]->sparse_transpose(S[bandwidth+inj_sign*ibw]);
+        }
+        double **density_from_bs = new double*[2*bandwidth+1];
+        for (int ibw=0;ibw<2*bandwidth+1;ibw++) {
+            density_from_bs[ibw] = new double[ndof*ndof]();
+        }
+        for (int iseq=0;iseq<seq_per_cpu;iseq++)
+            if ( (kpos=iseq+k_rank*seq_per_cpu)<n_k && rank_bs_comm>=0 )
+                if (determine_density_from_bs(H,S,density_from_bs,muvec[i_mu],k[kpos],ndof,bandwidth))
+                    return (LOGCERR, EXIT_FAILURE);
+        for (int ibw=0;ibw<2*bandwidth+1;ibw++) {
+            if (!rank_bs_comm) {
+                MPI_Allreduce(MPI_IN_PLACE,density_from_bs[ibw],ndof*ndof,MPI_DOUBLE,MPI_SUM,equal_bs_rank_comm);
+            }
+            MPI_Bcast(density_from_bs[ibw],ndof*ndof,MPI_DOUBLE,0,MPI_COMM_WORLD);
+            for (int i=0;i<bandwidth;i++) {
+                int i_bw_pos=start+i*inj_sign*ndof;
+                int j_bw_pos=i_bw_pos+(ibw-bandwidth)*ndof;
+                int start_sigma=start;
+                if (inj_sign==-1) {
+                    start_sigma+=-(bandwidth-1)*ndof;
+                }
+                if (j_bw_pos>=start_sigma && j_bw_pos<start_sigma+bandwidth*ndof) {
+                    copy_full_to_cp2k_csr(*Density,density_from_bs[ibw],i_bw_pos,j_bw_pos,ndof,ndof);
+                }
+            }
+            delete[] density_from_bs[ibw];
+            delete H[ibw];
+            delete S[ibw];
+        }
+        delete[] density_from_bs;
+        delete[] H;
+        delete[] S;
+    }
+
+    return 0;
+}
+
+int Singularities::determine_density_from_bs(TCSR<double> **H,TCSR<double> **S,double **density,double mu,double k_in,int ndof,int bandwidth)
+{
+    double d_zer=0.0;
+    CPX z_zer=CPX(d_zer,d_zer);
+    CPX z_one=CPX(1.0,d_zer);
+    int ndofsq=ndof*ndof;
+
+    CPX kval=exp(CPX(d_zer,k_in));
+
+    double *energies_k = new double[ndof]();
+    CPX *eigvec = NULL;
+    CPX *ovlmat = NULL;
+    if (!rank_bs_comm) {
+        eigvec = new CPX[ndofsq]();
+        ovlmat = new CPX[ndofsq]();
+        for (int ibandw=-bandwidth;ibandw<=bandwidth;ibandw++) {
+            H[bandwidth+ibandw]->add_sparse_to_cmp_full(eigvec,ndof,ndof,pow(kval,ibandw));
+            S[bandwidth+ibandw]->add_sparse_to_cmp_full(ovlmat,ndof,ndof,pow(kval,ibandw));
+        }
+    }
+
+    if (p_eig(eigvec,ovlmat,energies_k,ndof,bs_comm)) return (LOGCERR, EXIT_FAILURE);
+
+    if (!rank_bs_comm) {
+        c_zscal(ndofsq,z_zer,ovlmat,1);
+        for (int i=0;i<ndof;i++) {
+            c_zgemm('N','C',ndof,ndof,1,0.5/(n_k-1)*pow(kval,bandwidth)*fermi(energies_k[i],mu,Temp,0),&eigvec[i*ndof],ndof,&eigvec[i*ndof],ndof,z_one,ovlmat,ndof);
+        }
+        for (int i=0;i<2*bandwidth+1;i++) {
+            double prefac=1.0;
+            if (k_in==0 || k_in==M_PI) prefac*=0.5;
+            c_daxpy(ndofsq,prefac,(double*)ovlmat,2,density[i],1);
+            c_zscal(ndofsq,1.0/kval,ovlmat,1);
+        }
+        delete[] eigvec;
+        delete[] ovlmat;
+    }
+    delete[] energies_k;
+
+    return 0;
+}

@@ -15,6 +15,7 @@ int Execute(cp2k_csr_interop_type,cp2k_csr_interop_type);
 double determine_fermi(double,int);
 void write_bandstructure(int,int,int,int);
 std::vector< std::vector< std::vector<double> > > get_propagating(const std::vector<CPX>&);
+int DensityFromBS(cp2k_csr_interop_type,cp2k_csr_interop_type,cp2k_csr_interop_type*,std::vector<double>);
 ~Singularities();
 
 /// Vector containing the singularity points
@@ -55,6 +56,8 @@ std::vector< std::vector<double> > curvatures_matrix;
 int determine_velocities(TCSR<double>**,TCSR<double>**,double,double*,double*,double*,int,int);
 int determine_imaginary_bandstructure(TCSR<double>**,TCSR<double>**,double,CPX*,int);
 void follow_band(int);
+void copy_full_to_cp2k_csr(cp2k_csr_interop_type&,double*,int,int,int,int);
+int determine_density_from_bs(TCSR<double>**,TCSR<double>**,double**,double,double,int,int);
 
 };
 
