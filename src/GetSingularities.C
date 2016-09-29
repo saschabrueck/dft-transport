@@ -585,7 +585,7 @@ int Singularities::DensityFromBS(cp2k_csr_interop_type KohnSham,cp2k_csr_interop
     for (int i=1;i<n_k;i++) k[i]=i*M_PI/(n_k-1);
     int seq_per_cpu=int(ceil(double(n_k)/master_ranks.size()));
     int kpos;
-    for (int i_mu=0;i_mu<n_mu;i_mu++) {
+    for (uint i_mu=0;i_mu<muvec.size();i_mu++) {
         int inj_sign=contactvec[i_mu].inj_sign;
         int start=contactvec[i_mu].start_bs;
         int bandwidth=contactvec[i_mu].bandwidth;
