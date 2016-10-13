@@ -7,7 +7,6 @@
 #include <limits>
 #include <valarray>
 #include "ScaLapack.H"
-//#include "Arpack.H"
 #include "GetSigma.H"
 
 class InjectionIEV {
@@ -43,9 +42,8 @@ if (!boundary_rank) {
     CPX *mats=new CPX[ndofsq];
     c_zcopy(ndofsq,KScpx,1,mats,1);
     for (int ibandwidth=1;ibandwidth<nblocksband;ibandwidth++)
-        c_zaxpy(ndofsq,d_one,&KScpx[ibandwidth*ndofsq],1,mats,1);//easier is possible because mats is symmetric
+        c_zaxpy(ndofsq,d_one,&KScpx[ibandwidth*ndofsq],1,mats,1);
     CPX *matb=new CPX[2*bandwidth*ndofsq];//lowest block of right hand side matrix
-// i think this is right for the general case
     c_zcopy(ndofsq,KScpx,1,matb,1);
     for (int iband=1;iband<=2*(bandwidth-1);iband++) {
         c_zcopy(ndofsq,&matb[(iband-1)*ndofsq],1,&matb[iband*ndofsq],1);
@@ -56,14 +54,11 @@ if (!boundary_rank) {
 // now do the inversion
     int *pivarrayn=new int[ndof];
     double workyytest;
-//    double sabtime=get_time(d_zer);
     if (complexenergypoint) {
-// the matrix mats is not hermitian for complex energy point i think
         c_zgetrf(ndof,ndof,mats,ndof,pivarrayn,&iinfo);
         if (iinfo) return (LOGCERR, EXIT_FAILURE);
         c_zgetrs('N',ndof,ndof*2*bandwidth,mats,ndof,pivarrayn,matb,ndof,&iinfo);
         if (iinfo) return (LOGCERR, EXIT_FAILURE);
-//        cout << "TIME FOR CPX INVERSION " << get_time(sabtime) << endl;
     } else {
         double *matsreal=new double[ndofsq];
         double *matbreal=new double[2*bandwidth*ndofsq];
@@ -78,7 +73,6 @@ if (!boundary_rank) {
         delete[] matsreal;
         for (int imat=0;imat<2*bandwidth*ndofsq;imat++) matb[imat]=CPX(matbreal[imat],d_zer);
         delete[] matbreal;
-//        cout << "TIME FOR REAL INVERSION " << get_time(sabtime) << endl;
     }
     delete[] pivarrayn;
     delete[] mats;
@@ -142,28 +136,20 @@ if (!boundary_rank) {
         CPX *workyc=new CPX[lworkyc];
         c_zgeev('N','V',nindnzcoln,matmn,nindnzcoln,eigvalcpx,&cdummy,1,eigveccfull,nindnzcoln,workyc,lworkyc,workdouble,&iinfo);
         if (iinfo) return (LOGCERR, EXIT_FAILURE);
-//        cout << "TIME FOR CPX DIAGONALIZATION " << get_time(sabtime) << endl;
         delete[] workdouble;
         delete[] workyc;
-//        sabtime=get_time(d_zer);
-//        Arpack* AR = new Arpack();
-//        AR->eigs(eigveccfull,eigvalcpx,matmn,nindnzcoln,300);
-//        cout << "TIME FOR ARPACK DIAGONALIZATION " << get_time(sabtime) << endl;
-//        delete AR;
     } else {
         double *eigvalreal=new double[nindnzcoln];
         double *eigvalimag=new double[nindnzcoln];
         double *eigvec=new double[nindnzcoln*nindnzcoln];
         double dddummy;
         double *matmnreal=new double[nindnzcoln*nindnzcoln];
-//        sabtime=get_time(d_zer);
         c_dcopy(nindnzcoln*nindnzcoln,(double*)matmn,2,matmnreal,1);
         c_dgeev('N','V',nindnzcoln,matmnreal,nindnzcoln,eigvalreal,eigvalimag,&dddummy,1,eigvec,nindnzcoln,&workyytest,-1,&iinfo);
         int lworky=int(workyytest);
         double *worky=new double[lworky];
         c_dgeev('N','V',nindnzcoln,matmnreal,nindnzcoln,eigvalreal,eigvalimag,&dddummy,1,eigvec,nindnzcoln,worky,lworky,&iinfo);
         if (iinfo) return (LOGCERR, EXIT_FAILURE);
-//        cout << "TIME FOR REAL DIAGONALIZATION " << get_time(sabtime) << endl;
         delete[] worky;
         delete[] matmnreal;
         int iwhile=0;
@@ -194,7 +180,6 @@ if (!boundary_rank) {
         c_zlacpy('A',ndof,nindnzcoln,&eigveccfull[blockbwpos],nindnzcoln,eigvecc,ndof);
     } else {
 // RECONSTRUCT
-//        sabtime=get_time(d_zer);
         CPX *eigveccrec=new CPX[nindnzcoln*nindrzcoln];
         c_zgemm('N','N',nindrzcoln,nindnzcoln,nindnzcoln,z_one,matmr,nindrzcoln,eigveccfull,nindnzcoln,z_zer,eigveccrec,nindrzcoln);
         for (int iind=0;iind<nindnzcoln;iind++)
@@ -204,7 +189,6 @@ if (!boundary_rank) {
         for (int iind=0;iind<nindrzcoln;iind++)
             c_zcopy(nindnzcoln,&eigveccrec[iind],nindrzcoln,&eigvecc[indrzcolvecn[iind]-bandwidth*ndof],ndof);
         delete[] eigveccrec;
-//        cout << "TIME FOR RECONSTRUCTION " << get_time(sabtime) << endl;
     }
     delete[] indnzcolvecn;
     delete[] indrzcolvecn;
