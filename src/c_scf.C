@@ -208,6 +208,15 @@ void c_scf_method(cp2k_transport_parameters cp2k_transport_params, cp2k_csr_inte
             }
         }
 
+        if (transport_params.cp2k_method==cp2k_methods::TRANSMISSION && !transport_params.extra_scf && !transport_params.obc) {
+            contactvec.resize(1);
+            muvec.resize(1);
+            contactvec[0].bandwidth = cp2k_transport_params.contacts_data[0];
+            contactvec[0].inj_sign  = cp2k_transport_params.contacts_data[3];
+            contactvec[0].natoms    = cp2k_transport_params.contacts_data[2];
+            contactvec[0].atomstart = cp2k_transport_params.contacts_data[1];
+        }
+
         std::vector<int> natoms_start(mpi_size);
         MPI_Allgather(&atom_of_bf[S.first_row],1,MPI_INT,&natoms_start[0],1,MPI_INT,MPI_COMM_WORLD);
         natoms_start.push_back(cp2k_transport_params.n_atoms);
@@ -311,33 +320,39 @@ void c_scf_method(cp2k_transport_parameters cp2k_transport_params, cp2k_csr_inte
                 }
             }
 
-            std::vector<int> tridiag_blocks_start;
-            tridiag_blocks_start.push_back(cutout[0]);
-            tridiag_blocks_start.push_back(contactvec[0].atomstart+contactvec[0].sigma_natoms);
-            int tridiag_end = contactvec[1].atomstart+contactvec[1].natoms-contactvec[1].sigma_natoms;
-            int maxcol = 0;
-            while (tridiag_blocks_start[num_tridiag_blocks] < tridiag_end) {
-                for (int irow=tridiag_blocks_start[num_tridiag_blocks-1];irow<tridiag_blocks_start[num_tridiag_blocks];irow++) {
-                    int colend = cp2k_transport_params.n_atoms-cutout[1];
-                    if (irow<contactvec[0].bandwidth*contactvec[0].natoms) {
-                        colend = contactvec[0].atomstart+2*contactvec[0].bandwidth*contactvec[0].natoms;
-                    }
-                    for (int icol=irow;icol<colend;icol++) {
-                        if (adjmat[icol*cp2k_transport_params.n_atoms+irow]) {
-                            if (icol > maxcol) {
-                                maxcol = icol;
+            if (!(transport_params.cp2k_method==cp2k_methods::TRANSMISSION && !transport_params.extra_scf && !transport_params.obc)) {
+                std::vector<int> tridiag_blocks_start;
+                tridiag_blocks_start.push_back(cutout[0]);
+                tridiag_blocks_start.push_back(contactvec[0].atomstart+contactvec[0].sigma_natoms);
+                int tridiag_end = contactvec[1].atomstart+contactvec[1].natoms-contactvec[1].sigma_natoms;
+                int maxcol = 0;
+                while (tridiag_blocks_start[num_tridiag_blocks] < tridiag_end) {
+                    for (int irow=tridiag_blocks_start[num_tridiag_blocks-1];irow<tridiag_blocks_start[num_tridiag_blocks];irow++) {
+                        int colend = cp2k_transport_params.n_atoms-cutout[1];
+                        if (irow<contactvec[0].bandwidth*contactvec[0].natoms) {
+                            colend = contactvec[0].atomstart+2*contactvec[0].bandwidth*contactvec[0].natoms;
+                        }
+                        for (int icol=irow;icol<colend;icol++) {
+                            if (adjmat[icol*cp2k_transport_params.n_atoms+irow]) {
+                                if (icol > maxcol) {
+                                    maxcol = icol;
+                                }
                             }
                         }
                     }
+                    num_tridiag_blocks++;
+                    tridiag_blocks_start.push_back(maxcol+1);
                 }
-                num_tridiag_blocks++;
-                tridiag_blocks_start.push_back(maxcol+1);
+                tridiag_blocks_start[0] = 0;
+                tridiag_blocks_start[num_tridiag_blocks] = cp2k_transport_params.n_atoms;
+                for (int i=0;i<num_tridiag_blocks;i++) {
+                    Bsizes.push_back(tridiag_blocks_start[i+1]-tridiag_blocks_start[i]);
+                }
+ 
+                Bsizes[0]-=cutout[0];
+                Bsizes[Bsizes.size()-1]-=cutout[1];
             }
-            tridiag_blocks_start[0] = 0;
-            tridiag_blocks_start[num_tridiag_blocks] = cp2k_transport_params.n_atoms;
-            for (int i=0;i<num_tridiag_blocks;i++) {
-                Bsizes.push_back(tridiag_blocks_start[i+1]-tridiag_blocks_start[i]);
-            }
+ 
         }
  
         for (uint i=0;i<contactvec.size();i++) {
@@ -349,9 +364,6 @@ void c_scf_method(cp2k_transport_parameters cp2k_transport_params, cp2k_csr_inte
         MPI_Bcast(&num_tridiag_blocks,1,MPI_INT,0,MPI_COMM_WORLD);
         Bsizes.resize(num_tridiag_blocks);
         MPI_Bcast(&Bsizes[0],num_tridiag_blocks,MPI_INT,0,MPI_COMM_WORLD);
- 
-        Bsizes[0]-=cutout[0];
-        Bsizes[Bsizes.size()-1]-=cutout[1];
  
         for (uint i=0;i<contactvec.size();i++) {
             int atom_start = contactvec[i].atomstart;
@@ -477,5 +489,7 @@ void c_scf_method(cp2k_transport_parameters cp2k_transport_params, cp2k_csr_inte
             myfile.close();
         }
     }
+
+    if (!rank) cout << "Transport iteration " << cp2k_transport_params.iscf << " finished" << endl;
 }
 

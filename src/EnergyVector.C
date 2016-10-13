@@ -257,9 +257,11 @@ int Energyvector::write_transmission_current(std::vector<CPX> energyvector,std::
             }
         }
         myfile.close();
-        cout << "CURRENT IS " << current << endl;
+        if (transport_params.cp2k_method==cp2k_methods::TRANSPORT) {
+            cout << "CURRENT FROM TRANSMISSION " << current << endl;
+        }
     }
-    if (!iam) {
+    if (!iam && transport_params.cp2k_method==cp2k_methods::TRANSMISSION) {
         stringstream mysstream;
         mysstream << "CurrentFromTransmission_" << transport_params.cp2k_scf_iter;
         ofstream myfile(mysstream.str().c_str());
@@ -347,7 +349,18 @@ if (!iam) cout << "TIME FOR PROPAGATING MODES " << get_time(sabtime) << endl;
         for (uint ie=0;ie<energyvector.size();ie++) {
             MPI_Bcast(&propagating_sizes[ie][0],contactvec.size(),MPI_INT,0,MPI_COMM_WORLD);
         }
-        if (!iam && contactvec.size()==muvec.size()+1) {
+        if (!iam && contactvec.size()==muvec.size()+1 && transport_params.cp2k_method==cp2k_methods::TRANSPORT) {
+            double cb_max = *max_element(singularities.energies_cb.begin(),singularities.energies_cb.end());
+            double current = 0.0;
+            for (uint iele=0;iele<energyvector.size();iele++) {
+                if (!imag(energyvector[iele]) && real(energyvector[iele])>cb_max) {
+                    double diff_fermi = fermi(real(energyvector[iele]),muvec[0],transport_params.temperature,0)-fermi(real(energyvector[iele]),muvec[1],transport_params.temperature,0);
+                    current += transport_params.conduct_quant*diff_fermi*real(stepvector[iele])*propagating_sizes[iele][contactvec.size()-1];
+                }
+            }
+            cout << "CURRENT FROM BANDSTRUCTURE " << current << endl;
+        }
+        if (!iam && contactvec.size()==muvec.size()+1 && transport_params.cp2k_method==cp2k_methods::TRANSMISSION) {
             stringstream mysstream;
             mysstream << "CurrentFromBandstructure_" << transport_params.cp2k_scf_iter;
             ofstream myfile(mysstream.str().c_str());
@@ -366,8 +379,10 @@ if (!iam) cout << "TIME FOR PROPAGATING MODES " << get_time(sabtime) << endl;
             }
             myfile.close();
         }
-        if (!iam && contactvec.size()==muvec.size()+1) {
-            ofstream myfile("TransmissionFromBandstructure");
+        if (!iam && contactvec.size()==muvec.size()+1 && transport_params.cp2k_method==cp2k_methods::TRANSMISSION) {
+            stringstream mysstream;
+            mysstream << "TransmissionFromBandstructure_" << transport_params.cp2k_scf_iter;
+            ofstream myfile(mysstream.str().c_str());
             myfile.precision(15);
             double cb_max = *max_element(singularities.energies_cb.begin(),singularities.energies_cb.end());
             for (uint iele=0;iele<energyvector.size();iele++)
