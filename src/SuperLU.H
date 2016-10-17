@@ -96,8 +96,8 @@ void SuperLU<CPX>::prepare()
     int info;
 
     ScalePermstructInit(A.nrow,A.ncol,&ScalePermstruct);
-    LUstructInit(A.nrow,A.ncol,&LUstruct);
-//    LUstructInit(A.ncol,&LUstruct);
+//    LUstructInit(A.nrow,A.ncol,&LUstruct);
+    LUstructInit(A.ncol,&LUstruct);
 
     PStatInit(&stat);
     
