@@ -208,13 +208,25 @@ void c_scf_method(cp2k_transport_parameters cp2k_transport_params, cp2k_csr_inte
             }
         }
 
-        if (transport_params.cp2k_method==cp2k_methods::TRANSMISSION && !transport_params.extra_scf && !transport_params.obc) {
-            contactvec.resize(1);
-            muvec.resize(1);
-            contactvec[0].bandwidth = cp2k_transport_params.contacts_data[0];
-            contactvec[0].inj_sign  = cp2k_transport_params.contacts_data[3];
-            contactvec[0].natoms    = cp2k_transport_params.contacts_data[2];
-            contactvec[0].atomstart = cp2k_transport_params.contacts_data[1];
+        if (transport_params.cp2k_method==cp2k_methods::TRANSMISSION) {
+            if (!transport_params.extra_scf && !transport_params.obc) {
+                contactvec.resize(1);
+                muvec.resize(1);
+                contactvec[0].bandwidth = cp2k_transport_params.contacts_data[0];
+                contactvec[0].inj_sign  = cp2k_transport_params.contacts_data[3];
+                contactvec[0].natoms    = cp2k_transport_params.contacts_data[2];
+                contactvec[0].atomstart = cp2k_transport_params.contacts_data[1];
+                if (contactvec[0].atomstart<0) {
+                    if (contactvec[0].inj_sign==+1) {
+                        contactvec[0].atomstart = cutout[0];
+                    } else if (contactvec[0].inj_sign==-1) {
+                        contactvec[0].atomstart = cp2k_transport_params.n_atoms-contactvec[0].natoms-cutout[1];
+                    }
+                }
+            } else {
+                cutout[0] = contactvec[0].atomstart;
+                cutout[1] = cp2k_transport_params.n_atoms-contactvec[1].atomstart-contactvec[1].natoms;
+            }
         }
 
         std::vector<int> natoms_start(mpi_size);
