@@ -139,7 +139,7 @@ sabtime=get_time(0.0);
                         if (resvec[i_mu].rcond<numeric_limits<double>::epsilon()) return (LOGCERR, EXIT_FAILURE);
                     }
                     bool transmission_difference=abs(abs(resvec[0].transm)-abs(resvec[1].transm))/max(1.0,min(abs(resvec[0].transm),abs(resvec[1].transm)))<0.1;
-                    bool transmission_magnitude=abs(resvec[0].transm)<*max_element(propagating_sizes[propos].begin(),propagating_sizes[propos].end())*10.0 || transport_params.real_int_method!=real_int_methods::GAUSSCHEBYSHEV;
+                    bool transmission_magnitude=abs(resvec[0].transm)<=*max_element(propagating_sizes[propos].begin(),propagating_sizes[propos].end())*10.0 || transport_params.real_int_method!=real_int_methods::GAUSSCHEBYSHEV;
                     if (transmission_difference && transmission_magnitude) {
                         transmission[propos]=resvec[0].transm;
                     } else {
