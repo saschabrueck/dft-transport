@@ -10,12 +10,13 @@ SOLVERS = @pardiso_dflag@ @mumps_dflag@ @superlu_dflag@ @pexsi_dflag@ @splitsolv
 LDFLAGS = $(LFLAGS) $(DFLAGS) $(SOLVERS) 
 
 MAIN = main.cpp
-SOURCES_CPP = pole.cpp
+SOURCES_CPP = @pexsi@
 EXCLUDE_C_LIST = @pardiso@ @semi_self_consistent@ 
 SOURCES_C = $(filter-out $(EXCLUDE_C_LIST), $(wildcard *.C))
 EXCLUDE_c_LIST = @parsers@ 
 SOURCES_c = $(filter-out $(EXCLUDE_c_LIST), $(wildcard *.c))
-OBJECTS = $(SOURCES_CPP:.cpp=.o) $(SOURCES_C:.C=.o) $(SOURCES_c:.c=.o)
+SOURCES_cu = @splitsolve@
+OBJECTS = $(SOURCES_CPP:.cpp=.o) $(SOURCES_C:.C=.o) $(SOURCES_c:.c=.o) $(SOURCES_cu:.cu=.o)
 EXECUTABLE = transport
 
 all: $(SOURCES_CPP) $(SOURCES_C) $(SOURCES_c) $(EXECUTABLE)
@@ -31,6 +32,9 @@ $(EXECUTABLE): $(MAIN:.cpp=.o) $(OBJECTS)
 
 .c.o:
 	$(GCC) $(CFLAGS) $(INCLUDES) $(LDFLAGS) -c $< -o $@
+
+.cu.o:
+	$(NVCC) $(NVCCFLAGS) $(INCLUDES) $(LDFLAGS) -c $< -o $@
 
 y.tab.c: parser.y
 	$(YACC) -d -b y $<

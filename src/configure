@@ -605,7 +605,9 @@ semi_self_consistent
 fem_poisson_dflag
 splitsolve_dflag
 splitsolve_dfalg
+splitsolve
 pexsi_dflag
+pexsi
 superlu_dflag
 mumps_dflag
 pardiso_dflag
@@ -1799,11 +1801,14 @@ fi
 if test "x$with_pexsi" == "xyes"; then
 	{ $as_echo "$as_me:$LINENO: PEXSI enabled." >&5
 $as_echo "$as_me: PEXSI enabled." >&6;}
+	pexsi=pole.cpp
+
 	pexsi_dflag=-DHAVE_PEXSI
 
 else
 	{ $as_echo "$as_me:$LINENO: No PEXSI." >&5
 $as_echo "$as_me: No PEXSI." >&6;}
+
 
 fi
 
@@ -1818,11 +1823,14 @@ fi
 if test "x$with_splitsolve" == "xyes"; then
 	{ $as_echo "$as_me:$LINENO: SplitSolve enabled." >&5
 $as_echo "$as_me: SplitSolve enabled." >&6;}
+	splitsolve=CWC_utility.cu
+
 	splitsolve_dfalg=-DHAVE_SPLITSOLVE
 
 else
 	{ $as_echo "$as_me:$LINENO: No SplitSolve." >&5
 $as_echo "$as_me: No SplitSolve." >&6;}
+
 
 fi
 

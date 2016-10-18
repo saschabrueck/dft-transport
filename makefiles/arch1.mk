@@ -3,9 +3,11 @@ YACC     = bison
 
 CPP      = mpic++ 
 GCC      = gcc 
+NVCC     = nvcc
 
-CFLAGS   = -g -w -Wall -fopenmp 
-CXXFLAGS = -std=c++11 $(CFLAGS)
+CFLAGS    = -g -w -Wall -fopenmp 
+CXXFLAGS  = -std=c++11 $(CFLAGS)
+NVCCFLAGS = -arch=compute_35 -code=sm_35
 
 TOP_DIR       = /data/seyedb/cp2k-omen
 TOOLCHAIN_DIR = /data/vjoost/toolchain-r16466/install
@@ -31,7 +33,7 @@ TOOLCHAIN_LIB = $(TOOLCHAIN_DIR)/lib
 LFLAGS   = -L$(LIBCP2K) -L$(TOOLCHAIN_LIB) -L$(LIBAZTEC) \
            -L$(LIBMUMPS) -L$(LIBSSPARSE) -L$(LIBQHULL) -L$(LIBARPACK)
 
-DFLAGS   = -Dlibcp2k -DAdd_ -DHAVE_MUMPS
+DFLAGS   = -Dlibcp2k -DAdd_ 
 
 LIBS     = -lm -lgfortran -lstdc++ \
            -lcp2k \
@@ -40,7 +42,7 @@ LIBS     = -lm -lgfortran -lstdc++ \
            -lparmetis -lmetis -lzmumps -ldmumps -lmumps_common -lpord -lsuperlu_dist_3.3 \
            -lscalapack -lreflapack -lrefblas \
            -lsuitesparseconfig \
-           -lqhullstatic -larpack -lderiv -lint -lxcf90 -lxc -lmpifort
+           -lqhullstatic -larpack -lderiv -lint -lxcf90 -lxc -lmpifort -lrt
 
 INCLUDES = -I$(INCAZTEC) -I$(INCSLUDIST) -I$(INCSSPARSE) -I$(INCMUMPS) -I$(INCQHULL) -I$(INCPEXSI)
 
