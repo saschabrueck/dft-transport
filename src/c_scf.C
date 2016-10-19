@@ -176,7 +176,7 @@ void c_scf_method(cp2k_transport_parameters cp2k_transport_params, cp2k_csr_inte
         for (uint i_c=0;i_c<contactvec.size();i_c++) {
             int i_t;
             if (cp2k_transport_params.contacts_data[4+stride*i_c]) {
-                if (cp2k_transport_params.contacts_data[4+stride*i_c]==+1) {
+                if (cp2k_transport_params.contacts_data[3+stride*i_c]==+1) {
                     i_t=i_p++;
                 } else {
                     i_t=num_p+i_m++;
