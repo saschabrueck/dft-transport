@@ -1,26 +1,5 @@
-HOW TO START:
 
-Prepare CP2K:
-1) get CP2K : svn checkout svn://svn.code.sf.net/p/cp2k/code/trunk cp2k 
-1) (optional) if you already have CP2K on your machine, update your working copy of CP2K using svn -update
-2) compile CP2K with popt or pdbg with target libcp2k : "make -j ARCH=...  VERSION=pdbg libcp2k"
-   and make sure it works with an arbitray input file
+Please visit the following link for a detailed information on how to use the code: 
 
-Compile and run:
-3) cd to makefiles/ and using the sample .mk file (arch1.mk) write a .mk file (say, myarch.mk) according to your local installations.
-   * In order to use CP2K add -Dlibcp2k to DFLAGS 
+https://www.cp2k.org/howto:cp2k_omen 
 
-4) create a Makefile and run make 
-   > cd src/
-   > ./configure --with-arch=myarch
-   > make 
-5) to run (example) 
-   > cd ../inputfiles/files/ 
-   > mpirun -np N ../../src/transport test_external_scf
-
-* more information about input parameters can be found at : 
-  https://manual.cp2k.org/trunk/CP2K_INPUT/FORCE_EVAL/DFT/TRANSPORT.html
-
-Extra functionalities: 
-9) to use PARDISO run 
-   > ./configure --with-pardiso
