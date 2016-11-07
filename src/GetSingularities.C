@@ -564,7 +564,7 @@ int Singularities::determine_velocities(TCSR<double> **H,TCSR<double> **S,double
     return 0;
 }
 
-void Singularities::copy_full_to_cp2k_csr(cp2k_csr_interop_type& cp2kCSRmat,double* Pf,int start_i_to,int start_j_to,int length_i,int length_j)
+void Singularities::add_full_to_scaled_cp2k_csr(cp2k_csr_interop_type& cp2kCSRmat,double* Pf,int start_i_to,int start_j_to,int length_i,int length_j,double a, double b)
 {
     for(int r=0;r<cp2kCSRmat.nrows_local;r++){
         int i=r+cp2kCSRmat.first_row-start_i_to;
@@ -572,7 +572,7 @@ void Singularities::copy_full_to_cp2k_csr(cp2k_csr_interop_type& cp2kCSRmat,doub
             for(int e=cp2kCSRmat.rowptr_local[r]-1;e<cp2kCSRmat.rowptr_local[r+1]-1;e++){
                 int j=cp2kCSRmat.colind_local[e]-1-start_j_to;
                 if(j>=0 && j<length_j){
-                    cp2kCSRmat.nzvals_local[e]=Pf[i+j*length_i];
+                    cp2kCSRmat.nzvals_local[e]=a*Pf[i+j*length_i]+b*cp2kCSRmat.nzvals_local[e];
                 }
             }
         }
@@ -620,6 +620,7 @@ int Singularities::DensityFromBS(cp2k_csr_interop_type KohnSham,cp2k_csr_interop
                 MPI_Allreduce(MPI_IN_PLACE,density_from_bs[ibw],ndof*ndof,MPI_DOUBLE,MPI_SUM,equal_bs_rank_comm);
             }
             MPI_Bcast(density_from_bs[ibw],ndof*ndof,MPI_DOUBLE,0,MPI_COMM_WORLD);
+/*
             for (int i=0;i<bandwidth;i++) {
                 int i_bw_pos=start+i*inj_sign*ndof;
                 int j_bw_pos=i_bw_pos+(ibw-bandwidth)*ndof;
@@ -629,6 +630,28 @@ int Singularities::DensityFromBS(cp2k_csr_interop_type KohnSham,cp2k_csr_interop
                 }
                 if (j_bw_pos>=start_sigma && j_bw_pos<start_sigma+bandwidth*ndof) {
                     copy_full_to_cp2k_csr(*Density,density_from_bs[ibw],i_bw_pos,j_bw_pos,ndof,ndof);
+                }
+            }
+*/
+            if (inj_sign==+1) {//MUST BE CALLED BEFORE INJSIGN==-1
+                for (int i=min(0,bandwidth-ibw);i<max(bandwidth,2*bandwidth-ibw);i++) {
+                    double a=1.0;
+                    double b=0.0;
+                    if (i<max(0,bandwidth-ibw)) {
+                        a=1.0;
+                        b=0.0;
+                    }
+                    add_full_to_scaled_cp2k_csr(*Density,density_from_bs[ibw],(Overlap.nrows_total+ndof*i)%Overlap.nrows_total,(Overlap.nrows_total+ndof*(i+ibw-bandwidth))%Overlap.nrows_total,ndof,ndof,a,b);
+                }
+            } else {
+                for (int i=min(-bandwidth,-ibw);i<max(0,bandwidth-ibw);i++) {
+                    double a=1.0;
+                    double b=0.0;
+                    if (i>=min(0,bandwidth-ibw)) {
+                        a=0.5;
+                        b=0.5;
+                    }
+                    add_full_to_scaled_cp2k_csr(*Density,density_from_bs[ibw],(Overlap.nrows_total+ndof*i)%Overlap.nrows_total,(Overlap.nrows_total+ndof*(i+ibw-bandwidth))%Overlap.nrows_total,ndof,ndof,a,b);
                 }
             }
             delete[] density_from_bs[ibw];
