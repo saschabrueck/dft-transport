@@ -56,7 +56,7 @@ std::vector< std::vector<double> > curvatures_matrix;
 int determine_velocities(TCSR<double>**,TCSR<double>**,double,double*,double*,double*,int,int);
 int determine_imaginary_bandstructure(TCSR<double>**,TCSR<double>**,double,CPX*,int);
 void follow_band(int);
-void copy_full_to_cp2k_csr(cp2k_csr_interop_type&,double*,int,int,int,int);
+void add_full_to_scaled_cp2k_csr(cp2k_csr_interop_type&,double*,int,int,int,int,double,double);
 int determine_density_from_bs(TCSR<double>**,TCSR<double>**,double**,double,double,int,int);
 
 };
