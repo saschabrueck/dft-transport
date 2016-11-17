@@ -502,6 +502,24 @@ void c_scf_method(cp2k_transport_parameters cp2k_transport_params, cp2k_csr_inte
         }
     }
 
+    if (!cp2k_transport_params.extra_scf) {
+        std::vector<double> mulli(cp2k_transport_params.n_atoms,0.0);
+        for (int i=0;i<S.nrows_local;i++) {
+            for (int e=S.rowptr_local[i]-1;e<S.rowptr_local[i+1]-1;e++) {
+                mulli[atom_of_bf[i+S.first_row]]+=S.nzvals_local[e]*KS.nzvals_local[e];
+            }
+        }
+        MPI_Allreduce(MPI_IN_PLACE,&mulli[0],cp2k_transport_params.n_atoms,MPI_DOUBLE,MPI_SUM,MPI_COMM_WORLD);
+        if (!rank) {
+            stringstream mysstream;
+            mysstream << "Mullipot_" << cp2k_transport_params.iscf;
+            ofstream myfile(mysstream.str().c_str());
+            myfile.precision(8);
+            for (int i=0;i<cp2k_transport_params.n_atoms;i++) myfile<<mulli[i]<<"\n";
+            myfile.close();
+        }
+    }
+
     if (!rank) cout << "Transport iteration " << cp2k_transport_params.iscf << " finished" << endl;
 }
 
