@@ -1,6 +1,8 @@
 #include <mpi.h>
 #include <math.h>
-#include <iostream>
+#ifdef HAVE_SUPERLU
+#include "SuperLU.H"
+#endif
 #include <time.h>
 #include <stdlib.h>
 #include <stdio.h>
@@ -19,9 +21,6 @@
 #ifdef HAVE_SPLITSOLVE
 #include "SplitSolve.H"
 #endif
-#ifdef HAVE_SUPERLU
-#include "SuperLU.H"
-#endif
 #ifdef HAVE_PEXSI
 #include "c_pexsi_interface.h"
 #endif
@@ -30,6 +29,7 @@
 #endif
 #include "GetSigma.H"
 #include "Density.H"
+#include <iostream>
 
 int density(TCSR<double> *KohnSham,TCSR<double> *Overlap,TCSR<double> *Ps,TCSR<double> *PsImag,CPX energy,CPX weight,transport_methods::transport_method_type method,std::vector<double> muvec,std::vector<contact_type> contactvec,std::vector<result_type> &resultvec,std::vector<int> Bsizes,std::vector<int> orb_per_at,transport_parameters transport_params,MPI_Comm matrix_comm)
 {
@@ -188,7 +188,7 @@ sabtime=get_time(d_zer);
             MPI_Dims_create(matrix_procs,2,nprowcol);
             plan = PPEXSIPlanInitialize(matrix_comm,nprowcol[0],nprowcol[1],output_index,&info);
             if (info) return (LOGCERR, EXIT_FAILURE);
-            PPEXSILoadRealSymmetricHSMatrix(plan,options,Overlap->size_tot,n_nonzeros_global,Overlap->n_nonzeros,Overlap->size,Overlap->edge_i,Overlap->index_j,HS_nnz_inp,1,NULL,&info);
+            PPEXSILoadRealHSMatrix(plan,options,Overlap->size_tot,n_nonzeros_global,Overlap->n_nonzeros,Overlap->size,Overlap->edge_i,Overlap->index_j,HS_nnz_inp,1,NULL,&info);
             if (info) return (LOGCERR, EXIT_FAILURE);
             PPEXSISymbolicFactorizeComplexSymmetricMatrix(plan,options,&info);
             if (info) return (LOGCERR, EXIT_FAILURE);
@@ -255,7 +255,7 @@ sabtime=get_time(d_zer);
             MPI_Dims_create(matrix_procs,2,nprowcol);
             plan = PPEXSIPlanInitialize(matrix_comm,nprowcol[0],nprowcol[1],output_index,&info);
             if (info) return (LOGCERR, EXIT_FAILURE);
-            PPEXSILoadRealSymmetricHSMatrix(plan,options,HamSig->size_tot,n_nonzeros_global,HamSig->n_nonzeros,HamSig->size,HamSig->edge_i,HamSig->index_j,HS_nnz_inp,1,NULL,&info);
+            PPEXSILoadRealHSMatrix(plan,options,HamSig->size_tot,n_nonzeros_global,HamSig->n_nonzeros,HamSig->size,HamSig->edge_i,HamSig->index_j,HS_nnz_inp,1,NULL,&info);
             if (info) return (LOGCERR, EXIT_FAILURE);
             PPEXSISymbolicFactorizeComplexSymmetricMatrix(plan,options,&info);
             if (info) return (LOGCERR, EXIT_FAILURE);
