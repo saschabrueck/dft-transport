@@ -1,10 +1,10 @@
 #ifndef _SUPERLU
 #define _SUPERLU
 
+#include "superlu_zdefs.h"
 #include "CSR.H"
 #include "Types.H"
 #include "LinearSolver.H"
-#include "superlu_zdefs.h"
 
 template <class T>
 class SuperLU : public LinearSolver<T>{
@@ -25,7 +25,7 @@ private:
     int m_loc,n;
     MPI_Comm slu_comm;
     SuperMatrix A;
-    superlu_options_t options;
+    superlu_dist_options_t options;
     gridinfo_t grid;
     SuperLUStat_t stat;
     ScalePermstruct_t ScalePermstruct;
