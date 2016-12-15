@@ -1,3 +1,11 @@
+# module load daint-gpu
+# module switch PrgEnv-cray PrgEnv-gnu
+# module load fftw
+# module load cray-tpsl
+# module load cudatoolkit
+# module load magma
+# module load ddt
+
 #SCOREP = scorep
 
 CPP = $(SCOREP) CC
@@ -41,5 +49,5 @@ LIBS = -lcp2k \
 	$(UMFPACKLIB) $(AMDLIB) $(AZTECLIB) $(QHULLLIB) $(PEXSILIB) $(MAGMALIB) \
 	-lzmumps -lsuperlu_dist -lptscotch -lptscotcherr -lscotch \
 	-lcuda -lcudart -lcublas -lcufft -lcusparse \
-	-lsci_gnu -lm -lrt -fopenmp -lgfortran -lstdc++
+	-lm -lrt -fopenmp -lgfortran -lstdc++
 INCLUDES = $(INCUFC) $(INCUMF) $(INCAMD) $(INCAZT) $(INCQHU) $(INCPEX) $(INCMAG)
