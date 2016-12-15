@@ -461,8 +461,28 @@ MPI_Barrier(matrix_comm);
                 MPI_Recv(&inj[NBC[1]*nprol],NBC[1]*npror,MPI_DOUBLE_COMPLEX,right_bc_rank,3,matrix_comm,&status);
             }
 //if npror is zero do i get a segfault because i access the bad element or is it not accessed
-            if (matrix_rank==left_bc_rank) selfenergies[0].Finalize();
-            if (matrix_rank==right_bc_rank) selfenergies[1].Finalize();
+            if (matrix_rank==left_bc_rank) {
+                resultvec[0].npro=selfenergies[0].n_propagating;
+                resultvec[0].ndec=selfenergies[0].n_dec;
+                resultvec[0].eigval_degeneracy=selfenergies[0].eigval_degeneracy;
+                resultvec[0].rcond=selfenergies[0].rcond;
+                selfenergies[0].Finalize();
+            }
+            MPI_Bcast(&resultvec[0].npro,1,MPI_INT,left_bc_rank,matrix_comm);
+            MPI_Bcast(&resultvec[0].ndec,1,MPI_INT,left_bc_rank,matrix_comm);
+            MPI_Bcast(&resultvec[0].eigval_degeneracy,1,MPI_INT,left_bc_rank,matrix_comm);
+            MPI_Bcast(&resultvec[0].rcond,1,MPI_DOUBLE,left_bc_rank,matrix_comm);
+            if (matrix_rank==right_bc_rank) {
+                resultvec[1].npro=selfenergies[1].n_propagating;
+                resultvec[1].ndec=selfenergies[1].n_dec;
+                resultvec[1].eigval_degeneracy=selfenergies[1].eigval_degeneracy;
+                resultvec[1].rcond=selfenergies[1].rcond;
+                selfenergies[1].Finalize();
+            }
+            MPI_Bcast(&resultvec[1].npro,1,MPI_INT,right_bc_rank,matrix_comm);
+            MPI_Bcast(&resultvec[1].ndec,1,MPI_INT,right_bc_rank,matrix_comm);
+            MPI_Bcast(&resultvec[1].eigval_degeneracy,1,MPI_INT,right_bc_rank,matrix_comm);
+            MPI_Bcast(&resultvec[1].rcond,1,MPI_DOUBLE,right_bc_rank,matrix_comm);
             if (boundary_id==n_mu) {
                 int solver_size,solver_rank;
                 MPI_Comm_size(boundary_comm,&solver_size);
