@@ -200,11 +200,11 @@ void c_scf_method(cp2k_transport_parameters cp2k_transport_params, cp2k_csr_inte
         }
 
         int cutout[2]={0,0};
+        cutout[0]=cp2k_transport_params.cutout[0];
+        cutout[1]=cp2k_transport_params.cutout[1];
         if (transport_params.cp2k_method==cp2k_methods::TRANSPORT) {
+            cutout[system]=0;
             cutout[1-system]=cp2k_transport_params.n_atoms/2;
-        } else {
-            cutout[0]=cp2k_transport_params.cutout[0];
-            cutout[1]=cp2k_transport_params.cutout[1];
         }
         transport_params.obc                         = cp2k_transport_params.obc_equilibrium || cutout[0] || cutout[1];
 
