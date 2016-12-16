@@ -1257,27 +1257,6 @@ _ACEOF
 ac_status=$?
 fi
 
-if test -n "$ac_init_help"; then
-  case $ac_init_help in
-     short | recursive ) echo "Configuration of CP2K-OMEN version-0.1:";;
-   esac
-  cat <<\_ACEOF
-
-Optional Packages:
-  --with-PACKAGE[=ARG]    use PACKAGE [ARG=yes]
-  --without-PACKAGE       do not use PACKAGE (same as --with-PACKAGE=no)
-  --with-arch             machine dependent .mk file. Default: arch1
-  --with-pardiso          enable PARDISO. Default: no
-  --with-mumps            enable MUMPS. Default: no
-  --with-superlu          enable SuperLU. Default: no
-  --with-pexsi            enable PEXSI. Default: no
-  --with-splitsolve       enable SplitSolve. Default: no
-  --with-fempoisson       enable FEM-based Poisson solver. Default: no
-
-_ACEOF
-ac_status=$?
-fi
-
 if test "$ac_init_help" = "recursive"; then
   # If there are subdirs, report their specific --help.
   for ac_dir in : $ac_subdirs_all; do test "x$ac_dir" = x: && continue
