@@ -13,7 +13,35 @@
  *          Here only call functions that evaluate a P matrix.   
  */
 
-void add_to_cp2k_csr(cp2k_csr_interop_type& cp2kCSRmat,double factor,int start_i_fr,int start_j_fr,int start_i_to,int start_j_to,int length_i,int length_j,MPI_Comm cp2k_comm)
+void write_cp2k_csr(cp2k_csr_interop_type& cp2kCSRmat,const char* filename)
+{
+    ofstream myfile;
+    myfile.open(filename);
+    myfile.precision(14);
+    for(int i=0;i<cp2kCSRmat.nrows_local;i++){
+        for(int e=cp2kCSRmat.rowptr_local[i]-1;e<cp2kCSRmat.rowptr_local[i+1]-1;e++){
+            myfile<<i+1+cp2kCSRmat.first_row<<" "<<cp2kCSRmat.colind_local[e]<<" "<<cp2kCSRmat.nzvals_local[e]<<"\n";
+        }
+    }
+    myfile.close();                                                   
+}
+
+void add_full_to_scaled_cp2k_csr(cp2k_csr_interop_type& cp2kCSRmat,double* Pf,int start_i_to,int start_j_to,int length_i,int length_j,double a, double b)
+{
+    for(int r=0;r<cp2kCSRmat.nrows_local;r++){
+        int i=r+cp2kCSRmat.first_row-start_i_to;
+        if(i>=0 && i<length_i){
+            for(int e=cp2kCSRmat.rowptr_local[r]-1;e<cp2kCSRmat.rowptr_local[r+1]-1;e++){
+                int j=cp2kCSRmat.colind_local[e]-1-start_j_to;
+                if(j>=0 && j<length_j){
+                    cp2kCSRmat.nzvals_local[e]=a*Pf[i+j*length_i]+b*cp2kCSRmat.nzvals_local[e];
+                }
+            }
+        }
+    }
+}
+
+void add_from_to_scaled_cp2k_csr(cp2k_csr_interop_type& cp2kCSRmat,double a, double b,int start_i_fr,int start_j_fr,int start_i_to,int start_j_to,int length_i,int length_j,MPI_Comm cp2k_comm)
 {
     TCSR<double> *Pmc = new TCSR<double>(cp2kCSRmat,start_i_fr,length_i,start_j_fr,length_j);
     TCSR<double> *Pm  = new TCSR<double>(Pmc,cp2k_comm);
@@ -21,40 +49,57 @@ void add_to_cp2k_csr(cp2k_csr_interop_type& cp2kCSRmat,double factor,int start_i
     double *Pf = new double[length_i*length_j];
     Pm->sparse_to_full(Pf,length_i,length_j);
     delete Pm;
-    for(int r=0;r<cp2kCSRmat.nrows_local;r++){
-        int i=r+cp2kCSRmat.first_row-start_i_to;
-        if(i>=0 && i<length_i){
-            for(int e=cp2kCSRmat.rowptr_local[r]-1;e<cp2kCSRmat.rowptr_local[r+1]-1;e++){
-                int j=cp2kCSRmat.colind_local[e]-1-start_j_to;
-                if(j>=0 && j<length_j){
-                    cp2kCSRmat.nzvals_local[e]+=factor*Pf[i+j*length_i];
-                }
-            }
-        }
-    }
+    add_full_to_scaled_cp2k_csr(cp2kCSRmat,Pf,start_i_to,start_j_to,length_i,length_j,a,b);
     delete[] Pf;
 }
 
-void copy_to_cp2k_csr(cp2k_csr_interop_type& cp2kCSRmat,double factor,int start_i_fr,int start_j_fr,int start_i_to,int start_j_to,int length_i,int length_j,MPI_Comm cp2k_comm)
+void write_scaled_cp2k_csr_bin(cp2k_csr_interop_type& cp2kCSRmat,const char* filename,double factor,MPI_Comm cp2k_comm)
 {
-    TCSR<double> *Pmc = new TCSR<double>(cp2kCSRmat,start_i_fr,length_i,start_j_fr,length_j);
-    TCSR<double> *Pm  = new TCSR<double>(Pmc,cp2k_comm);
-    delete Pmc;
-    double *Pf = new double[length_i*length_j];
-    Pm->sparse_to_full(Pf,length_i,length_j);
-    delete Pm;
-    for(int r=0;r<cp2kCSRmat.nrows_local;r++){
-        int i=r+cp2kCSRmat.first_row-start_i_to;
-        if(i>=0 && i<length_i){
-            for(int e=cp2kCSRmat.rowptr_local[r]-1;e<cp2kCSRmat.rowptr_local[r+1]-1;e++){
-                int j=cp2kCSRmat.colind_local[e]-1-start_j_to;
-                if(j>=0 && j<length_j){
-                    cp2kCSRmat.nzvals_local[e]=factor*Pf[i+j*length_i];
-                }
-            }
+    MPI_File file;
+    MPI_Status status;
+    MPI_File_open(cp2k_comm,filename,MPI_MODE_CREATE|MPI_MODE_WRONLY,MPI_INFO_NULL,&file);
+    int rank,mpi_size;
+    MPI_Comm_size(cp2k_comm,&mpi_size);
+    MPI_Comm_rank(cp2k_comm,&rank);
+
+    int *dist = new int[mpi_size];
+    int *disp = new int[mpi_size];
+    MPI_Allgather(&cp2kCSRmat.nze_local,1,MPI_INT,dist,1,MPI_INT,cp2k_comm);
+    disp[0]=0;
+    for (int i=0;i<mpi_size-1;i++) {
+        disp[i+1]=disp[i]+dist[i];
+    }
+
+    MPI_Offset offset = 0;
+    if (rank) offset=(4*disp[rank]+3)*sizeof(double);
+    delete[] dist;
+    delete[] disp;
+
+    MPI_File_seek(file,offset,MPI_SEEK_SET);
+
+    if (!rank) {
+        double head_1=(double) cp2kCSRmat.nrows_total;
+        double head_2=(double) cp2kCSRmat.nze_total;
+        double head_3=(double) 1;
+        MPI_File_write(file,&head_1,1,MPI_DOUBLE,&status);
+        MPI_File_write(file,&head_2,1,MPI_DOUBLE,&status);
+        MPI_File_write(file,&head_3,1,MPI_DOUBLE,&status);
+    }
+
+    for (int i=0;i<cp2kCSRmat.nrows_local;i++) {
+        for(int e=cp2kCSRmat.rowptr_local[i]-1;e<cp2kCSRmat.rowptr_local[i+1]-1;e++){
+            double i_val=(double) i+cp2kCSRmat.first_row+1;
+            double j_val=(double) cp2kCSRmat.colind_local[e];
+            double r_val=factor*cp2kCSRmat.nzvals_local[e];
+            double m_val=0.0;
+            MPI_File_write(file,&i_val,1,MPI_DOUBLE,&status);
+            MPI_File_write(file,&j_val,1,MPI_DOUBLE,&status);
+            MPI_File_write(file,&r_val,1,MPI_DOUBLE,&status);
+            MPI_File_write(file,&m_val,1,MPI_DOUBLE,&status);
         }
     }
-    delete[] Pf;
+
+    MPI_File_close(&file);
 }
 
 #ifdef HAVE_PIMAG
@@ -69,13 +114,20 @@ void c_scf_method(cp2k_transport_parameters cp2k_transport_params, cp2k_csr_inte
     char gpu_string[255];
     set_gpu(0,gpu_string);
 #endif
+
+    c_dscal(P->nze_local,0.5,P->nzvals_local,1);
+
+/*
+    write_scaled_cp2k_csr_bin( S,"S_4.bin",1.0,MPI_COMM_WORLD);
+    write_scaled_cp2k_csr_bin(KS,"H_4.bin",cp2k_transport_params.evoltfactor,MPI_COMM_WORLD);
+    return;
+*/
+
     int rank,mpi_size;
     MPI_Comm_size(MPI_COMM_WORLD,&mpi_size);
     MPI_Comm_rank(MPI_COMM_WORLD,&rank);
 
     if (!rank) cout << "Starting Transport" << endl;
-
-    c_dscal(P->nze_local,0.5,P->nzvals_local,1);
  
     std::vector<int> atom_of_bf;
     for (int a=0;a<cp2k_transport_params.n_atoms;a++) {
@@ -423,25 +475,25 @@ void c_scf_method(cp2k_transport_parameters cp2k_transport_params, cp2k_csr_inte
         int cndof=cndof_pbc;
         for (int i=0;i<cbw_pbc;i++) {
             for (int ii=0;ii<=i;ii++) {
-                copy_to_cp2k_csr(*P,0.5,\
+                add_from_to_scaled_cp2k_csr(*P,0.5,0.0,\
                         (i+1+offset)*cndof,\
                         offset*cndof,\
                         ii*cndof,\
                         size_tot+(ii-(i+1))*cndof,\
                         cndof,cndof,MPI_COMM_WORLD);
-                add_to_cp2k_csr(*P,0.5,\
+                add_from_to_scaled_cp2k_csr(*P,0.5,1.0,\
                         size_tot-(offset+1)*cndof,\
                         size_tot-(i+2+offset)*cndof,\
                         ii*cndof,\
                         size_tot+(ii-(i+1))*cndof,\
                         cndof,cndof,MPI_COMM_WORLD);
-                copy_to_cp2k_csr(*P,0.5,\
+                add_from_to_scaled_cp2k_csr(*P,0.5,0.0,\
                         offset*cndof,\
                         (i+1+offset)*cndof,\
                         size_tot+(ii-(i+1))*cndof,\
                         ii*cndof,\
                         cndof,cndof,MPI_COMM_WORLD);
-                add_to_cp2k_csr(*P,0.5,\
+                add_from_to_scaled_cp2k_csr(*P,0.5,1.0,\
                         size_tot-(i+2+offset)*cndof,\
                         size_tot-(offset+1)*cndof,\
                         size_tot+(ii-(i+1))*cndof,\
@@ -456,25 +508,25 @@ void c_scf_method(cp2k_transport_parameters cp2k_transport_params, cp2k_csr_inte
         int cndof=cndof_mid;
         for (int i=0;i<cbw_mid;i++) {
             for (int ii=0;ii<=i;ii++) {
-                copy_to_cp2k_csr(*P,0.5,\
+                add_from_to_scaled_cp2k_csr(*P,0.5,0.0,\
                         mid+(-i-2)*cndof,\
                         mid+(-1)*cndof,\
                         mid+(-i-1+ii)*cndof,\
                         mid+(0+ii)*cndof,\
                         cndof,cndof,MPI_COMM_WORLD);
-                add_to_cp2k_csr(*P,0.5,\
+                add_from_to_scaled_cp2k_csr(*P,0.5,1.0,\
                         mid+0*cndof,\
                         mid+(i+1)*cndof,\
                         mid+(-i-1+ii)*cndof,\
                         mid+(0+ii)*cndof,\
                         cndof,cndof,MPI_COMM_WORLD);
-                copy_to_cp2k_csr(*P,0.5,\
+                add_from_to_scaled_cp2k_csr(*P,0.5,0.0,\
                         mid+(-1)*cndof,\
                         mid+(-i-2)*cndof,\
                         mid+(0+ii)*cndof,\
                         mid+(-i-1+ii)*cndof,\
                         cndof,cndof,MPI_COMM_WORLD);
-                add_to_cp2k_csr(*P,0.5,\
+                add_from_to_scaled_cp2k_csr(*P,0.5,1.0,\
                         mid+(i+1)*cndof,\
                         mid+0*cndof,\
                         mid+(0+ii)*cndof,\
