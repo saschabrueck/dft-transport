@@ -559,7 +559,9 @@ void InjectionBeyn<T>::get_Q_matrix(CPX *Q,CPX *Q2,CPX *Y,TCSR<CPX> **A,int sign
     }
 
     MPI_Comm_free(&lin_comm);
-    MPI_Comm_free(&master_comm);
+    if (master_comm!=MPI_COMM_NULL) {
+        MPI_Comm_free(&master_comm);
+    }
 
 }
 

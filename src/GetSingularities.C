@@ -38,14 +38,19 @@ Singularities::Singularities(transport_parameters transport_params,std::vector<c
     int color = iam / size_bs_comm;
     if (iam>=size_bs_comm*n_k) color = MPI_UNDEFINED;
     MPI_Comm_split(MPI_COMM_WORLD,color,iam,&bs_comm);
-    MPI_Comm_rank(bs_comm,&rank_bs_comm);
-    color = rank_bs_comm;
     if (iam>=size_bs_comm*n_k) {
-        color = MPI_UNDEFINED;
         rank_bs_comm = -1;
+        color = MPI_UNDEFINED;
+    } else {
+        MPI_Comm_rank(bs_comm,&rank_bs_comm);
+        color = rank_bs_comm;
     }
     MPI_Comm_split(MPI_COMM_WORLD,color,iam,&equal_bs_rank_comm);
-    MPI_Comm_rank(equal_bs_rank_comm,&k_rank);
+    if (iam>=size_bs_comm*n_k) {
+        k_rank = -1;
+    } else {
+        MPI_Comm_rank(equal_bs_rank_comm,&k_rank);
+    }
     int k_size;
     if (!iam) MPI_Comm_size(equal_bs_rank_comm,&k_size);
     MPI_Bcast(&k_size,1,MPI_INT,0,MPI_COMM_WORLD);
@@ -58,8 +63,12 @@ Singularities::Singularities(transport_parameters transport_params,std::vector<c
 
 Singularities::~Singularities()
 {
-    MPI_Comm_free(&bs_comm);
-    MPI_Comm_free(&equal_bs_rank_comm);
+    if (bs_comm!=MPI_COMM_NULL) {
+        MPI_Comm_free(&bs_comm);
+    }
+    if (equal_bs_rank_comm!=MPI_COMM_NULL) {
+        MPI_Comm_free(&equal_bs_rank_comm);
+    }
 }
 
 int Singularities::Execute(cp2k_csr_interop_type KohnSham,cp2k_csr_interop_type Overlap)
