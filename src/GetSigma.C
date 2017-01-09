@@ -190,6 +190,24 @@ int BoundarySelfEnergy::Cutout(TCSR<CPX> *SumHamC,contact_type pcontact,CPX pene
                 H[bandwidth+ibw]->sparse_transpose(H[bandwidth-ibw]);
             }
         }
+        int tau_from_ndof_blocks=0;
+        if (tau_from_ndof_blocks) {
+            CPX* Hfull = new CPX[3*ntriblock*ntriblock]();
+            for (int ibw=0;ibw<bandwidth;ibw++) {
+                for (int jbw=0;jbw<2*bandwidth+1;jbw++) {
+                    for(int i=0;i<ndof;i++){
+                        for(int e=H[jbw]->edge_i[i]-H[jbw]->findx;e<H[jbw]->edge_i[i+1]-H[jbw]->findx;e++){
+                            int j=H[jbw]->index_j[e]-H[jbw]->findx;
+                            Hfull[ndof*ibw+(ibw+jbw)*ndof*ntriblock+i+j*ntriblock]=H[jbw]->nnz[e];
+                        }
+                    }
+                }
+            }
+            H1t->full_to_sparse(&Hfull[(1-inj_sign)*ntriblock*ntriblock],ntriblock,ntriblock);
+            H0-> full_to_sparse(&Hfull[             ntriblock*ntriblock],ntriblock,ntriblock);
+            H1-> full_to_sparse(&Hfull[(1+inj_sign)*ntriblock*ntriblock],ntriblock,ntriblock);
+            delete[] Hfull;
+        }
     } else {
         delete H0;
         delete H1;
