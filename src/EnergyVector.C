@@ -252,7 +252,7 @@ int Energyvector::write_transmission_current(std::vector<CPX> energyvector,std::
         for (uint iele=0;iele<energyvector.size();iele++) {
             if (!imag(energyvector[iele])) {
                 myfile << real(energyvector[iele]) << " " << real(stepvector[iele]) << " " << transmission[iele] << endl;
-                double diff_fermi=fermi(real(energyvector[iele]),muvec[0],transport_params.temperature,0)-fermi(real(energyvector[iele]),muvec[1],transport_params.temperature,0);
+                double diff_fermi = fermi(real(energyvector[iele]),muvec[0],transport_params.temperature,0)-fermi(real(energyvector[iele]),muvec[1],transport_params.temperature,0);
                 current += transport_params.conduct_quant*diff_fermi*real(stepvector[iele])*(-transmission[iele]);
             }
         }
@@ -262,22 +262,31 @@ int Energyvector::write_transmission_current(std::vector<CPX> energyvector,std::
         }
     }
     if (!iam && transport_params.cp2k_method==cp2k_methods::TRANSMISSION) {
-        stringstream mysstream;
-        mysstream << "CurrentFromTransmission_" << transport_params.cp2k_scf_iter;
-        ofstream myfile(mysstream.str().c_str());
+        ofstream myfile("CurrentFromTransmissionComplete");
+        ofstream myfily("CurrentFromTransmissionAboveFermiLevel");
         myfile.precision(15);
+        myfily.precision(15);
         for (int ibias=-600;ibias<=600;ibias++) {
             double dbias=ibias*0.001;
-            double current = 0.0;
+            double currentc = 0.0;
+            double currentf = 0.0;
             for (uint iele=0;iele<energyvector.size();iele++) {
                 if (!imag(energyvector[iele])) {
-                    double diff_fermi = fermi(real(energyvector[iele]),muvec[0]+dbias,transport_params.temperature,0)-fermi(real(energyvector[iele]),muvec[0],transport_params.temperature,0);
-                    current += transport_params.conduct_quant*diff_fermi*real(stepvector[iele])*(-transmission[iele]);
+                    double diff_fermi = fermi(real(energyvector[iele]),muvec[0]-dbias,transport_params.temperature,0)-fermi(real(energyvector[iele]),muvec[0],transport_params.temperature,0);
+                    double current = transport_params.conduct_quant*diff_fermi*real(stepvector[iele])*(-transmission[iele]);
+                    currentc += current;
+                    if (real(energyvector[iele])>muvec[0]) {
+                        currentf += current;
+                    }
                 }
             }
-            myfile << dbias << " " << current << endl;
+            myfile << dbias << " " << currentc << endl;
+            if (ibias>=0) {
+                myfily << dbias << " " << currentf << endl;
+            }
         }
         myfile.close();
+        myfily.close();
     }
     return 0;
 }
@@ -371,7 +380,7 @@ if (!iam) cout << "TIME FOR PROPAGATING MODES " << get_time(sabtime) << endl;
                 double current = 0.0;
                 for (uint iele=0;iele<energyvector.size();iele++) {
                     if (!imag(energyvector[iele]) && real(energyvector[iele])>cb_max) {
-                        double diff_fermi = fermi(real(energyvector[iele]),muvec[0]+dbias,transport_params.temperature,0)-fermi(real(energyvector[iele]),muvec[0],transport_params.temperature,0);
+                        double diff_fermi = fermi(real(energyvector[iele]),muvec[0]-dbias,transport_params.temperature,0)-fermi(real(energyvector[iele]),muvec[0],transport_params.temperature,0);
                         current += transport_params.conduct_quant*diff_fermi*real(stepvector[iele])*propagating_sizes[iele][contactvec.size()-1];
                     }
                 }

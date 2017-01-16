@@ -26,6 +26,34 @@ void write_cp2k_csr(cp2k_csr_interop_type& cp2kCSRmat,const char* filename)
     myfile.close();                                                   
 }
 
+void read_nzvals_bin(cp2k_csr_interop_type& cp2kCSRmat,const char* filename,MPI_Comm cp2k_comm)
+{
+    MPI_File file;
+    MPI_Status status;
+    MPI_File_open(cp2k_comm,filename,MPI_MODE_RDONLY,MPI_INFO_NULL,&file);
+    int rank,mpi_size;
+    MPI_Comm_size(cp2k_comm,&mpi_size);
+    MPI_Comm_rank(cp2k_comm,&rank);
+
+    int *dist = new int[mpi_size];
+    int *disp = new int[mpi_size];
+    MPI_Allgather(&cp2kCSRmat.nze_local,1,MPI_INT,dist,1,MPI_INT,cp2k_comm);
+    disp[0]=0;
+    for (int i=0;i<mpi_size-1;i++) {
+        disp[i+1]=disp[i]+dist[i];
+    }
+
+    MPI_Offset offset = disp[rank]*sizeof(double);
+
+    delete[] dist;
+    delete[] disp;
+
+    MPI_File_seek(file,offset,MPI_SEEK_SET);
+    MPI_File_read(file,cp2kCSRmat.nzvals_local,cp2kCSRmat.nze_local,MPI_DOUBLE,&status);
+
+    MPI_File_close(&file);
+}
+
 void add_full_to_scaled_cp2k_csr(cp2k_csr_interop_type& cp2kCSRmat,double* Pf,int start_i_to,int start_j_to,int length_i,int length_j,double a, double b)
 {
     for(int r=0;r<cp2kCSRmat.nrows_local;r++){
@@ -470,6 +498,7 @@ void c_scf_method(cp2k_transport_parameters cp2k_transport_params, cp2k_csr_inte
 
     }
 
+    int overwrite_first_last_diag_block=1;
     if (cndof_pbc) {
         int size_tot=S.nrows_total;
         int offset=0;
@@ -501,6 +530,20 @@ void c_scf_method(cp2k_transport_parameters cp2k_transport_params, cp2k_csr_inte
                         ii*cndof,\
                         cndof,cndof,MPI_COMM_WORLD);
             }
+        }
+        if (overwrite_first_last_diag_block) {
+            add_from_to_scaled_cp2k_csr(*P,1.0,0.0,\
+                    size_tot-(offset+2)*cndof,\
+                    size_tot-(offset+2)*cndof,\
+                    size_tot-(offset+1)*cndof,\
+                    size_tot-(offset+1)*cndof,\
+                    cndof,cndof,MPI_COMM_WORLD);
+            add_from_to_scaled_cp2k_csr(*P,1.0,0.0,\
+                    (offset+1)*cndof,\
+                    (offset+1)*cndof,\
+                    offset*cndof,\
+                    offset*cndof,\
+                    cndof,cndof,MPI_COMM_WORLD);
         }
     }
     if (cndof_mid) {
@@ -535,42 +578,52 @@ void c_scf_method(cp2k_transport_parameters cp2k_transport_params, cp2k_csr_inte
                         cndof,cndof,MPI_COMM_WORLD);
             }
         }
-    }
-
-    if (!cp2k_transport_params.extra_scf) {
-        std::vector<double> mulli(cp2k_transport_params.n_atoms,0.0);
-        for (int i=0;i<S.nrows_local;i++) {
-            for (int e=S.rowptr_local[i]-1;e<S.rowptr_local[i+1]-1;e++) {
-                mulli[atom_of_bf[i+S.first_row]]+=S.nzvals_local[e]*P->nzvals_local[e];
-            }
-        }
-        MPI_Allreduce(MPI_IN_PLACE,&mulli[0],cp2k_transport_params.n_atoms,MPI_DOUBLE,MPI_SUM,MPI_COMM_WORLD);
-        if (!rank) {
-            stringstream mysstream;
-            mysstream << "Mulliken_" << cp2k_transport_params.iscf;
-            ofstream myfile(mysstream.str().c_str());
-            myfile.precision(8);
-            for (int i=0;i<cp2k_transport_params.n_atoms;i++) myfile<<mulli[i]<<"\n";
-            myfile.close();
+        if (overwrite_first_last_diag_block) {
+            add_from_to_scaled_cp2k_csr(*P,1.0,0.0,\
+                    mid-2*cndof,\
+                    mid-2*cndof,\
+                    mid-1*cndof,\
+                    mid-1*cndof,\
+                    cndof,cndof,MPI_COMM_WORLD);
+            add_from_to_scaled_cp2k_csr(*P,1.0,0.0,\
+                    mid+1*cndof,\
+                    mid+1*cndof,\
+                    mid+0*cndof,\
+                    mid+0*cndof,\
+                    cndof,cndof,MPI_COMM_WORLD);
         }
     }
 
-    if (!cp2k_transport_params.extra_scf) {
-        std::vector<double> mulli(cp2k_transport_params.n_atoms,0.0);
-        for (int i=0;i<S.nrows_local;i++) {
-            for (int e=S.rowptr_local[i]-1;e<S.rowptr_local[i+1]-1;e++) {
-                mulli[atom_of_bf[i+S.first_row]]+=S.nzvals_local[e]*KS.nzvals_local[e];
-            }
+    std::vector<double> mulli(cp2k_transport_params.n_atoms,0.0);
+    for (int i=0;i<S.nrows_local;i++) {
+        for (int e=S.rowptr_local[i]-1;e<S.rowptr_local[i+1]-1;e++) {
+            mulli[atom_of_bf[i+S.first_row]]+=S.nzvals_local[e]*P->nzvals_local[e];
         }
-        MPI_Allreduce(MPI_IN_PLACE,&mulli[0],cp2k_transport_params.n_atoms,MPI_DOUBLE,MPI_SUM,MPI_COMM_WORLD);
-        if (!rank) {
-            stringstream mysstream;
-            mysstream << "Mullipot_" << cp2k_transport_params.iscf;
-            ofstream myfile(mysstream.str().c_str());
-            myfile.precision(8);
-            for (int i=0;i<cp2k_transport_params.n_atoms;i++) myfile<<mulli[i]<<"\n";
-            myfile.close();
+    }
+    MPI_Allreduce(MPI_IN_PLACE,&mulli[0],cp2k_transport_params.n_atoms,MPI_DOUBLE,MPI_SUM,MPI_COMM_WORLD);
+    if (!rank) {
+        stringstream mysstream;
+        mysstream << "Mulliken_" << cp2k_transport_params.iscf;
+        ofstream myfile(mysstream.str().c_str());
+        myfile.precision(8);
+        for (int i=0;i<cp2k_transport_params.n_atoms;i++) myfile<<mulli[i]<<"\n";
+        myfile.close();
+    }
+
+    mulli.assign(cp2k_transport_params.n_atoms,0.0);
+    for (int i=0;i<S.nrows_local;i++) {
+        for (int e=S.rowptr_local[i]-1;e<S.rowptr_local[i+1]-1;e++) {
+            mulli[atom_of_bf[i+S.first_row]]+=S.nzvals_local[e]*KS.nzvals_local[e];
         }
+    }
+    MPI_Allreduce(MPI_IN_PLACE,&mulli[0],cp2k_transport_params.n_atoms,MPI_DOUBLE,MPI_SUM,MPI_COMM_WORLD);
+    if (!rank) {
+        stringstream mysstream;
+        mysstream << "Mullipot_" << cp2k_transport_params.iscf;
+        ofstream myfile(mysstream.str().c_str());
+        myfile.precision(8);
+        for (int i=0;i<cp2k_transport_params.n_atoms;i++) myfile<<mulli[i]<<"\n";
+        myfile.close();
     }
 
     if (!rank) cout << "Transport iteration " << cp2k_transport_params.iscf << " finished" << endl;
