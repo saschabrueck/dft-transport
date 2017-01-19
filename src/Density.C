@@ -557,12 +557,14 @@ if (worldrank==left_gpu_rank) cout << "TIME FOR WAVEFUNCTION SPARSE SOLVE PHASE 
             double diff_fermil = -(fermi(real(energy),muvec[0]+vbias,transport_params.temperature,0)-fermi(real(energy),muvec[0],transport_params.temperature,0));
             CPX* SolT = new CPX[solsize*nprol];
             full_transpose(nprol,solsize,Sol,SolT);
-            resultvec[0].dos=Ps->psipsidagger_transpose(Overlap,PsImag,SolT,nprol,+weight*diff_fermil);//here i would not need the density, only the PsImag
+            //resultvec[0].dos=Ps->psipsidagger_transpose(Overlap,PsImag,SolT,nprol,+weight*diff_fermil);//here i would not need the density, only the PsImag
+            Ps->psipsidagger_transpose(Overlap,resultvec[0].dosprofile,&orb_per_at[0],PsImag,SolT,nprol,+weight*diff_fermil,matrix_comm);
             delete[] SolT;
             double diff_fermir = +(fermi(real(energy),muvec[1]+vbias,transport_params.temperature,0)-fermi(real(energy),muvec[1],transport_params.temperature,0));
             SolT = new CPX[solsize*npror];
             full_transpose(npror,solsize,&Sol[solsize*nprol],SolT);
-            resultvec[1].dos=Ps->psipsidagger_transpose(Overlap,PsImag,SolT,npror,+weight*diff_fermir);//here i would not need the density, only the PsImag
+            //resultvec[1].dos=Ps->psipsidagger_transpose(Overlap,PsImag,SolT,npror,+weight*diff_fermir);//here i would not need the density, only the PsImag
+            Ps->psipsidagger_transpose(Overlap,resultvec[1].dosprofile,&orb_per_at[0],PsImag,SolT,npror,+weight*diff_fermir,matrix_comm);
             delete[] SolT;
         }
 #endif
@@ -573,13 +575,15 @@ sabtime=get_time(d_zer);
                 double fermil = fermi(real(energy),muvec[0],transport_params.temperature,0)-fermi(real(energy),muvec[1],transport_params.temperature,0);
                 CPX* SolT = new CPX[solsize*nprol];
                 full_transpose(nprol,solsize,Sol,SolT);
-                resultvec[0].dos=Ps->psipsidagger_transpose(Overlap,PsImag,SolT,nprol,+weight*fermil);
+                //resultvec[0].dos=Ps->psipsidagger_transpose(Overlap,PsImag,SolT,nprol,+weight*fermil);
+                Ps->psipsidagger_transpose(Overlap,resultvec[0].dosprofile,&orb_per_at[0],PsImag,SolT,nprol,+weight*fermil,matrix_comm);
                 delete[] SolT;
             } else {
                 double fermir = fermi(real(energy),muvec[1],transport_params.temperature,0)-fermi(real(energy),muvec[0],transport_params.temperature,0);
                 CPX* SolT = new CPX[solsize*npror];
                 full_transpose(npror,solsize,&Sol[solsize*nprol],SolT);
-                resultvec[1].dos=Ps->psipsidagger_transpose(Overlap,PsImag,SolT,npror,+weight*fermir);
+                //resultvec[1].dos=Ps->psipsidagger_transpose(Overlap,PsImag,SolT,npror,+weight*fermir);
+                Ps->psipsidagger_transpose(Overlap,resultvec[1].dosprofile,&orb_per_at[0],PsImag,SolT,npror,+weight*fermir,matrix_comm);
                 delete[] SolT;
             }
 if (!worldrank) cout << "TIME FOR CONSTRUCTION OF S-PATTERN DENSITY MATRIX " << get_time(sabtime) << endl;

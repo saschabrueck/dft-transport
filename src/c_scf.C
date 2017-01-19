@@ -115,7 +115,7 @@ void write_scaled_cp2k_csr_bin(cp2k_csr_interop_type& cp2kCSRmat,const char* fil
     }
 
     for (int i=0;i<cp2kCSRmat.nrows_local;i++) {
-        for(int e=cp2kCSRmat.rowptr_local[i]-1;e<cp2kCSRmat.rowptr_local[i+1]-1;e++){
+        for (int e=cp2kCSRmat.rowptr_local[i]-1;e<cp2kCSRmat.rowptr_local[i+1]-1;e++) {
             double i_val=(double) i+cp2kCSRmat.first_row+1;
             double j_val=(double) cp2kCSRmat.colind_local[e];
             double r_val=factor*cp2kCSRmat.nzvals_local[e];
@@ -127,6 +127,81 @@ void write_scaled_cp2k_csr_bin(cp2k_csr_interop_type& cp2kCSRmat,const char* fil
         }
     }
 
+    MPI_File_close(&file);
+}
+
+void write_scaled_cp2k_csr_bin_remove_pbc(cp2k_csr_interop_type& cp2kCSRmat,const char* filename,double factor,int bw,int ndof,MPI_Comm cp2k_comm)
+{
+    MPI_File file;
+    MPI_Status status;
+    MPI_File_open(cp2k_comm,filename,MPI_MODE_CREATE|MPI_MODE_WRONLY,MPI_INFO_NULL,&file);
+    int rank,mpi_size;
+    MPI_Comm_size(cp2k_comm,&mpi_size);
+    MPI_Comm_rank(cp2k_comm,&rank);
+
+    int *remove_element = new int[max(cp2kCSRmat.nze_local,1)];
+    int n_removed_elements = 0;
+
+    for (int i=0;i<max(0,min(cp2kCSRmat.nrows_local,bw*ndof-cp2kCSRmat.first_row));i++) {
+        for (int e=cp2kCSRmat.rowptr_local[i]-1;e<cp2kCSRmat.rowptr_local[i+1]-1;e++) {
+            if ( (cp2kCSRmat.colind_local[e]-1)/ndof - (i+cp2kCSRmat.first_row)/ndof > bw ) {
+                remove_element[e] = 1;
+                n_removed_elements++;
+            }
+        }
+    }
+
+    for (int i=max(0,min(cp2kCSRmat.nrows_local,cp2kCSRmat.nrows_total-bw*ndof-cp2kCSRmat.first_row));i<cp2kCSRmat.nrows_local;i++) {
+        for (int e=cp2kCSRmat.rowptr_local[i]-1;e<cp2kCSRmat.rowptr_local[i+1]-1;e++) {
+            if ( (cp2kCSRmat.colind_local[e]-1)/ndof - (i+cp2kCSRmat.first_row)/ndof < -bw ) {
+                remove_element[e] = 1;
+                n_removed_elements++;
+            }
+        }
+    }
+
+    int remaining_elements = cp2kCSRmat.nze_local - n_removed_elements;
+
+    int *dist = new int[mpi_size];
+    int *disp = new int[mpi_size];
+    MPI_Allgather(&remaining_elements,1,MPI_INT,dist,1,MPI_INT,cp2k_comm);
+    disp[0]=0;
+    for (int i=0;i<mpi_size-1;i++) {
+        disp[i+1]=disp[i]+dist[i];
+    }
+
+    MPI_Offset offset = 0;
+    if (rank) offset=(4*disp[rank]+3)*sizeof(double);
+    delete[] dist;
+    delete[] disp;
+
+    MPI_File_seek(file,offset,MPI_SEEK_SET);
+
+    if (!rank) {
+        double head_1=(double) cp2kCSRmat.nrows_total;
+        double head_2=(double) cp2kCSRmat.nze_total;
+        double head_3=(double) 1;
+        MPI_File_write(file,&head_1,1,MPI_DOUBLE,&status);
+        MPI_File_write(file,&head_2,1,MPI_DOUBLE,&status);
+        MPI_File_write(file,&head_3,1,MPI_DOUBLE,&status);
+    }
+
+    for (int i=0;i<cp2kCSRmat.nrows_local;i++) {
+        for (int e=cp2kCSRmat.rowptr_local[i]-1;e<cp2kCSRmat.rowptr_local[i+1]-1;e++) {
+            if (!remove_element[e]) {
+                double i_val=(double) i+cp2kCSRmat.first_row+1;
+                double j_val=(double) cp2kCSRmat.colind_local[e];
+                double r_val=factor*cp2kCSRmat.nzvals_local[e];
+                double m_val=0.0;
+                MPI_File_write(file,&i_val,1,MPI_DOUBLE,&status);
+                MPI_File_write(file,&j_val,1,MPI_DOUBLE,&status);
+                MPI_File_write(file,&r_val,1,MPI_DOUBLE,&status);
+                MPI_File_write(file,&m_val,1,MPI_DOUBLE,&status);
+            }
+        }
+    }
+
+    delete[] remove_element;
     MPI_File_close(&file);
 }
 
@@ -156,14 +231,6 @@ void c_scf_method(cp2k_transport_parameters cp2k_transport_params, cp2k_csr_inte
     MPI_Comm_rank(MPI_COMM_WORLD,&rank);
 
     if (!rank) cout << "Starting Transport" << endl;
- 
-    std::vector<int> atom_of_bf;
-    for (int a=0;a<cp2k_transport_params.n_atoms;a++) {
-        for (int i=0;i<cp2k_transport_params.nsgf[a];i++) {
-            atom_of_bf.push_back(a);
-        }
-    }
-    atom_of_bf.push_back(cp2k_transport_params.n_atoms);
  
     int cndof_pbc=0;
     int cndof_mid=0;
@@ -310,6 +377,14 @@ void c_scf_method(cp2k_transport_parameters cp2k_transport_params, cp2k_csr_inte
             }
         }
 
+        std::vector<int> atom_of_bf;
+        for (int a=0;a<cp2k_transport_params.n_atoms;a++) {
+            for (int i=0;i<cp2k_transport_params.nsgf[a];i++) {
+                atom_of_bf.push_back(a);
+            }
+        }
+        atom_of_bf.push_back(cp2k_transport_params.n_atoms);
+ 
         std::vector<int> natoms_start(mpi_size);
         MPI_Allgather(&atom_of_bf[S.first_row],1,MPI_INT,&natoms_start[0],1,MPI_INT,MPI_COMM_WORLD);
         natoms_start.push_back(cp2k_transport_params.n_atoms);
@@ -335,6 +410,7 @@ void c_scf_method(cp2k_transport_parameters cp2k_transport_params, cp2k_csr_inte
         }
         if (i_bf!=S.nrows_local) throw std::exception();
         MPI_Allreduce(MPI_IN_PLACE,&maxpair,1,MPI_INT,MPI_MAX,MPI_COMM_WORLD);
+        atom_of_bf=std::vector<int>();
  
         int *pairmatrix_local = new int[maxpair*pairlist.size()]();
         for (uint a=0;a<pairlist.size();a++) {
@@ -593,6 +669,14 @@ void c_scf_method(cp2k_transport_parameters cp2k_transport_params, cp2k_csr_inte
                     cndof,cndof,MPI_COMM_WORLD);
         }
     }
+
+    std::vector<int> atom_of_bf;
+    for (int a=0;a<cp2k_transport_params.n_atoms;a++) {
+        for (int i=0;i<cp2k_transport_params.nsgf[a];i++) {
+            atom_of_bf.push_back(a);
+        }
+    }
+    atom_of_bf.push_back(cp2k_transport_params.n_atoms);
 
     std::vector<double> mulli(cp2k_transport_params.n_atoms,0.0);
     for (int i=0;i<S.nrows_local;i++) {
