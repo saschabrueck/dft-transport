@@ -143,16 +143,6 @@ rhofile.close();
         if (!iam) cout << "TIME FOR SCHROEDINGER " << get_time(sabtime) << endl;
 
 if(!iam){
-stringstream dosstream;
-dosstream << "DOS_Profile" << i_iter;
-rename("DOS_Profile",dosstream.str().c_str());
-stringstream trastream;
-trastream << "Transmission" << i_iter;
-rename("Transmission",trastream.str().c_str());
-}
-
-
-if(!iam){
 stringstream mysstream;
 mysstream << "rhofile" << i_iter;
 ofstream rhofile(mysstream.str().c_str());

@@ -120,6 +120,7 @@ struct result_type
 {
     int npro,ndec,eigval_degeneracy;
     double transm,dos,rcond;
+    double *dosprofile;
 };
 
 #define LOGCERR std::cerr << "ERROR IN LINE " << __LINE__ << " OF FILE " << __FILE__ << std::endl
@@ -284,6 +285,7 @@ public:
     void psipsidagger_transpose(CPX*,int,CPX);
     void psipsidagger_transpose(CPX*,CPX*,int,CPX);
     double psipsidagger_transpose(TCSR<double>*,TCSR<double>*,CPX*,int,CPX);
+    void psipsidagger_transpose(TCSR<double>*,double*,int*,TCSR<double>*,CPX*,int,CPX,MPI_Comm);
     void psipsidagger_transpose(double*,int,double);
     double psipsidagger(TCSR<double>*,CPX*,CPX*,CPX*,int,int,int,CPX);
     double psipsidagger_transpose(TCSR<double>*,CPX*,CPX*,CPX*,int,int,int,CPX);
@@ -2451,6 +2453,33 @@ inline double TCSR<double>::psipsidagger_transpose(TCSR<double>* matS,TCSR<doubl
         }
     }
     return result;
+}
+
+/************************************************************************************************/
+
+template <>
+inline void TCSR<double>::psipsidagger_transpose(TCSR<double>* matS,double* dosprofile,int* n_of_el,TCSR<double>* matI,CPX* psi,int nkval,CPX factor,MPI_Comm matrix_comm)
+{
+    int i,e;
+    CPX z;
+    int* atom_of_bf=new int[size_tot];
+    int atom=0;
+    for (int i=0;i<size_tot;i++) {
+        if (i==n_of_el[atom+1]) ++atom;
+        atom_of_bf[i]=atom;
+    }
+    ++atom;
+    init_variable(dosprofile,atom);
+    for(i=0;i<size;i++){
+        for(e=edge_i[i]-findx;e<edge_i[i+1]-findx;e++){
+            z=c_zdotc(nkval,&psi[(index_j[e]-findx)*nkval],1,&psi[(first_row+i)*nkval],1);
+            nnz[e]+=real(factor*z);
+            matI->nnz[e]+=imag(factor*z);
+            dosprofile[atom_of_bf[first_row+i]]+=matS->nnz[e]*real(z);
+        }
+    }
+    delete[] atom_of_bf;
+    MPI_Allreduce(MPI_IN_PLACE,dosprofile,atom,MPI_DOUBLE,MPI_SUM,matrix_comm);
 }
 
 /************************************************************************************************/

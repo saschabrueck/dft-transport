@@ -111,12 +111,20 @@ sabtime=get_time(0.0);
     int degeneracy_warning=0;
     energyvector.insert(energyvector.end(),energyvector_real.begin(),energyvector_real.end());
     stepvector.insert(stepvector.end(),stepvector_real.begin(),stepvector_real.end());
+    MPI_File file;
+    MPI_Status status;
+    stringstream mysstream;
+    mysstream << "DOS_Profile_" << transport_params.cp2k_scf_iter;
+    MPI_File_open(MPI_COMM_WORLD,mysstream.str().c_str(),MPI_MODE_CREATE|MPI_MODE_WRONLY,MPI_INFO_NULL,&file);
     for (int iseq=0;iseq<int(ceil(double(energyvector.size())/n_mat_comm));iseq++) {
         int jpos=matrix_id+iseq*n_mat_comm;
         int propos=jpos-(energyvector.size()-energyvector_real.size());
         if (jpos<int(energyvector.size())) {
             if (abs(stepvector[jpos])>0.0) {
                 std::vector<result_type> resvec(muvec.size());
+                for (uint i_mu=0;i_mu<muvec.size();i_mu++) {
+                    resvec[i_mu].dosprofile = new double[orb_per_at.size()-1]();
+                }
                 transport_methods::transport_method_type method;
                 if (propos>=0) {
                     if (transport_params.negf_solver) {
@@ -134,6 +142,9 @@ sabtime=get_time(0.0);
                 if (density(KohnShamCollect,OverlapCollect,DensReal,DensImag,energyvector[jpos],stepvector[jpos],method,muvec,contactvec,resvec,Bsizes,orb_per_at,transport_params,matrix_comm)) return (LOGCERR, EXIT_FAILURE);
                 if (!matrix_rank && propos>=0) {
                     for (uint i_mu=0;i_mu<muvec.size();i_mu++) {
+                        MPI_Offset offset = (i_mu*energyvector_real.size()+propos)*(orb_per_at.size()-1)*sizeof(double);
+                        MPI_File_seek(file,offset,MPI_SEEK_SET);
+                        MPI_File_write(file,resvec[i_mu].dosprofile,orb_per_at.size()-1,MPI_DOUBLE,&status);
                         if (resvec[i_mu].npro!=propagating_sizes[propos][i_mu] && transport_params.real_int_method==real_int_methods::GAUSSCHEBYSHEV) propagating_warning++;
                         if (resvec[i_mu].eigval_degeneracy>=0) degeneracy_warning++;
                         if (resvec[i_mu].rcond<numeric_limits<double>::epsilon()) return (LOGCERR, EXIT_FAILURE);
@@ -146,10 +157,14 @@ sabtime=get_time(0.0);
                         transmission_warning++;
                     }
                 }
+                for (uint i_mu=0;i_mu<muvec.size();i_mu++) {
+                    delete[] resvec[i_mu].dosprofile;
+                }
             }
         }
         if (!iam) cout << "Finished " << int((iseq+1)*100.0/ceil(double(energyvector.size())/n_mat_comm)) << "%" << endl;
     }
+    MPI_File_close(&file);
 if (!iam) cout << "TIME FOR DENSITY " << get_time(sabtime) << endl;
     MPI_Allreduce(MPI_IN_PLACE,&transmission_warning,1,MPI_INT,MPI_SUM,MPI_COMM_WORLD);
     if (!iam) if (transmission_warning) cout << "WARNING: INCORRECT TRANSMISSION FOR " << int(transmission_warning*100.0/energyvector.size()) << "%" << " OF THE ENERGY POINTS" << endl;
