@@ -606,7 +606,6 @@ fem_poisson_dflag
 splitsolve_dflag
 splitsolve
 pexsi_dflag
-pexsi
 superlu_dflag
 mumps_dflag
 pardiso_dflag
@@ -1800,14 +1799,11 @@ fi
 if test "x$with_pexsi" == "xyes"; then
 	{ $as_echo "$as_me:$LINENO: PEXSI enabled." >&5
 $as_echo "$as_me: PEXSI enabled." >&6;}
-	pexsi=pole.cpp
-
 	pexsi_dflag=-DHAVE_PEXSI
 
 else
 	{ $as_echo "$as_me:$LINENO: No PEXSI." >&5
 $as_echo "$as_me: No PEXSI." >&6;}
-
 
 fi
 

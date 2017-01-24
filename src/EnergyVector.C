@@ -1,9 +1,9 @@
+#include "pole.hpp"
 #include "Utilities.H"
 #include "Density.H"
 #include "GetSingularities.H"
 #include "Quadrature.H"
 #include "EnergyVector.H"
-#include "pole.hpp"
 #include <iterator>
 #include <limits>
 
