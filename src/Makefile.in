@@ -10,7 +10,7 @@ SOLVERS = @pardiso_dflag@ @mumps_dflag@ @superlu_dflag@ @pexsi_dflag@ @splitsolv
 LDFLAGS = $(LFLAGS) $(DFLAGS) $(SOLVERS) 
 
 MAIN = main.cpp
-SOURCES_CPP = @pexsi@
+SOURCES_CPP = 
 EXCLUDE_C_LIST = @pardiso@ @semi_self_consistent@ 
 SOURCES_C = $(filter-out $(EXCLUDE_C_LIST), $(wildcard *.C))
 EXCLUDE_c_LIST = @parsers@ 
