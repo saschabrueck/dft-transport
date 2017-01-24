@@ -19,21 +19,21 @@ SOURCES_cu = @splitsolve@
 OBJECTS = $(SOURCES_CPP:.cpp=.o) $(SOURCES_C:.C=.o) $(SOURCES_c:.c=.o) $(SOURCES_cu:.cu=.o)
 EXECUTABLE = transport
 
-all: $(SOURCES_CPP) $(SOURCES_C) $(SOURCES_c) $(EXECUTABLE)
+all: $(SOURCES_CPP) $(SOURCES_C) $(SOURCES_c) $(SOURCES_cu) $(EXECUTABLE)
 
 $(EXECUTABLE): $(MAIN:.cpp=.o) $(OBJECTS)
 	$(CPP) $(CXXFLAGS) $(INCLUDES) -o $@ $(MAIN:.cpp=.o) $(OBJECTS) $(LDFLAGS) $(LIBS)
 
-.cpp.o:
+%.o: %.cpp
 	$(CPP) $(CXXFLAGS) $(INCLUDES) $(LDFLAGS) -c $< -o $@
 
-.C.o:
+%.o: %.C
 	$(CPP) $(CXXFLAGS) $(INCLUDES) $(LDFLAGS) -c $< -o $@
 
-.c.o:
+%.o: %.c
 	$(GCC) $(CFLAGS) $(INCLUDES) $(LDFLAGS) -c $< -o $@
 
-.cu.o:
+%.o: %.cu
 	$(NVCC) $(NVCCFLAGS) $(INCLUDES) $(LDFLAGS) -c $< -o $@
 
 y.tab.c: parser.y
