@@ -296,42 +296,42 @@ int BoundarySelfEnergy::GetSigmaInv(MPI_Comm boundary_comm,transport_parameters 
     int ntriblock=bandwidth*ndof;
     int triblocksize=ntriblock*ntriblock;
     int NK=transport_params.n_points_inv;
-    int boundary_rank;
+    double imag_shift=0.0;
+    int boundary_rank,boundary_size;
     MPI_Comm_rank(boundary_comm,&boundary_rank);
+    MPI_Comm_size(boundary_comm,&boundary_size);
+    CPX **B=NULL;
+    CPX *BB=NULL;
+    CPX *M=NULL;
 int worldrank; MPI_Comm_rank(MPI_COMM_WORLD,&worldrank);
 double sabtime=get_time(0.0);
     if (!boundary_rank) {
-        CPX **B=new CPX*[4*bandwidth-1];
+        B=new CPX*[4*bandwidth-1];
         for (int IB=0;IB<4*bandwidth-1;IB++) {
             B[IB]=new CPX[ndofsq]();
         }
-        double imag_shift=0.0;
-        CPX *M=new CPX[ndofsq];
-        int *pivarrays=new int[ndof];
-        int iinfo;
-        for (int IK=0;IK<NK;IK++) {
-            CPX z = exp(CPX(0.0,2.0*(IK+0.5)*M_PI/double(NK)))+imag_shift*CPX(0.0,1.0);
+        M=new CPX[ndofsq];
+    }
+    for (int IK=0;IK<NK;IK++) {
+        CPX z = exp(CPX(0.0,2.0*(IK+0.5)*M_PI/double(NK)))+imag_shift*CPX(0.0,1.0);
+        if (!boundary_rank) {
             create_M_matrix(M,ndof,H,bandwidth,z);
-            c_zgetrf(ndof,ndof,M,ndof,pivarrays,&iinfo);
-            if (iinfo) return (LOGCERR, EXIT_FAILURE);
-            CPX nworks;
-            c_zgetri(ndof,M,ndof,pivarrays,&nworks,-1,&iinfo);
-            int lworks=int(real(nworks));
-            CPX* works=new CPX[lworks];
-            c_zgetri(ndof,M,ndof,pivarrays,works,lworks,&iinfo);
-            if (iinfo) return (LOGCERR, EXIT_FAILURE);
-            delete[] works;
+        }
+        if (p_inv(M,ndof,boundary_comm)) return (LOGCERR, EXIT_FAILURE);
+        if (!boundary_rank) {
             for (int IB=0;IB<4*bandwidth-1;IB++) {
                 CPX expfac=pow(z,IB-(2*bandwidth-1))/double(NK);
                 c_zaxpy(ndofsq,expfac,M,1,B[IB],1);
             }
         }
-        delete[] pivarrays;
+    }
+    if (!boundary_rank) {
         delete[] M;
+    }
 if (!worldrank) cout << "TIME FOR SIGMA SOLVER INTEGRATION " << get_time(sabtime) << endl;
+    if (!boundary_rank) {
         sigma = new CPX[triblocksize];
-        CPX *BB = new CPX[triblocksize];
-        int *pivarray=new int[ntriblock];
+        BB = new CPX[triblocksize];
         for (int IB=0;IB<bandwidth;IB++) {
             for (int JB=0;JB<bandwidth;JB++) {
                 c_zlacpy('A',ndof,ndof,B[IB-JB+2*bandwidth-1-inj_sign*bandwidth],ndof,&sigma[ndof*IB+ntriblock*ndof*JB],ntriblock);
@@ -343,13 +343,11 @@ if (!worldrank) cout << "TIME FOR SIGMA SOLVER INTEGRATION " << get_time(sabtime
                 c_zlacpy('A',ndof,ndof,B[IB-JB+2*bandwidth-1],ndof,&sigma[ndof*IB+ntriblock*ndof*JB],ntriblock);
             }
         }
-        c_zgetrf(ntriblock,ntriblock,sigma,ntriblock,pivarray,&iinfo);
-        if (iinfo) return (LOGCERR, EXIT_FAILURE);
-        c_zgetrs('T',ntriblock,ntriblock,sigma,ntriblock,pivarray,BB,ntriblock,&iinfo);
-        if (iinfo) return (LOGCERR, EXIT_FAILURE);
+    }
+    if (p_lin(sigma,BB,BB,ntriblock,ntriblock,boundary_comm)) return (LOGCERR, EXIT_FAILURE);
+    if (!boundary_rank) {
         H1t->trans_mat_vec_mult(BB,sigma,ntriblock,1);
         c_zscal(triblocksize,CPX(-1.0,0.0),sigma,1);
-        delete[] pivarray;
         delete[] BB;
         for (int IB=0;IB<4*bandwidth-1;IB++) {
             delete[] B[IB];
