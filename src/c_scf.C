@@ -139,7 +139,7 @@ void write_scaled_cp2k_csr_bin_remove_pbc(cp2k_csr_interop_type& cp2kCSRmat,cons
     MPI_Comm_size(cp2k_comm,&mpi_size);
     MPI_Comm_rank(cp2k_comm,&rank);
 
-    int *remove_element = new int[max(cp2kCSRmat.nze_local,1)];
+    int *remove_element = new int[max(cp2kCSRmat.nze_local,1)]();
     int n_removed_elements = 0;
 
     for (int i=0;i<max(0,min(cp2kCSRmat.nrows_local,bw*ndof-cp2kCSRmat.first_row));i++) {
@@ -563,6 +563,9 @@ void c_scf_method(cp2k_transport_parameters cp2k_transport_params, cp2k_csr_inte
 
         //write_matrix(Overlap,KohnSham,wr_cutblocksize,wr_bw,wr_ndof);
         //if (diagscalapack(Overlap,KohnSham,transport_params)) throw std::exception();
+        //write_scaled_cp2k_csr_bin_remove_pbc( S,"S_4.bin",1.0,contactvec[0].bandwidth,contactvec[0].ndof,MPI_COMM_WORLD);
+        //write_scaled_cp2k_csr_bin_remove_pbc(KS,"H_4.bin",cp2k_transport_params.evoltfactor,contactvec[0].bandwidth,contactvec[0].ndof,MPI_COMM_WORLD);
+        //return;
         if (transport_params.cp2k_method==cp2k_methods::LOCAL_SCF) {
 #ifdef HAVE_OMEN_POISSON
             if (semiselfconsistent(S,KS,P,PImag,muvec,contactvec,Bsizes,orb_per_atom,transport_params)) throw std::exception();
