@@ -193,20 +193,26 @@ std::vector< std::vector< std::vector<double> > > Singularities::get_propagating
     }
 }
 
+double Singularities::determine_charge(double mu,int i_mu,int mode)
+{
+    double n_ele_i = 0.0;
+    int ndof=contactvec[i_mu].ndof;
+    for (int j=0;j<n_k;j++) {
+        for (int i=0;i<ndof;i++) {
+            n_ele_i+=2.0/(n_k-1)*fermi(energies_matrix[i_mu][i+j*ndof],mu,Temp,mode);
+            if (j==0 || j==n_k-1) n_ele_i-=1.0/(n_k-1)*fermi(energies_matrix[i_mu][i+j*ndof],mu,Temp,mode);
+        }
+    }
+    return n_ele_i;
+}
+
 double Singularities::determine_fermi(double n_ele,int i_mu)
 {
     double mu;
     if (!iam) {
         cout << "Fermi Level / Number of Electrons" << endl;
-        int ndof=contactvec[i_mu].ndof;
         mu=(energies_matrix[i_mu][floor(n_ele/2.0)-1]+energies_matrix[i_mu][floor(n_ele/2.0)])/2.0;
-        double n_ele_iter = 0.0;
-        for (int j=0;j<n_k;j++) {
-            for (int i=0;i<ndof;i++) {
-                n_ele_iter+=2.0/(n_k-1)*fermi(energies_matrix[i_mu][i+j*ndof],mu,Temp,0);
-                if (j==0 || j==n_k-1) n_ele_iter-=1.0/(n_k-1)*fermi(energies_matrix[i_mu][i+j*ndof],mu,Temp,0);
-            }
-        }
+        double n_ele_iter=determine_charge(mu,i_mu,0);
         cout << mu << " / " << n_ele_iter << endl;
         double mu_a = mu;
         double n_ele_a = n_ele_iter;
@@ -215,13 +221,7 @@ double Singularities::determine_fermi(double n_ele,int i_mu)
             mu_a=mu;
             n_ele_a=n_ele_iter;
             mu+=(n_ele-n_ele_iter);
-            n_ele_iter=0.0;
-            for (int j=0;j<n_k;j++) {
-                for (int i=0;i<ndof;i++) {
-                    n_ele_iter+=2.0/(n_k-1)*fermi(energies_matrix[i_mu][i+j*ndof],mu,Temp,0);
-                    if (j==0 || j==n_k-1) n_ele_iter-=1.0/(n_k-1)*fermi(energies_matrix[i_mu][i+j*ndof],mu,Temp,0);
-                }
-            }
+            n_ele_iter=determine_charge(mu,i_mu,0);
 cout << "[" << mu_a << "," << mu << "]" << " / " << n_ele_iter << " FIND" << endl;
         }
         double mu_b = mu;
@@ -232,13 +232,7 @@ cout << "[" << mu_a << "," << mu << "]" << " / " << n_ele_iter << " FIND" << end
 //Bisection
         while (abs(mu_a-mu_b)>Temp && abs(n_ele-n_ele_iter)>eps_mu) {
             mu=(mu_a+mu_b)/2.0;
-            n_ele_iter=0.0;
-            for (int j=0;j<n_k;j++) {
-                for (int i=0;i<ndof;i++) {
-                    n_ele_iter+=2.0/(n_k-1)*fermi(energies_matrix[i_mu][i+j*ndof],mu,Temp,0);
-                    if (j==0 || j==n_k-1) n_ele_iter-=1.0/(n_k-1)*fermi(energies_matrix[i_mu][i+j*ndof],mu,Temp,0);
-                }
-            }
+            n_ele_iter=determine_charge(mu,i_mu,0);
             if ((n_ele-n_ele_a)*(n_ele-n_ele_iter)>0) {
                 mu_a=mu;
                 n_ele_a=n_ele_iter;
@@ -250,21 +244,9 @@ cout << "[" << mu_a << "," << mu_b << "]" << " / " << n_ele_iter << " BISECT" <<
         mu=(mu_a+mu_b)/2.0;
 //Newton
         while (abs(n_ele-n_ele_iter)>eps_mu) {
-            double dfermi=0.0;
-            for (int j=0;j<n_k;j++) {
-                for (int i=0;i<ndof;i++) {
-                    dfermi+=2.0/(n_k-1)*fermi(energies_matrix[i_mu][i+j*ndof],mu,Temp,2);
-                    if (j==0 || j==n_k-1) dfermi-=1.0/(n_k-1)*fermi(energies_matrix[i_mu][i+j*ndof],mu,Temp,2);
-                }
-            }
+            double dfermi=determine_charge(mu,i_mu,2);
             mu+=(n_ele-n_ele_iter)/dfermi;
-            n_ele_iter=0.0;
-            for (int j=0;j<n_k;j++) {
-                for (int i=0;i<ndof;i++) {
-                    n_ele_iter+=2.0/(n_k-1)*fermi(energies_matrix[i_mu][i+j*ndof],mu,Temp,0);
-                    if (j==0 || j==n_k-1) n_ele_iter-=1.0/(n_k-1)*fermi(energies_matrix[i_mu][i+j*ndof],mu,Temp,0);
-                }
-            }
+            n_ele_iter=determine_charge(mu,i_mu,0);
 cout << mu << " / " << n_ele_iter << " NEWTON" << endl;
         }
         cout << mu << " / " << n_ele_iter << " FERMI" << endl;

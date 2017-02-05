@@ -1,4 +1,4 @@
-#include "pole.hpp"
+#include "pexsi/pole.hpp"
 #include "Utilities.H"
 #include "Density.H"
 #include "GetSingularities.H"
@@ -316,6 +316,12 @@ int Energyvector::determine_energyvector(std::vector<CPX> &energyvector_cc,std::
 double sabtime=get_time(0.0);
         if ( singularities.Execute(KohnSham,Overlap) ) return (LOGCERR, EXIT_FAILURE);
         if (transport_params.cp2k_method!=cp2k_methods::LOCAL_SCF) for (uint i_mu=0;i_mu<muvec.size();i_mu++) muvec[i_mu]=singularities.determine_fermi(contactvec[i_mu].n_ele,i_mu);
+        if (!iam && contactvec.size()==muvec.size()+1) {
+            double gate_charge=contactvec[muvec.size()].n_ele;
+            double doping=contactvec[0].n_ele-gate_charge;
+            double intrinsic_charge=singularities.determine_charge(muvec[0],muvec.size(),0)-gate_charge;
+            cout << "Conduction band charge on gate from bandstructure: " << intrinsic_charge << " Built-in potential: " << transport_params.temperature*log(doping/intrinsic_charge) << endl;
+        }
         bands_start=singularities.energy_gs;
 if (!iam) cout << "TIME FOR SINGULARITIES " << get_time(sabtime) << endl;
         int follow_bands = (transport_params.real_int_method==real_int_methods::GAUSSCHEBYSHEV);
