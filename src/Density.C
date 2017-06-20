@@ -31,7 +31,7 @@
 #include "Density.H"
 #include <iostream>
 
-int density(TCSR<double> *KohnSham,TCSR<double> *Overlap,TCSR<double> *Ps,TCSR<double> *PsImag,CPX energy,CPX weight,transport_methods::transport_method_type method,std::vector<double> muvec,std::vector<contact_type> contactvec,std::vector<result_type> &resultvec,std::vector<int> Bsizes,std::vector<int> orb_per_at,transport_parameters transport_params,MPI_Comm matrix_comm)
+int density(TCSR<double> *KohnSham,TCSR<double> *Overlap,TCSR<double> *Ps,TCSR<double> *PsImag,CPX energy,CPX weight,CPX dweight,transport_methods::transport_method_type method,std::vector<double> muvec,std::vector<contact_type> contactvec,std::vector<result_type> &resultvec,std::vector<int> Bsizes,std::vector<int> orb_per_at,transport_parameters transport_params,MPI_Comm matrix_comm)
 {
     double d_one = 1.0;
     double d_zer = 0.0;
@@ -100,6 +100,8 @@ sabtime=get_time(d_zer);
                 if ( selfenergies[ipos].GetSigma(boundary_comm,transport_params) ) return (LOGCERR, EXIT_FAILURE);
             }
 if (!worldrank) cout << "TIME FOR SIGMA GETSIGMA " << get_time(sabtime) << endl;
+int left_gpu_rank  = ceil((double)matrix_procs/GPUS_per_point)-1;
+if (worldrank==left_gpu_rank) cout << "TIME FOR FALL-THROUGH GETSIGMA " << get_time(sabtime) << endl;
             if (!run_splitsolve) {
 MPI_Barrier(matrix_comm);
 sabtime=get_time(d_zer);
@@ -208,6 +210,9 @@ if (!worldrank) cout << "TIME FOR EQ INVERSION " << get_time(sabtime) << endl;
 sabtime=get_time(d_zer);
         if (transport_params.inv_solver_method==inv_solver_methods::FULL) {
             FullInvert solver(HamSig,Ps,-weight/M_PI*CPX(0.0,1.0),matrix_comm);
+            if (transport_params.get_fermi_neutral) {
+                FullInvert solverD(HamSig,PsImag,-dweight/M_PI*CPX(0.0,1.0),matrix_comm);
+            }
             delete HamSig;
         } else if (transport_params.inv_solver_method==inv_solver_methods::RGF) {
             Bmax.push_back(Bsizes[0]-1);
@@ -220,6 +225,9 @@ sabtime=get_time(d_zer);
                 tmprGF::sparse_invert(HamSig,Fsizes);
             }
             Ps->add_real(HamSig,-weight/M_PI*CPX(0.0,1.0));
+            if (transport_params.get_fermi_neutral) {
+                PsImag->add_real(HamSig,-dweight/M_PI*CPX(0.0,1.0));
+            }
             delete HamSig;
 #ifdef HAVE_PARDISO_SELINV
         } else if (transport_params.inv_solver_method==inv_solver_methods::PARDISO) {
@@ -228,6 +236,9 @@ sabtime=get_time(d_zer);
                 Pardiso::sparse_invert(HamSig);
             }
             Ps->add_real(HamSig,-weight/M_PI*CPX(0.0,1.0));
+            if (transport_params.get_fermi_neutral) {
+                PsImag->add_real(HamSig,-dweight/M_PI*CPX(0.0,1.0));
+            }
             delete HamSig;
 #endif
 #ifdef HAVE_PEXSI
@@ -266,6 +277,9 @@ sabtime=get_time(d_zer);
   
             delete[] HS_nnz_inp;
             Ps->add_real(HamSig,-weight/M_PI*CPX(0.0,1.0));
+            if (transport_params.get_fermi_neutral) {
+                PsImag->add_real(HamSig,-dweight/M_PI*CPX(0.0,1.0));
+            }
             delete HamSig;
 #endif
         } else return (LOGCERR, EXIT_FAILURE);
@@ -434,6 +448,7 @@ sabtime=get_time(d_zer);
         int left_gpu_rank  = ceil((double)matrix_procs/GPUS_per_point)-1;
         int right_gpu_rank = matrix_procs-ceil((double)matrix_procs/GPUS_per_point);
 if (worldrank==left_gpu_rank) cout << "TIME FOR WAVEFUNCTION SPARSE DECOMPOSITION PHASE " << get_time(sabtime) << endl;
+if (!worldrank) cout << "TIME FOR FALL-THROUGH RANK WAVEFUNCTION " << get_time(sabtime) << endl;
 MPI_Barrier(matrix_comm);
         if (transport_params.lin_solver_method==lin_solver_methods::SPLITSOLVE) {
             int left_bc_rank  = 0;
@@ -551,23 +566,18 @@ if (worldrank==left_gpu_rank) cout << "TIME FOR WAVEFUNCTION SPARSE SOLVE PHASE 
             delete[] displc_sol;
         }
 //maybe i should have a solver comm (pointer to MPI_COMM_NULL after use) and a function sol_alloc and sol_dealloc
-#ifdef HAVE_PIMAG
         if (transport_params.cp2k_method==cp2k_methods::TRANSMISSION) {
-            double vbias=0.01;
-            double diff_fermil = -(fermi(real(energy),muvec[0]+vbias,transport_params.temperature,0)-fermi(real(energy),muvec[0],transport_params.temperature,0));
+            double factor_w=0.0;
+            if (weight==1.0) factor_w=1.0;
             CPX* SolT = new CPX[solsize*nprol];
             full_transpose(nprol,solsize,Sol,SolT);
-            //resultvec[0].dos=Ps->psipsidagger_transpose(Overlap,PsImag,SolT,nprol,+weight*diff_fermil);//here i would not need the density, only the PsImag
-            Ps->psipsidagger_transpose(Overlap,resultvec[0].dosprofile,&orb_per_at[0],PsImag,SolT,nprol,+weight*diff_fermil,matrix_comm);
+            Ps->psipsidagger_transpose(Overlap,resultvec[0].dosprofile,&orb_per_at[0],PsImag,SolT,nprol,factor_w,matrix_comm);
             delete[] SolT;
-            double diff_fermir = +(fermi(real(energy),muvec[1]+vbias,transport_params.temperature,0)-fermi(real(energy),muvec[1],transport_params.temperature,0));
             SolT = new CPX[solsize*npror];
             full_transpose(npror,solsize,&Sol[solsize*nprol],SolT);
-            //resultvec[1].dos=Ps->psipsidagger_transpose(Overlap,PsImag,SolT,npror,+weight*diff_fermir);//here i would not need the density, only the PsImag
-            Ps->psipsidagger_transpose(Overlap,resultvec[1].dosprofile,&orb_per_at[0],PsImag,SolT,npror,+weight*diff_fermir,matrix_comm);
+            Ps->psipsidagger_transpose(Overlap,resultvec[1].dosprofile,&orb_per_at[0],PsImag,SolT,npror,factor_w,matrix_comm);
             delete[] SolT;
         }
-#endif
         if (transport_params.cp2k_method==cp2k_methods::TRANSPORT) {
 sabtime=get_time(d_zer);
 //int minmuarg=std::min_element( vec.begin(), vec.end() ); and then loop over all that are not munmuarg
@@ -575,15 +585,29 @@ sabtime=get_time(d_zer);
                 double fermil = fermi(real(energy),muvec[0],transport_params.temperature,0)-fermi(real(energy),muvec[1],transport_params.temperature,0);
                 CPX* SolT = new CPX[solsize*nprol];
                 full_transpose(nprol,solsize,Sol,SolT);
-                //resultvec[0].dos=Ps->psipsidagger_transpose(Overlap,PsImag,SolT,nprol,+weight*fermil);
-                Ps->psipsidagger_transpose(Overlap,resultvec[0].dosprofile,&orb_per_at[0],PsImag,SolT,nprol,+weight*fermil,matrix_comm);
+                if (transport_params.get_fermi_neutral) {
+                    Overlap->psipsidagger_transpose(resultvec[0].dosprofile,SolT,nprol,matrix_comm);
+                } else {
+                    Ps->psipsidagger_transpose(Overlap,resultvec[0].dosprofile,&orb_per_at[0],PsImag,SolT,nprol,+weight*fermil,matrix_comm);
+                    delete[] SolT;
+                    SolT = new CPX[solsize*npror];
+                    full_transpose(npror,solsize,&Sol[solsize*nprol],SolT);
+                    Ps->psipsidagger_transpose(Overlap,resultvec[1].dosprofile,&orb_per_at[0],PsImag,SolT,npror,0.0,matrix_comm);
+                }
                 delete[] SolT;
             } else {
                 double fermir = fermi(real(energy),muvec[1],transport_params.temperature,0)-fermi(real(energy),muvec[0],transport_params.temperature,0);
                 CPX* SolT = new CPX[solsize*npror];
                 full_transpose(npror,solsize,&Sol[solsize*nprol],SolT);
-                //resultvec[1].dos=Ps->psipsidagger_transpose(Overlap,PsImag,SolT,npror,+weight*fermir);
-                Ps->psipsidagger_transpose(Overlap,resultvec[1].dosprofile,&orb_per_at[0],PsImag,SolT,npror,+weight*fermir,matrix_comm);
+                if (transport_params.get_fermi_neutral) {
+                    Overlap->psipsidagger_transpose(resultvec[1].dosprofile,SolT,npror,matrix_comm);
+                } else {
+                    Ps->psipsidagger_transpose(Overlap,resultvec[1].dosprofile,&orb_per_at[0],PsImag,SolT,npror,+weight*fermir,matrix_comm);
+                    delete[] SolT;
+                    SolT = new CPX[solsize*nprol];
+                    full_transpose(nprol,solsize,Sol,SolT);
+                    Ps->psipsidagger_transpose(Overlap,resultvec[0].dosprofile,&orb_per_at[0],PsImag,SolT,nprol,0.0,matrix_comm);
+                }
                 delete[] SolT;
             }
 if (!worldrank) cout << "TIME FOR CONSTRUCTION OF S-PATTERN DENSITY MATRIX " << get_time(sabtime) << endl;

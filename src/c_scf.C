@@ -218,6 +218,12 @@ void c_scf_method(cp2k_transport_parameters cp2k_transport_params, cp2k_csr_inte
     set_gpu(0,gpu_string);
 #endif
 
+    int rank,mpi_size;
+    MPI_Comm_size(MPI_COMM_WORLD,&mpi_size);
+    MPI_Comm_rank(MPI_COMM_WORLD,&rank);
+
+    if (!rank) cout << "Starting Transport" << endl;
+
     c_dscal(P->nze_local,0.5,P->nzvals_local,1);
 
 /*
@@ -226,12 +232,13 @@ void c_scf_method(cp2k_transport_parameters cp2k_transport_params, cp2k_csr_inte
     return;
 */
 
-    int rank,mpi_size;
-    MPI_Comm_size(MPI_COMM_WORLD,&mpi_size);
-    MPI_Comm_rank(MPI_COMM_WORLD,&rank);
+    double dens_mixing=1.0;
+    double *P_save=NULL;
+    if (dens_mixing<1.0 || dens_mixing>0.0) {
+        P_save = new double[P->nze_local];
+        c_dcopy(P->nze_local,P->nzvals_local,1,P_save,1);
+    }
 
-    if (!rank) cout << "Starting Transport" << endl;
- 
     int cndof_pbc=0;
     int cndof_mid=0;
     int cbw_pbc=0;
@@ -292,6 +299,11 @@ void c_scf_method(cp2k_transport_parameters cp2k_transport_params, cp2k_csr_inte
         transport_params.negf_solver                 = false;
         if (cp2k_transport_params.qt_formalism==41) {
             transport_params.negf_solver             = true;
+        }
+        transport_params.update_fermi                = true;
+        transport_params.get_fermi_neutral           = false;
+        if (transport_params.cp2k_method==cp2k_methods::TRANSPORT) {
+//            transport_params.get_fermi_neutral       = true;
         }
 
         int cutout[2]={0,0};
@@ -563,21 +575,30 @@ void c_scf_method(cp2k_transport_parameters cp2k_transport_params, cp2k_csr_inte
 
         //write_matrix(Overlap,KohnSham,wr_cutblocksize,wr_bw,wr_ndof);
         //if (diagscalapack(Overlap,KohnSham,transport_params)) throw std::exception();
-        //write_scaled_cp2k_csr_bin_remove_pbc( S,"S_4.bin",1.0,contactvec[0].bandwidth,contactvec[0].ndof,MPI_COMM_WORLD);
-        //write_scaled_cp2k_csr_bin_remove_pbc(KS,"H_4.bin",cp2k_transport_params.evoltfactor,contactvec[0].bandwidth,contactvec[0].ndof,MPI_COMM_WORLD);
-        //return;
+        if (transport_params.cp2k_method==cp2k_methods::WRITE_OUT) {
+            write_scaled_cp2k_csr_bin_remove_pbc( S,"S_4.bin",1.0,contactvec[0].bandwidth,contactvec[0].ndof,MPI_COMM_WORLD);
+            write_scaled_cp2k_csr_bin_remove_pbc(KS,"H_4.bin",cp2k_transport_params.evoltfactor,contactvec[0].bandwidth,contactvec[0].ndof,MPI_COMM_WORLD);
+            return;
+        }
         if (transport_params.cp2k_method==cp2k_methods::LOCAL_SCF) {
 #ifdef HAVE_OMEN_POISSON
+            transport_params.update_fermi=false;
             if (semiselfconsistent(S,KS,P,PImag,muvec,contactvec,Bsizes,orb_per_atom,transport_params)) throw std::exception();
 #endif
         } else {
+            if (transport_params.get_fermi_neutral) {
+                Energyvector energyvector;
+                if (energyvector.Execute(S,KS,P,PImag,muvec,contactvec,Bsizes,orb_per_atom,NULL,NULL,transport_params)) throw std::exception();
+                transport_params.update_fermi=false;
+                transport_params.get_fermi_neutral=false;
+            }
             Energyvector energyvector;
             if (energyvector.Execute(S,KS,P,PImag,muvec,contactvec,Bsizes,orb_per_atom,NULL,NULL,transport_params)) throw std::exception();
         }
 
     }
 
-    int overwrite_first_last_diag_block=1;
+    int overwrite_first_last_diag_block=0;
     if (cndof_pbc) {
         int size_tot=S.nrows_total;
         int offset=0;
@@ -684,7 +705,7 @@ void c_scf_method(cp2k_transport_parameters cp2k_transport_params, cp2k_csr_inte
     std::vector<double> mulli(cp2k_transport_params.n_atoms,0.0);
     for (int i=0;i<S.nrows_local;i++) {
         for (int e=S.rowptr_local[i]-1;e<S.rowptr_local[i+1]-1;e++) {
-            mulli[atom_of_bf[i+S.first_row]]+=S.nzvals_local[e]*P->nzvals_local[e];
+            mulli[atom_of_bf[i+S.first_row]]+=2.0*S.nzvals_local[e]*P->nzvals_local[e];
         }
     }
     MPI_Allreduce(MPI_IN_PLACE,&mulli[0],cp2k_transport_params.n_atoms,MPI_DOUBLE,MPI_SUM,MPI_COMM_WORLD);
@@ -700,7 +721,7 @@ void c_scf_method(cp2k_transport_parameters cp2k_transport_params, cp2k_csr_inte
     mulli.assign(cp2k_transport_params.n_atoms,0.0);
     for (int i=0;i<S.nrows_local;i++) {
         for (int e=S.rowptr_local[i]-1;e<S.rowptr_local[i+1]-1;e++) {
-            mulli[atom_of_bf[i+S.first_row]]+=S.nzvals_local[e]*KS.nzvals_local[e];
+            mulli[atom_of_bf[i+S.first_row]]+=2.0*S.nzvals_local[e]*KS.nzvals_local[e];
         }
     }
     MPI_Allreduce(MPI_IN_PLACE,&mulli[0],cp2k_transport_params.n_atoms,MPI_DOUBLE,MPI_SUM,MPI_COMM_WORLD);
@@ -711,6 +732,12 @@ void c_scf_method(cp2k_transport_parameters cp2k_transport_params, cp2k_csr_inte
         myfile.precision(8);
         for (int i=0;i<cp2k_transport_params.n_atoms;i++) myfile<<mulli[i]<<"\n";
         myfile.close();
+    }
+
+    if (dens_mixing<1.0 || dens_mixing>0.0) {
+        c_dscal(P->nze_local,dens_mixing,P->nzvals_local,1);
+        c_daxpy(P->nze_local,1.0-dens_mixing,P_save,1,P->nzvals_local,1);
+        delete[] P_save;
     }
 
     if (!rank) cout << "Transport iteration " << cp2k_transport_params.iscf << " finished" << endl;

@@ -1,4 +1,3 @@
-#ifdef HAVE_SPLITSOLVE
 #include <stdio.h>
 #include "Types.H"
 #include "cublas_v2.h"
@@ -304,7 +303,7 @@ void change_sign_imag_on_dev(CPX *var,int N){
     change_sign_imaginary_part_on_dev<<< i_N/BLOCK_DIM, BLOCK_DIM >>>((cuDoubleComplex*)var,N);
 }
 
-__global__ void d_extract_diag(double *D,int *edge_i,int *index_j,double *nnz,\
+__global__ void d_extract_diag(double *D,int *edge_i,int *index_j,cuDoubleComplex *nnz,\
 	   int NR,int imin,int imax,int shift,int findx){
 
      int j;
@@ -315,7 +314,7 @@ __global__ void d_extract_diag(double *D,int *edge_i,int *index_j,double *nnz,\
 	  for(j=edge_i[idx+imin]-findx;j<edge_i[idx+imin+1]-findx;j++){
 	      ind_j = index_j[j]-findx-shift-imin;
 	      if((ind_j>=0)&&(ind_j<NR)){
-	          D[idx+ind_j*NR] = nnz[j];
+	          D[idx+ind_j*NR] = nnz[j].x;
 	      }
 	  }
      }	   
@@ -324,15 +323,15 @@ __global__ void d_extract_diag(double *D,int *edge_i,int *index_j,double *nnz,\
 }
 
 extern "C"
-void d_extract_diag_on_dev(double *D,int *edge_i,int *index_j,double *nnz,int NR,\
+void d_extract_diag_on_dev(double *D,int *edge_i,int *index_j,CPX *nnz,int NR,\
      int imin,int imax,int shift,int findx,cudaStream_t stream){
 
     uint i_N = NR + (BLOCK_DIM-(NR%BLOCK_DIM));
 
-    d_extract_diag<<< i_N/BLOCK_DIM, BLOCK_DIM, 0, stream >>>(D,edge_i,index_j,nnz,NR,imin,imax,shift,findx);
+    d_extract_diag<<< i_N/BLOCK_DIM, BLOCK_DIM, 0, stream >>>(D,edge_i,index_j,(cuDoubleComplex*)nnz,NR,imin,imax,shift,findx);
 }
 
-__global__ void d_extract_not_diag(double *D,int *edge_i,int *index_j,double *nnz,\
+__global__ void d_extract_not_diag(double *D,int *edge_i,int *index_j,cuDoubleComplex *nnz,\
 	   int NR,int imin,int imax,int jmin,int side,int shift,int findx){
 
      int j;
@@ -348,7 +347,7 @@ __global__ void d_extract_not_diag(double *D,int *edge_i,int *index_j,double *nn
 	  for(j=edge_i[idx+imin]-findx;j<edge_i[idx+imin+1]-findx;j++){
 	      ind_j = index_j[j]-findx-jmin;
 	      if(side*ind_j>=limit){
-	          D[idx+ind_j*NR] = nnz[j];
+	          D[idx+ind_j*NR] = nnz[j].x;
 	      }
 	  }
      }	   
@@ -357,12 +356,12 @@ __global__ void d_extract_not_diag(double *D,int *edge_i,int *index_j,double *nn
 }
 
 extern "C"
-void d_extract_not_diag_on_dev(double *D,int *edge_i,int *index_j,double *nnz,int NR,\
+void d_extract_not_diag_on_dev(double *D,int *edge_i,int *index_j,CPX *nnz,int NR,\
      int imin,int imax,int jmin,int side,int shift,int findx,cudaStream_t stream){
 
     uint i_N = NR + (BLOCK_DIM-(NR%BLOCK_DIM));
 
-    d_extract_not_diag<<< i_N/BLOCK_DIM, BLOCK_DIM, 0, stream >>>(D,edge_i,index_j,nnz,NR,imin,imax,jmin,side,shift,findx);
+    d_extract_not_diag<<< i_N/BLOCK_DIM, BLOCK_DIM, 0, stream >>>(D,edge_i,index_j,(cuDoubleComplex*)nnz,NR,imin,imax,jmin,side,shift,findx);
 }
 
 __global__ void z_extract_diag(cuDoubleComplex *D,int *edge_i,int *index_j,cuDoubleComplex *nnz,\
@@ -676,5 +675,3 @@ void z_symmetrize_matrix_2(CPX *matrix,int N,cudaStream_t stream){
 
     z_symmetrize_2<<< grid, threads, 0, stream >>>((cuDoubleComplex*)matrix, N);
 }
-
-#endif

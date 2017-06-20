@@ -27,6 +27,8 @@ extern "C" {
 		    double*,double,double*);
   void z_csr_mult_f(void*,int,int,int,int,int*,int*,CPX*,CPX,\
 		    CPX*,CPX,CPX*);
+  void z_csr_mult_fo(void*,int,int,int,int,int*,int*,CPX*,CPX,\
+		     CPX*,CPX,CPX*);
   void d_transpose_matrix(double*,double*,int,int);
   void z_transpose_matrix(CPX*,CPX*,int,int);
   void d_init_var_on_dev(double*,int,cudaStream_t);
@@ -35,14 +37,16 @@ extern "C" {
   void z_init_eye_on_dev(CPX*,int,cudaStream_t);
   void correct_diag_on_dev(CPX*,int,cudaStream_t);
   void change_var_type_on_dev(double*,CPX*,int,cudaStream_t);
-  void d_extract_diag_on_dev(double*,int*,int*,double*,int,int,int,int,int,\
+  void change_sign_imag_on_dev(CPX*,int);
+  void d_extract_diag_on_dev(double*,int*,int*,CPX*,int,int,int,int,int,\
 			     cudaStream_t);
-  void d_extract_not_diag_on_dev(double*,int*,int*,double*,int,int,int,int,\
-				 int,int,int,cudaStream_t);
+  void d_extract_not_diag_on_dev(double*,int*,int*,CPX*,int,int,int,int,\
+				 int,int,int,cudaStream_t); 
   void d_symmetrize_matrix(double*,int,cudaStream_t);
   void z_extract_diag_on_dev(CPX*,int*,int*,CPX*,int,int,int,int,int,\
 			     cudaStream_t);
   void z_extract_not_diag_on_dev(CPX*,int*,int*,CPX*,int,int,int,int,\
 				 int,int,int,cudaStream_t); 
   void z_symmetrize_matrix(CPX*,int,cudaStream_t);
+  void z_symmetrize_matrix_2(CPX*,int,cudaStream_t);
 }
