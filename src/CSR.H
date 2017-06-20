@@ -12,6 +12,7 @@ using namespace MYBLAS;
 
 namespace cp2k_methods {
     enum cp2k_method_type {
+        WRITE_OUT    = 0,
         LOCAL_SCF    = 1,
         TRANSMISSION = 2,
         TRANSPORT    = 3,
@@ -88,6 +89,8 @@ struct transport_parameters
     int    pexsi_row_ordering;
     int    pexsi_verbosity;
     int    pexsi_np_symb_fact;
+    bool   update_fermi;
+    bool   get_fermi_neutral;
     bool   negf_solver;
     bool   extra_scf;
     bool   obc;
@@ -286,6 +289,7 @@ public:
     void psipsidagger_transpose(CPX*,CPX*,int,CPX);
     double psipsidagger_transpose(TCSR<double>*,TCSR<double>*,CPX*,int,CPX);
     void psipsidagger_transpose(TCSR<double>*,double*,int*,TCSR<double>*,CPX*,int,CPX,MPI_Comm);
+    void psipsidagger_transpose(double*,CPX*,int,MPI_Comm);
     void psipsidagger_transpose(double*,int,double);
     double psipsidagger(TCSR<double>*,CPX*,CPX*,CPX*,int,int,int,CPX);
     double psipsidagger_transpose(TCSR<double>*,CPX*,CPX*,CPX*,int,int,int,CPX);
@@ -2480,6 +2484,23 @@ inline void TCSR<double>::psipsidagger_transpose(TCSR<double>* matS,double* dosp
     }
     delete[] atom_of_bf;
     MPI_Allreduce(MPI_IN_PLACE,dosprofile,atom,MPI_DOUBLE,MPI_SUM,matrix_comm);
+}
+
+/************************************************************************************************/
+
+template <>
+inline void TCSR<double>::psipsidagger_transpose(double* dosprofile,CPX* psi,int nkval,MPI_Comm matrix_comm)
+{
+    int i,e;
+    CPX z;
+    init_variable(dosprofile,size_tot);
+    for(i=0;i<size;i++){
+        for(e=edge_i[i]-findx;e<edge_i[i+1]-findx;e++){
+            z=c_zdotc(nkval,&psi[(index_j[e]-findx)*nkval],1,&psi[(first_row+i)*nkval],1);
+            dosprofile[first_row+i]+=nnz[e]*real(z);
+        }
+    }
+    MPI_Allreduce(MPI_IN_PLACE,dosprofile,size_tot,MPI_DOUBLE,MPI_SUM,matrix_comm);
 }
 
 /************************************************************************************************/

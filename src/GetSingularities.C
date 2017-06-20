@@ -206,6 +206,24 @@ double Singularities::determine_charge(double mu,int i_mu,int mode)
     return n_ele_i;
 }
 
+double Singularities::determine_free_charge(double mu,int i_mu)
+{
+    double n_ele_i = 0.0;
+    int ndof=contactvec[i_mu].ndof;
+    for (int j=0;j<n_k;j++) {
+        for (int i=0;i<ndof;i++) {
+            if (energies_matrix[i_mu][i+j*ndof]<mu) {
+                n_ele_i+=2.0/(n_k-1)*(1-fermi(energies_matrix[i_mu][i+j*ndof],mu,Temp,0));
+                if (j==0 || j==n_k-1) n_ele_i-=1.0/(n_k-1)*(1-fermi(energies_matrix[i_mu][i+j*ndof],mu,Temp,0));
+            } else {
+                n_ele_i+=2.0/(n_k-1)*fermi(energies_matrix[i_mu][i+j*ndof],mu,Temp,0);
+                if (j==0 || j==n_k-1) n_ele_i-=1.0/(n_k-1)*fermi(energies_matrix[i_mu][i+j*ndof],mu,Temp,0);
+            }
+        }
+    }
+    return n_ele_i;
+}
+
 double Singularities::determine_fermi(double n_ele,int i_mu)
 {
     double mu;

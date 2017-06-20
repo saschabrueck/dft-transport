@@ -17,14 +17,15 @@ Energyvector::~Energyvector()
 {
 }
 
-int Energyvector::Execute(cp2k_csr_interop_type Overlap,cp2k_csr_interop_type KohnSham,cp2k_csr_interop_type *P,cp2k_csr_interop_type *PImag,std::vector<double> muvec,std::vector<contact_type> contactvec,std::vector<int> Bsizes,std::vector<int> orb_per_at,double *Vatom,double *rho_atom,transport_parameters transport_params)
+int Energyvector::Execute(cp2k_csr_interop_type Overlap,cp2k_csr_interop_type KohnSham,cp2k_csr_interop_type *P,cp2k_csr_interop_type *PImag,std::vector<double> &muvec,std::vector<contact_type> contactvec,std::vector<int> Bsizes,std::vector<int> orb_per_at,double *Vatom,double *rho_atom,transport_parameters transport_params)
 {
     std::vector<CPX> energyvector;
     std::vector<CPX> energyvector_real;
     std::vector<CPX> stepvector;
     std::vector<CPX> stepvector_real;
+    std::vector<CPX> drdmvector;
     std::vector< std::vector<int> > propagating_sizes;
-    if (determine_energyvector(energyvector,stepvector,energyvector_real,stepvector_real,propagating_sizes,KohnSham,Overlap,muvec,contactvec,transport_params)) return (LOGCERR, EXIT_FAILURE);
+    if (determine_energyvector(energyvector,stepvector,drdmvector,energyvector_real,stepvector_real,propagating_sizes,KohnSham,Overlap,muvec,contactvec,transport_params)) return (LOGCERR, EXIT_FAILURE);
     if (!iam) cout << "Size of Energyvectors " << energyvector.size() << " " << energyvector_real.size() << endl;
 
     distribution_methods::distribution_method_type distribution_method_cc = distribution_methods::NO_DISTRIBUTION;
@@ -47,16 +48,16 @@ int Energyvector::Execute(cp2k_csr_interop_type Overlap,cp2k_csr_interop_type Ko
     }
 
     if (transport_params.tasks_per_point==transport_params.tasks_per_point_cc && distribution_method==distribution_method_cc) {
-        if (distribute_and_execute(energyvector,stepvector,energyvector_real,stepvector_real,propagating_sizes,distribution_method,transport_params.tasks_per_point,Overlap,KohnSham,P,PImag,muvec,contactvec,Bsizes,orb_per_at,Vatom,rho_atom,transport_params)) return (LOGCERR, EXIT_FAILURE);
+        if (distribute_and_execute(energyvector,stepvector,drdmvector,energyvector_real,stepvector_real,propagating_sizes,distribution_method,transport_params.tasks_per_point,Overlap,KohnSham,P,PImag,muvec,contactvec,Bsizes,orb_per_at,Vatom,rho_atom,transport_params)) return (LOGCERR, EXIT_FAILURE);
     } else {
-        if (energyvector.size()) if (distribute_and_execute(energyvector,stepvector,std::vector<CPX>(),std::vector<CPX>(),propagating_sizes,distribution_method_cc,transport_params.tasks_per_point_cc,Overlap,KohnSham,P,PImag,muvec,contactvec,Bsizes,orb_per_at,Vatom,rho_atom,transport_params)) return (LOGCERR, EXIT_FAILURE);
+        if (energyvector.size()) if (distribute_and_execute(energyvector,stepvector,drdmvector,std::vector<CPX>(),std::vector<CPX>(),propagating_sizes,distribution_method_cc,transport_params.tasks_per_point_cc,Overlap,KohnSham,P,PImag,muvec,contactvec,Bsizes,orb_per_at,Vatom,rho_atom,transport_params)) return (LOGCERR, EXIT_FAILURE);
         double *Ptmp = NULL;
         if (energyvector.size() && energyvector_real.size()) {
             Ptmp = new double[P->nze_local];
             c_dcopy(P->nze_local,P->nzvals_local,1,Ptmp,1);
             c_dscal(P->nze_local,0.0,P->nzvals_local,1);
         }
-        if (energyvector_real.size()) if (distribute_and_execute(std::vector<CPX>(),std::vector<CPX>(),energyvector_real,stepvector_real,propagating_sizes,distribution_method,transport_params.tasks_per_point,Overlap,KohnSham,P,PImag,muvec,contactvec,Bsizes,orb_per_at,Vatom,rho_atom,transport_params)) return (LOGCERR, EXIT_FAILURE);
+        if (energyvector_real.size()) if (distribute_and_execute(std::vector<CPX>(),std::vector<CPX>(),std::vector<CPX>(),energyvector_real,stepvector_real,propagating_sizes,distribution_method,transport_params.tasks_per_point,Overlap,KohnSham,P,PImag,muvec,contactvec,Bsizes,orb_per_at,Vatom,rho_atom,transport_params)) return (LOGCERR, EXIT_FAILURE);
         if (energyvector.size() && energyvector_real.size()) {
             c_daxpy(P->nze_local,1.0,Ptmp,1,P->nzvals_local,1);
             delete[] Ptmp;
@@ -67,7 +68,7 @@ int Energyvector::Execute(cp2k_csr_interop_type Overlap,cp2k_csr_interop_type Ko
     return 0;
 }
 
-int Energyvector::distribute_and_execute(std::vector<CPX> energyvector,std::vector<CPX> stepvector,std::vector<CPX> energyvector_real,std::vector<CPX> stepvector_real,std::vector< std::vector<int> > propagating_sizes,distribution_methods::distribution_method_type distribution_method,int tasks_per_point,cp2k_csr_interop_type Overlap,cp2k_csr_interop_type KohnSham,cp2k_csr_interop_type *P,cp2k_csr_interop_type *PImag,std::vector<double> muvec,std::vector<contact_type> contactvec,std::vector<int> Bsizes,std::vector<int> orb_per_at,double *Vatom,double *rho_atom,transport_parameters transport_params)
+int Energyvector::distribute_and_execute(std::vector<CPX> energyvector,std::vector<CPX> stepvector,std::vector<CPX> drdmvector,std::vector<CPX> energyvector_real,std::vector<CPX> stepvector_real,std::vector< std::vector<int> > propagating_sizes,distribution_methods::distribution_method_type distribution_method,int tasks_per_point,cp2k_csr_interop_type Overlap,cp2k_csr_interop_type KohnSham,cp2k_csr_interop_type *P,cp2k_csr_interop_type *PImag,std::vector<double> &muvec,std::vector<contact_type> contactvec,std::vector<int> Bsizes,std::vector<int> orb_per_at,double *Vatom,double *rho_atom,transport_parameters transport_params)
 {
 double sabtime;
     std::vector<int> Tsizes = get_tsizes(distribution_method,Overlap.nrows_total-transport_params.cutl-transport_params.cutr,Bsizes,orb_per_at,transport_params.gpus_per_point,tasks_per_point);
@@ -111,6 +112,7 @@ sabtime=get_time(0.0);
     int degeneracy_warning=0;
     energyvector.insert(energyvector.end(),energyvector_real.begin(),energyvector_real.end());
     stepvector.insert(stepvector.end(),stepvector_real.begin(),stepvector_real.end());
+    drdmvector.insert(drdmvector.end(),stepvector_real.begin(),stepvector_real.end());
     MPI_File file;
     MPI_Status status;
     stringstream mysstream;
@@ -122,8 +124,12 @@ sabtime=get_time(0.0);
         if (jpos<int(energyvector.size())) {
             if (abs(stepvector[jpos])>0.0) {
                 std::vector<result_type> resvec(muvec.size());
+                int dosprofilesize = orb_per_at.size()-1;
+                if (transport_params.get_fermi_neutral) {
+                    dosprofilesize = OverlapCollect->size_tot;
+                }
                 for (uint i_mu=0;i_mu<muvec.size();i_mu++) {
-                    resvec[i_mu].dosprofile = new double[orb_per_at.size()-1]();
+                    resvec[i_mu].dosprofile = new double[dosprofilesize]();
                 }
                 transport_methods::transport_method_type method;
                 if (propos>=0) {
@@ -139,12 +145,12 @@ sabtime=get_time(0.0);
                         method=transport_methods::EQ;
                     }
                 }
-                if (density(KohnShamCollect,OverlapCollect,DensReal,DensImag,energyvector[jpos],stepvector[jpos],method,muvec,contactvec,resvec,Bsizes,orb_per_at,transport_params,matrix_comm)) return (LOGCERR, EXIT_FAILURE);
+                if (density(KohnShamCollect,OverlapCollect,DensReal,DensImag,energyvector[jpos],stepvector[jpos],drdmvector[jpos],method,muvec,contactvec,resvec,Bsizes,orb_per_at,transport_params,matrix_comm)) return (LOGCERR, EXIT_FAILURE);
                 if (!matrix_rank && propos>=0) {
                     for (uint i_mu=0;i_mu<muvec.size();i_mu++) {
-                        MPI_Offset offset = (i_mu*energyvector_real.size()+propos)*(orb_per_at.size()-1)*sizeof(double);
+                        MPI_Offset offset = (i_mu*energyvector_real.size()+propos)*dosprofilesize*sizeof(double);
                         MPI_File_seek(file,offset,MPI_SEEK_SET);
-                        MPI_File_write(file,resvec[i_mu].dosprofile,orb_per_at.size()-1,MPI_DOUBLE,&status);
+                        MPI_File_write(file,resvec[i_mu].dosprofile,dosprofilesize,MPI_DOUBLE,&status);
                         if (resvec[i_mu].npro!=propagating_sizes[propos][i_mu] && transport_params.real_int_method==real_int_methods::GAUSSCHEBYSHEV) propagating_warning++;
                         if (resvec[i_mu].eigval_degeneracy>=0) degeneracy_warning++;
                         if (resvec[i_mu].rcond<numeric_limits<double>::epsilon()) return (LOGCERR, EXIT_FAILURE);
@@ -175,6 +181,89 @@ if (!iam) cout << "TIME FOR DENSITY " << get_time(sabtime) << endl;
     MPI_Allreduce(MPI_IN_PLACE,&transmission[0],energyvector_real.size(),MPI_DOUBLE,MPI_SUM,MPI_COMM_WORLD);
     if (energyvector_real.size()) write_transmission_current(energyvector_real,stepvector_real,transmission,muvec,transport_params);
 
+    if (transport_params.get_fermi_neutral) {
+        int ind_hi;
+        int ind_lo;
+        if (muvec[0]>muvec[1]) {
+            ind_hi=0;
+            ind_lo=1;
+        } else {
+            ind_hi=1;
+            ind_lo=0;
+        }
+        int start_hi=contactvec[ind_hi].start+contactvec[ind_hi].inj_sign*contactvec[ind_hi].bandwidth*contactvec[ind_hi].ndof;
+        int start_lo=contactvec[ind_lo].start+contactvec[ind_lo].inj_sign*contactvec[ind_lo].bandwidth*contactvec[ind_lo].ndof;
+        int end_hi=start_hi+contactvec[ind_hi].ndof;
+        int end_lo=start_lo+contactvec[ind_lo].ndof;
+        double norbnc_hi=0.0;
+        double norbnc_lo=0.0;
+        double drdmcc_lo=0.0;
+        for (int i=0;i<OverlapCollect->size;i++) {
+            int ib=OverlapCollect->first_row+i;
+            if (ib>=start_hi && ib<end_hi) {
+                for (int e=OverlapCollect->edge_i[i]-OverlapCollect->findx;e<OverlapCollect->edge_i[i+1]-OverlapCollect->findx;e++) {
+                    norbnc_hi-=OverlapCollect->nnz[e]*DensReal->nnz[e];
+                }
+            }
+            if (ib>=start_lo && ib<end_lo) {
+                for (int e=OverlapCollect->edge_i[i]-OverlapCollect->findx;e<OverlapCollect->edge_i[i+1]-OverlapCollect->findx;e++) {
+                    norbnc_lo-=OverlapCollect->nnz[e]*DensReal->nnz[e];
+                    drdmcc_lo+=OverlapCollect->nnz[e]*DensImag->nnz[e];
+                }
+            }
+        }
+        MPI_Allreduce(MPI_IN_PLACE,&norbnc_hi,1,MPI_DOUBLE,MPI_SUM,MPI_COMM_WORLD);
+        MPI_Allreduce(MPI_IN_PLACE,&norbnc_lo,1,MPI_DOUBLE,MPI_SUM,MPI_COMM_WORLD);
+        MPI_Allreduce(MPI_IN_PLACE,&drdmcc_lo,1,MPI_DOUBLE,MPI_SUM,MPI_COMM_WORLD);
+        norbnc_hi+=contactvec[ind_hi].n_ele/2.0;
+        norbnc_lo+=contactvec[ind_lo].n_ele/2.0;
+        if (!iam) {
+            ifstream dosfile(mysstream.str().c_str(),ios::in|ios::binary);
+            if (dosfile.fail()) return (LOGCERR, EXIT_FAILURE);
+            dosfile.seekg(ind_hi*energyvector_real.size()*OverlapCollect->size_tot*sizeof(double),ios::beg);
+            std::vector<double> dosvector(energyvector_real.size()*OverlapCollect->size_tot);
+            dosfile.read((char*)&dosvector[0],energyvector_real.size()*OverlapCollect->size_tot*sizeof(double));
+            dosfile.close();
+            std::vector<double> dos_hi(energyvector_real.size(),0.0);
+            std::vector<double> dos_lo(energyvector_real.size(),0.0);
+            for (uint ie=0;ie<energyvector_real.size();ie++) {
+                for (int ib=start_hi;ib<end_hi;ib++) {
+                    dos_hi[ie]+=dosvector[ie*OverlapCollect->size_tot+ib];
+                }
+                for (int ib=start_lo;ib<end_lo;ib++) {
+                    dos_lo[ie]+=dosvector[ie*OverlapCollect->size_tot+ib];
+                }
+            }
+            dosvector=std::vector<double>();
+            double nele_hi=0.0;
+            for (uint ie=0;ie<energyvector_real.size();ie++) {
+                double diff_fermi = fermi(real(energyvector_real[ie]),muvec[ind_hi],transport_params.temperature,0)-fermi(real(energyvector_real[ie]),muvec[ind_lo],transport_params.temperature,0);
+                nele_hi += real(stepvector_real[ie])*diff_fermi*dos_hi[ie];
+            }
+            while (norbnc_hi-nele_hi>1.0E-10) {
+                double drdm_hi=0.0;
+                for (uint ie=0;ie<energyvector_real.size();ie++) {
+                    double drdm_fermi = fermi(real(energyvector_real[ie]),muvec[ind_hi],transport_params.temperature,2);
+                    drdm_hi += real(stepvector_real[ie])*drdm_fermi*dos_hi[ie];
+                }
+                if (abs(drdm_hi)<1.0E-12) break;
+                muvec[ind_hi]+=(norbnc_hi-nele_hi)/drdm_hi;
+                nele_hi=0.0;
+                for (uint ie=0;ie<energyvector_real.size();ie++) {
+                    double diff_fermi = fermi(real(energyvector_real[ie]),muvec[ind_hi],transport_params.temperature,0)-fermi(real(energyvector_real[ie]),muvec[ind_lo],transport_params.temperature,0);
+                    nele_hi += real(stepvector_real[ie])*diff_fermi*dos_hi[ie];
+                }
+            }
+            double nele_lo=0.0;
+            for (uint ie=0;ie<energyvector_real.size();ie++) {
+                double diff_fermi = fermi(real(energyvector_real[ie]),muvec[ind_hi],transport_params.temperature,0)-fermi(real(energyvector_real[ie]),muvec[ind_lo],transport_params.temperature,0);
+                nele_lo += real(stepvector_real[ie])*diff_fermi*dos_lo[ie];
+            }
+            muvec[ind_lo]+=(norbnc_lo-nele_lo)/drdmcc_lo;
+        }
+        MPI_Bcast(&muvec[0],muvec.size(),MPI_DOUBLE,0,MPI_COMM_WORLD);
+    }
+
     if (transport_params.cutl || transport_params.cutr) {
         TCSR<double> *DensRealCollect = new TCSR<double>(*P,MPI_COMM_WORLD,&Tsizes[0],Tsizes.size(),transport_params.cutl,transport_params.cutr,&matrix_comm);
         c_dscal(DensRealCollect->n_nonzeros,double(Tsizes.size())/double(nprocs),DensRealCollect->nnz,1);
@@ -202,13 +291,14 @@ if (!iam) cout << "TIME FOR DENSITY " << get_time(sabtime) << endl;
         DensReal->atom_allocate(OverlapCollect,&orb_per_at[0],rho_atom,2.0);
         MPI_Allreduce(MPI_IN_PLACE,rho_atom,orb_per_at.size()-1,MPI_DOUBLE,MPI_SUM,MPI_COMM_WORLD);
     }
+    MPI_Comm_free(&matrix_comm);
+
     delete KohnShamCollect;
     delete OverlapCollect;
     delete DensReal;
     if (transport_params.cp2k_method!=cp2k_methods::LOCAL_SCF) {
         delete DensImag;
     }
-    MPI_Comm_free(&matrix_comm);
 
     return 0;
 }
@@ -306,7 +396,7 @@ int Energyvector::write_transmission_current(std::vector<CPX> energyvector,std::
     return 0;
 }
 
-int Energyvector::determine_energyvector(std::vector<CPX> &energyvector_cc,std::vector<CPX> &stepvector_cc,std::vector<CPX> &energyvector,std::vector<CPX> &stepvector,std::vector< std::vector<int> > &propagating_sizes,cp2k_csr_interop_type KohnSham,cp2k_csr_interop_type Overlap,std::vector<double> &muvec,std::vector<contact_type> contactvec,transport_parameters transport_params)
+int Energyvector::determine_energyvector(std::vector<CPX> &energyvector_cc,std::vector<CPX> &stepvector_cc,std::vector<CPX> &drdmvector_cc,std::vector<CPX> &energyvector,std::vector<CPX> &stepvector,std::vector< std::vector<int> > &propagating_sizes,cp2k_csr_interop_type KohnSham,cp2k_csr_interop_type Overlap,std::vector<double> &muvec,std::vector<contact_type> contactvec,transport_parameters transport_params)
 {
     Singularities singularities(transport_params,contactvec);
     int determine_singularities = !(transport_params.real_int_method!=real_int_methods::GAUSSCHEBYSHEV && transport_params.cp2k_method==cp2k_methods::LOCAL_SCF);
@@ -315,12 +405,15 @@ int Energyvector::determine_energyvector(std::vector<CPX> &energyvector_cc,std::
     if (determine_singularities) {
 double sabtime=get_time(0.0);
         if ( singularities.Execute(KohnSham,Overlap) ) return (LOGCERR, EXIT_FAILURE);
-        if (transport_params.cp2k_method!=cp2k_methods::LOCAL_SCF) for (uint i_mu=0;i_mu<muvec.size();i_mu++) muvec[i_mu]=singularities.determine_fermi(contactvec[i_mu].n_ele,i_mu);
+        if (transport_params.update_fermi) for (uint i_mu=0;i_mu<muvec.size();i_mu++) muvec[i_mu]=singularities.determine_fermi(contactvec[i_mu].n_ele,i_mu);
         if (!iam && contactvec.size()==muvec.size()+1) {
             double gate_charge=contactvec[muvec.size()].n_ele;
             double doping=contactvec[0].n_ele-gate_charge;
             double intrinsic_charge=singularities.determine_charge(muvec[0],muvec.size(),0)-gate_charge;
             cout << "Conduction band charge on gate from bandstructure: " << intrinsic_charge << " Built-in potential: " << transport_params.temperature*log(doping/intrinsic_charge) << endl;
+            double free_charge_lead=singularities.determine_free_charge(muvec[0],0);
+            double free_charge_gate=singularities.determine_free_charge(muvec[0],muvec.size());
+            cout << "Free charge lead: " << free_charge_lead << " Free charge gate: " << free_charge_gate << " Built-in potential: " << transport_params.temperature*log(free_charge_lead/free_charge_gate) << endl;
         }
         bands_start=singularities.energy_gs;
 if (!iam) cout << "TIME FOR SINGULARITIES " << get_time(sabtime) << endl;
@@ -345,13 +438,18 @@ if (!iam) cout << "Fermi level difference " << muvec_max-muvec_min << endl;
         double energy_cb=*min_element(singularities.energies_cb.begin(),singularities.energies_cb.end());
         if (assign_real_axis_energies(energy_cb,nonequi_end,energyvector,stepvector,singularities.energies_extremum,muvec.size(),transport_params)) return (LOGCERR, EXIT_FAILURE);
     } else if (transport_params.cp2k_method==cp2k_methods::TRANSPORT) {
-        if (assign_cmpx_cont_energies(bands_start,muvec_min,energyvector_cc,stepvector_cc,transport_params.temperature,transport_params.n_abscissae)) return (LOGCERR, EXIT_FAILURE);
+        if (assign_cmpx_cont_energies(bands_start,muvec_min,energyvector_cc,stepvector_cc,drdmvector_cc,transport_params.temperature,transport_params.n_abscissae)) return (LOGCERR, EXIT_FAILURE);
         if (assign_real_axis_energies(nonequi_start,nonequi_end,energyvector,stepvector,singularities.energies_extremum,muvec.size(),transport_params)) return (LOGCERR, EXIT_FAILURE);
     } else if (transport_params.cp2k_method==cp2k_methods::TRANSMISSION) {
         if (!transport_params.extra_scf) {
-            if (assign_cmpx_cont_energies(bands_start,muvec_avg,energyvector_cc,stepvector_cc,transport_params.temperature,transport_params.n_abscissae)) return (LOGCERR, EXIT_FAILURE);
+            if (assign_cmpx_cont_energies(bands_start,muvec_avg,energyvector_cc,stepvector_cc,drdmvector_cc,transport_params.temperature,transport_params.n_abscissae)) return (LOGCERR, EXIT_FAILURE);
         } else {
-            if (assign_real_axis_energies(nonequi_start,nonequi_end,energyvector,stepvector,singularities.energies_extremum,muvec.size(),transport_params)) return (LOGCERR, EXIT_FAILURE);
+            if (transport_params.energy_interval<=0.0) {
+                energyvector.assign(1,muvec_avg);
+                stepvector.assign(1,1.0);
+            } else {
+                if (assign_real_axis_energies(nonequi_start,nonequi_end,energyvector,stepvector,singularities.energies_extremum,muvec.size(),transport_params)) return (LOGCERR, EXIT_FAILURE);
+            }
         }
     } else return (LOGCERR, EXIT_FAILURE);
     if (!iam) {
@@ -493,18 +591,22 @@ int Energyvector::assign_real_axis_energies(double nonequi_start,double nonequi_
     return 0;
 }
 
-int Energyvector::assign_cmpx_cont_energies(double start,double mu,std::vector<CPX> &energyvector,std::vector<CPX> &stepvector,double Temp,int num_points_on_contour)
+int Energyvector::assign_cmpx_cont_energies(double start,double mu,std::vector<CPX> &energyvector,std::vector<CPX> &stepvector,std::vector<CPX> &drdmvector,double Temp,int num_points_on_contour)
 {
     energyvector.clear();
     stepvector.clear();
+    drdmvector.clear();
     enum cc_int_method {do_pexsi,do_pole_summation,do_contour,do_line};
     cc_int_method method=do_pexsi;
     if (method==do_pexsi) {
         energyvector.resize(num_points_on_contour);
         stepvector.resize(num_points_on_contour);
+        drdmvector.resize(num_points_on_contour);
         double EM=abs(mu-start); // Max|E-mu| for all Eigenvalues E of 
         if (PEXSI::GetPoleDensity(&energyvector[0],&stepvector[0],num_points_on_contour,Temp,0.0,EM,mu)) return (LOGCERR, EXIT_FAILURE);
         c_zscal(num_points_on_contour,CPX(M_PI/2.0,0.0),&stepvector[0],1);
+        if (PEXSI::GetPoleDensityDrvMu(&energyvector[0],&drdmvector[0],num_points_on_contour,Temp,0.0,EM,mu)) return (LOGCERR, EXIT_FAILURE);
+        c_zscal(num_points_on_contour,CPX(M_PI/2.0,0.0),&drdmvector[0],1);
     } else if (method==do_pole_summation) {
         double Temp_r=1.0*Temp;
         double Temp_i=1.0*Temp;

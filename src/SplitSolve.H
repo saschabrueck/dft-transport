@@ -64,13 +64,13 @@ private:
     CPX *M3_dev;
     CPX *y_dev;
     CPX *z_dev;
-    T *nnz_dev;
+    CPX *nnz_dev;
     int *edge_i_dev;
     int *index_j_dev;
     int *b_min,*b_max;
 
-    void extract_diag(int*,int*,T*,T*,int*,int*,int,cudaStream_t);
-    void extract_not_diag(int*,int*,T*,T*,int*,int*,int,int,cudaStream_t);
+    void extract_diag(int*,int*,CPX*,T*,int*,int*,int,cudaStream_t);
+    void extract_not_diag(int*,int*,CPX*,T*,int*,int*,int,int,cudaStream_t);
     void change_var_type(T*,CPX*,int,cudaStream_t);
     void symmetrize_matrix(T*,int,cudaStream_t);
     void create_blocks(int,int,int*,int*,int*,int);
@@ -217,7 +217,7 @@ void SplitSolve<CPX>::symmetrize_matrix(CPX *M,int N,cudaStream_t stream)
 /************************************************************************************************/
 
 template <>
-void SplitSolve<double>::extract_diag(int *edge_i,int *index_j,double *nnz,double *D,int *Bmin,\
+void SplitSolve<double>::extract_diag(int *edge_i,int *index_j,CPX *nnz,double *D,int *Bmin,\
 				      int *Bmax,int index,cudaStream_t stream)
 {
 
@@ -257,7 +257,7 @@ void SplitSolve<CPX>::extract_diag(int *edge_i,int *index_j,CPX *nnz,CPX *D,int 
 /************************************************************************************************/
 
 template <>
-void SplitSolve<double>::extract_not_diag(int *edge_i,int *index_j,double *nnz,double *D,int *Bmin,\
+void SplitSolve<double>::extract_not_diag(int *edge_i,int *index_j,CPX *nnz,double *D,int *Bmin,\
 					  int *Bmax,int index,int side,cudaStream_t stream)
 {
 
@@ -587,7 +587,7 @@ void SplitSolve<T>::SecondStage()
 
     deallocate_data_on_dev(edge_i_dev,(matrix->size+1)*sizeof(int));
     deallocate_data_on_dev(index_j_dev,matrix->n_nonzeros*sizeof(int));
-    deallocate_data_on_dev(nnz_dev,matrix->n_nonzeros*sizeof(T));
+    deallocate_data_on_dev(nnz_dev,matrix->n_nonzeros*sizeof(CPX));
 
     delete[] ipiv;
 }
@@ -1282,13 +1282,11 @@ void SplitSolve<T>::prepare(int *Bmin,int *Bmax,int NBlock,int Bsize,int *orb_pe
 
 	allocate_data_on_device((void**)&edge_i_dev,(matrix->size+1)*sizeof(int));
 	allocate_data_on_device((void**)&index_j_dev,matrix->n_nonzeros*sizeof(int));
-	allocate_data_on_device((void**)&nnz_dev,matrix->n_nonzeros*sizeof(T));
+	allocate_data_on_device((void**)&nnz_dev,matrix->n_nonzeros*sizeof(CPX));
 
 	memcpy_to_device(matrix->edge_i,edge_i_dev,(matrix->size+1)*sizeof(int));
 	memcpy_to_device(matrix->index_j,index_j_dev,matrix->n_nonzeros*sizeof(int));
-	//memcpy_to_device(matrix->nnz,nnz_dev,matrix->n_nonzeros*sizeof(CPX));
-	cudaMemcpy2DAsync(nnz_dev,sizeof(T),matrix->nnz,sizeof(CPX),sizeof(T),matrix->n_nonzeros,cudaMemcpyHostToDevice,NULL);
-
+	memcpy_to_device(matrix->nnz,nnz_dev,matrix->n_nonzeros*sizeof(CPX));
 
 	M_host  = HostMem;
 	M1_host = &HostMem[b_size*matrix->size];
