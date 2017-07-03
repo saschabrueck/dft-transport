@@ -232,7 +232,7 @@ void c_scf_method(cp2k_transport_parameters cp2k_transport_params, cp2k_csr_inte
     return;
 */
 
-    double dens_mixing=1.0;
+    double dens_mixing=cp2k_transport_params.dens_mixing;
     double *P_save=NULL;
     if (dens_mixing<1.0 || dens_mixing>0.0) {
         P_save = new double[P->nze_local];
@@ -302,8 +302,8 @@ void c_scf_method(cp2k_transport_parameters cp2k_transport_params, cp2k_csr_inte
         }
         transport_params.update_fermi                = true;
         transport_params.get_fermi_neutral           = false;
-        if (transport_params.cp2k_method==cp2k_methods::TRANSPORT) {
-//            transport_params.get_fermi_neutral       = true;
+        if (cp2k_transport_params.transport_neutral==52) {
+            transport_params.get_fermi_neutral       = true;
         }
 
         int cutout[2]={0,0};
