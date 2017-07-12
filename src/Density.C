@@ -571,16 +571,16 @@ if (worldrank==left_gpu_rank) cout << "TIME FOR WAVEFUNCTION SPARSE SOLVE PHASE 
             if (weight==1.0) factor_w=1.0;
             CPX* SolT = new CPX[solsize*nprol];
             full_transpose(nprol,solsize,Sol,SolT);
-            Ps->psipsidagger_transpose(Overlap,resultvec[0].dosprofile,&orb_per_at[0],PsImag,SolT,nprol,factor_w,matrix_comm);
+            Ps->psipsidagger_transpose(Overlap,resultvec[0].dosprofile,&orb_per_at[0],PsImag,SolT,nprol,-0.5*factor_w,matrix_comm);
             delete[] SolT;
             SolT = new CPX[solsize*npror];
             full_transpose(npror,solsize,&Sol[solsize*nprol],SolT);
-            Ps->psipsidagger_transpose(Overlap,resultvec[1].dosprofile,&orb_per_at[0],PsImag,SolT,npror,factor_w,matrix_comm);
+            Ps->psipsidagger_transpose(Overlap,resultvec[1].dosprofile,&orb_per_at[0],PsImag,SolT,npror,+0.5*factor_w,matrix_comm);
             delete[] SolT;
         }
         if (transport_params.cp2k_method==cp2k_methods::TRANSPORT) {
 sabtime=get_time(d_zer);
-//int minmuarg=std::min_element( vec.begin(), vec.end() ); and then loop over all that are not munmuarg
+//int minmuarg=std::min_element( vec.begin(), vec.end() ); and then loop over all that are not minmuarg
             if (muvec[0]>muvec[1]) {
                 double fermil = fermi(real(energy),muvec[0],transport_params.temperature,0)-fermi(real(energy),muvec[1],transport_params.temperature,0);
                 CPX* SolT = new CPX[solsize*nprol];

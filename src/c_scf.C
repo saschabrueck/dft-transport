@@ -550,14 +550,14 @@ void c_scf_method(cp2k_transport_parameters cp2k_transport_params, cp2k_csr_inte
             int atom_start = contactvec[i].atomstart;
             int atom_stop  = atom_start + contactvec[i].natoms;
             contactvec[i].atomstart = atom_start-cutout[0];
-            contactvec[i].start     = std::accumulate(&cp2k_transport_params.nsgf[cutout[0]],&cp2k_transport_params.nsgf[atom_start],0);
-            contactvec[i].start_bs  = std::accumulate(&cp2k_transport_params.nsgf[0],&cp2k_transport_params.nsgf[atom_start],0);
-            contactvec[i].ndof      = std::accumulate(&cp2k_transport_params.nsgf[atom_start],&cp2k_transport_params.nsgf[atom_stop],0);
-            contactvec[i].n_ele     = std::accumulate(&cp2k_transport_params.zeff[atom_start],&cp2k_transport_params.zeff[atom_stop],0.0);
+            contactvec[i].start     = std::accumulate(cp2k_transport_params.nsgf+cutout[0], cp2k_transport_params.nsgf+atom_start,0);
+            contactvec[i].start_bs  = std::accumulate(cp2k_transport_params.nsgf,           cp2k_transport_params.nsgf+atom_start,0);
+            contactvec[i].ndof      = std::accumulate(cp2k_transport_params.nsgf+atom_start,cp2k_transport_params.nsgf+atom_stop ,0);
+            contactvec[i].n_ele     = std::accumulate(cp2k_transport_params.zeff+atom_start,cp2k_transport_params.zeff+atom_stop ,0.0);
         }
  
-        transport_params.cutl = std::accumulate(&cp2k_transport_params.nsgf[0],&cp2k_transport_params.nsgf[cutout[0]],0);
-        transport_params.cutr = std::accumulate(&cp2k_transport_params.nsgf[cp2k_transport_params.n_atoms-cutout[1]],&cp2k_transport_params.nsgf[cp2k_transport_params.n_atoms],0);
+        transport_params.cutl = std::accumulate(cp2k_transport_params.nsgf,                                        cp2k_transport_params.nsgf+cutout[0]                    ,0);
+        transport_params.cutr = std::accumulate(cp2k_transport_params.nsgf+cp2k_transport_params.n_atoms-cutout[1],cp2k_transport_params.nsgf+cp2k_transport_params.n_atoms,0);
  
         if (!transport_params.extra_scf && transport_params.obc && !system) {
             cndof_pbc=contactvec[0].ndof;
@@ -717,6 +717,10 @@ void c_scf_method(cp2k_transport_parameters cp2k_transport_params, cp2k_csr_inte
         for (int i=0;i<cp2k_transport_params.n_atoms;i++) myfile<<mulli[i]<<"\n";
         myfile.close();
     }
+    double electrondensity=-std::accumulate(mulli.begin(),mulli.end(),0.0);
+    double totaldensity=std::accumulate(cp2k_transport_params.zeff,cp2k_transport_params.zeff+cp2k_transport_params.n_atoms,electrondensity);
+    if (!rank) cout << "ELECTRON DENSITY " << cp2k_transport_params.iscf << " IS " << electrondensity << endl;
+    if (!rank) cout << "TOTAL DENSITY " << cp2k_transport_params.iscf << " IS " << totaldensity << endl;
 
     mulli.assign(cp2k_transport_params.n_atoms,0.0);
     for (int i=0;i<S.nrows_local;i++) {

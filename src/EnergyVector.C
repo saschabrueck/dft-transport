@@ -363,7 +363,7 @@ int Energyvector::write_transmission_current(std::vector<CPX> energyvector,std::
         }
         myfile.close();
         if (transport_params.cp2k_method==cp2k_methods::TRANSPORT) {
-            cout << "CURRENT FROM TRANSMISSION " << current << endl;
+            cout << "CURRENT FROM TRANSMISSION " << transport_params.cp2k_scf_iter << " IS " << current << endl;
         }
     }
     if (!iam && transport_params.cp2k_method==cp2k_methods::TRANSMISSION) {
@@ -486,7 +486,7 @@ if (!iam) cout << "TIME FOR PROPAGATING MODES " << get_time(sabtime) << endl;
                     current += transport_params.conduct_quant*diff_fermi*real(stepvector[iele])*propagating_sizes[iele][contactvec.size()-1];
                 }
             }
-            cout << "CURRENT FROM BANDSTRUCTURE " << current << endl;
+            cout << "CURRENT FROM BANDSTRUCTURE " << transport_params.cp2k_scf_iter << " IS " << current << endl;
         }
         if (!iam && contactvec.size()==muvec.size()+1 && transport_params.cp2k_method==cp2k_methods::TRANSMISSION) {
             stringstream mysstream;
