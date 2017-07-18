@@ -7,12 +7,6 @@
 //#include "DiagScaLapack.H"
 //#include "WriteMatrix.H"
 
-/**  
- *   \brief Takes the overlap (S) and Kohn-Sham (KS) matrices as input and returns a density matrix (P).
- *          This function acts as the gate to the CP2K's world. 
- *          Here only call functions that evaluate a P matrix.   
- */
-
 void write_cp2k_csr(cp2k_csr_interop_type& cp2kCSRmat,const char* filename)
 {
     ofstream myfile;
@@ -205,6 +199,10 @@ void write_scaled_cp2k_csr_bin_remove_pbc(cp2k_csr_interop_type& cp2kCSRmat,cons
     MPI_File_close(&file);
 }
 
+/*!  
+ *   \brief Takes the overlap (S) and Kohn-Sham (KS) matrices as input and returns a density matrix (P).
+ *          This function acts as the gate to the CP2K's world. 
+ */
 #ifdef HAVE_PIMAG
 void c_scf_method(cp2k_transport_parameters cp2k_transport_params, cp2k_csr_interop_type S, cp2k_csr_interop_type KS, cp2k_csr_interop_type * P, cp2k_csr_interop_type * PImag)
 {

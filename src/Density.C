@@ -31,6 +31,8 @@
 #include "Density.H"
 #include <iostream>
 
+/*! \brief Function that calls the inversion or linear solvers, adds up the LDOS computed from the solution to the P matrix, and computes the atom-resolved DOS and transmission for each energy point
+*/
 int density(TCSR<double> *KohnSham,TCSR<double> *Overlap,TCSR<double> *Ps,TCSR<double> *PsImag,CPX energy,CPX weight,CPX dweight,transport_methods::transport_method_type method,std::vector<double> muvec,std::vector<contact_type> contactvec,std::vector<result_type> &resultvec,std::vector<int> Bsizes,std::vector<int> orb_per_at,transport_parameters transport_params,MPI_Comm matrix_comm)
 {
     double d_one = 1.0;

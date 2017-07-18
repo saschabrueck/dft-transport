@@ -4,11 +4,6 @@
 #include "Types.H"
 #include <vector>
 
-/** \enum quadrature_type
- *
- *  \brief User friendly access to quadrature types in \sa Quadrature
- *
- */
 namespace quadrature_types {
 enum quadrature_type {
   NONE=0,
@@ -22,20 +17,17 @@ enum quadrature_type {
 };
 } // namespace
 
-/** \class Quadrature
+/*! \class Quadrature
  *  
  *  \brief Provides access to abscissae and weights for quadratures
  *
  *  The class implements quadrature types by providing access to abscissae and
  *  weights for quadrature
- *
- *  \version $Revision$
- *  \date $Date$
  */
 class Quadrature {
  public:
-  std::vector<CPX> abscissae;    ///< Vector containing the abscissae
-  std::vector<CPX> weights; ///< Vector containing the corresponding weights
+  std::vector<CPX> abscissae;
+  std::vector<CPX> weights;
   Quadrature(quadrature_types::quadrature_type, double, double, int);
 
 };
