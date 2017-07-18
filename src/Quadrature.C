@@ -8,17 +8,10 @@ struct QUADRATURE_Exception{
     QUADRATURE_Exception(const int line,const char* file) {std::cerr<<"Error in line "<<line<<" of file "<<file<<std::endl;}
 };
 
-/** \brief Constructor
+/*! \brief Constructor
  *
  *  Currently implemented methods for quadrature:
  *
- *    - 'quadrature_type::GL'
- *      Real line Gauss-Legendre. Abscissae and weights are calculated by
- *      constructing a symmetric companion matrix whose eigenvalues are the 
- *      abscissa. The weights are derived from the first eigenvector.
- *    - 'quadrature_type::CCGL'
- *      Complex contour Gauss Legendre. Same as above but abscissae are
- *      located on a half circle in the upper complex plane.
  *    - 'quadrature_type::GC'
  *      Real line Gauss-Chebychev. Abscissae and weights are calculated
  *      on the fly. This method allows for a pole on the upper end of the

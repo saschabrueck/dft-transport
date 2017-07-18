@@ -1,7 +1,3 @@
-/**  \brief Distribute Matrices, construct Energyvector and start Density in parallel
- *
- *   \author Sascha A. Brueck
- */
 #ifndef __ENERGYVECTOR
 #define __ENERGYVECTOR
 
@@ -17,6 +13,10 @@ namespace distribution_methods {
     };
 }
 
+/*!  \brief Distribute matrices from CP2K to the energy points, call bandstructure calculator, construct energyvector and call density evaluation in parallel
+ *
+ *   \author Sascha A. Brueck
+ */
 class Energyvector {
 public:
 Energyvector();
