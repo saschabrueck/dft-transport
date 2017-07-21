@@ -12,9 +12,9 @@ CPP = $(SCOREP) CC
 GCC = cc
 NVCC = nvcc
 
-CFLAGS = -Wall -fopenmp -O3 -ffast-math -funroll-loops -march=native
+#CFLAGS = -Wall -fopenmp -O3 -ffast-math -funroll-loops -march=native
 #CFLAGS = -Wall -dynamic -fno-omit-frame-pointer -O1 -g -fsanitize=leak
-#CFLAGS = -Wall -g -fopenmp
+CFLAGS = -Wall -g -fopenmp
 CXXFLAGS = -std=c++11 $(CFLAGS)
 NVCCFLAGS = -arch=compute_60 -code=sm_60
 
@@ -31,7 +31,7 @@ INCAMD        = -I$(LIB_TOP)/../OMEN_XC50/AMD/Include/
 INCUFC        = -I$(LIB_TOP)/../OMEN_XC50/UFconfig/
 INCUMF        = -I$(LIB_TOP)/../OMEN_XC50/UMFPACK/Include/
 INCMAG        = -I$(LIB_TOP)/magma-2.2.0/include/
-INCPEX        = -I$(LIB_TOP)/pexsi_v0.10.1/include/
+INCPEX        = -I$(LIB_TOP)/pexsi_v0.10.2/include/
 
 # Common library paths
 AZTECLIB      = $(LIB_TOP)/../OMEN_XC50/AZTEC/lib/libaztec.a
@@ -39,12 +39,12 @@ QHULLLIB      = $(LIB_TOP)/../OMEN_XC50/QHULL/src/libqhull.a
 AMDLIB        = $(LIB_TOP)/../OMEN_XC50/AMD/Lib/libamd.a
 UMFPACKLIB    = $(LIB_TOP)/../OMEN_XC50/UMFPACK/Lib/libumfpack.a
 MAGMALIB      = $(LIB_TOP)/magma-2.2.0/lib/libmagma.a
-PEXSILIB      = $(LIB_TOP)/pexsi_v0.10.1/src/libpexsi_daint.a
+PEXSILIB      = $(LIB_TOP)/pexsi_v0.10.2/src/libpexsi_daint.a
 
 DMALLOC = -L/apps/common/UES/SLES12/ddt/6.1.2/lib/64/ -ldmallocthcxx -z muldefs
 
 LFLAGS = -L$(LIB_TOP)/cp2k/lib/pexsi/popt/
-DFLAGS = -DAdd_ -Dlibcp2k -DHAVE_MUMPS -DHAVE_SUPERLU -DHAVE_PEXSI -DHAVE_SPLITSOLVE -DHAVE_OMEN_POISSON
+DFLAGS = -DAdd_ -Dlibcp2k -DHAVE_MUMPS -DHAVE_SUPERLU -DHAVE_PEXSI -DHAVE_SPLITSOLVE -DHAVE_OMEN_POISSON -DHAVE_PIMAG
 LIBS = -lcp2k \
 	$(UMFPACKLIB) $(AMDLIB) $(AZTECLIB) $(QHULLLIB) $(PEXSILIB) $(MAGMALIB) \
 	-lzmumps -lsuperlu_dist -lptscotch -lptscotcherr -lscotch \
