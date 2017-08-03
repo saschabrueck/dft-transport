@@ -569,18 +569,27 @@ if (worldrank==left_gpu_rank) cout << "TIME FOR WAVEFUNCTION SPARSE SOLVE PHASE 
         }
 //maybe i should have a solver comm (pointer to MPI_COMM_NULL after use) and a function sol_alloc and sol_dealloc
         if (transport_params.cp2k_method==cp2k_methods::TRANSMISSION) {
-            CPX factor_w=0.0;
-            if (weight==1.0) factor_w=1.0;
             ifstream rangefile("CURRENT_CUBE_RANGE");
-            if (rangefile) {
+            CPX factor_w=0.0;
+            if (weight==1.0) {
+                factor_w=1.0;
+            } else if (abs(muvec[0]-muvec[1])>0.01) {
+                if (muvec[0]>muvec[1]) {
+                    double fermil = fermi(real(energy),muvec[0],transport_params.temperature,0)-fermi(real(energy),muvec[1],transport_params.temperature,0);
+                    factor_w=+weight*fermil;
+                } else {
+                    double fermir = fermi(real(energy),muvec[1],transport_params.temperature,0)-fermi(real(energy),muvec[0],transport_params.temperature,0);
+                    factor_w=+weight*fermir;
+                }
+            } else if (rangefile) {
                 double range_start, range_end;
                 rangefile >> range_start;
                 rangefile >> range_end;
                 if (real(energy)>range_start && real(energy)<range_end) {
                     factor_w=weight;
                 }
+                rangefile.close();
             }
-            rangefile.close();
             CPX* SolT = new CPX[solsize*nprol];
             full_transpose(nprol,solsize,Sol,SolT);
             Ps->psipsidagger_transpose(Overlap,resultvec[0].dosprofile,&orb_per_at[0],PsImag,SolT,nprol,-0.5*factor_w,matrix_comm);
