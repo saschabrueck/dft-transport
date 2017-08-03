@@ -715,10 +715,7 @@ void c_scf_method(cp2k_transport_parameters cp2k_transport_params, cp2k_csr_inte
         for (int i=0;i<cp2k_transport_params.n_atoms;i++) myfile<<mulli[i]<<"\n";
         myfile.close();
     }
-    double electrondensity=-std::accumulate(mulli.begin(),mulli.end(),0.0);
-    double totaldensity=std::accumulate(cp2k_transport_params.zeff,cp2k_transport_params.zeff+cp2k_transport_params.n_atoms,electrondensity);
-    if (!rank) cout << "ELECTRON DENSITY " << cp2k_transport_params.iscf << " IS " << electrondensity << endl;
-    if (!rank) cout << "TOTAL DENSITY " << cp2k_transport_params.iscf << " IS " << totaldensity << endl;
+    if (!rank) cout << "CHARGE " << cp2k_transport_params.iscf << " IS " << std::accumulate(cp2k_transport_params.zeff,cp2k_transport_params.zeff+cp2k_transport_params.n_atoms,-std::accumulate(mulli.begin(),mulli.end(),0.0)) << endl;
 
     mulli.assign(cp2k_transport_params.n_atoms,0.0);
     for (int i=0;i<S.nrows_local;i++) {
