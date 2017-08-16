@@ -189,18 +189,8 @@ void Poisson::solve_FDM(double *Vnew,double *Vold,double *rho_atom,double *drho_
 	    c_daxpy(P->size,-beta,doping,1,res,1);
 	    P->update_loc_diag(drho_dV,beta);
         
-	    if(mpi_loc_size==1){
-#ifdef HAVE_PARDISO
-	        solver = new Pardiso<double>(P,loc_comm);
-#else
-		solver = new Umfpack<double>(P,loc_comm);
-#endif
-		solver->prepare();
-	    }else{
-	        solver = new Aztec<double>(P,loc_comm);
-	    }
+            solver = new Hypre<double>(RP2,loc_comm);
 	    solver->solve_equation(delta_V,res,1);
-
 	    delete solver;
 
 	    iterate_V(Vnew,delta_V,NULL,FEM->NGrid);
@@ -310,34 +300,24 @@ void Poisson::solve_FEM(double *Vnew,double *Vold,double *rho_atom,double *drho_
 
 	while((condition>criterion)&&(IC<max_iter)){
 	  
-//	    if((IC)||(no_task==34)){
+	    if((IC)||(no_task==34)){
 	        calc_cd_cdd(rho,drho_dV,rhsign,Ef,Vnew,NC,FEM->real_at_index,\
 			    FEM->ratom_index,Wire->ch_conv,FEM->poisson_index,FEM->atom_index,\
 			    FEM->NAtom,Temp,start,stop);
 		
-//	    }else{
-//	        copy_cd_cdd(rho,drho_dV,rho_atom,drho_atom_dV,FEM->ratom_index,\
-//			    Wire->ch_conv,FEM->poisson_index,FEM->atom_index,\
-//			    FEM->NAtom,start,stop);
-//	    }
+	    }else{
+	        copy_cd_cdd(rho,drho_dV,rho_atom,drho_atom_dV,FEM->ratom_index,\
+			    Wire->ch_conv,FEM->poisson_index,FEM->atom_index,\
+			    FEM->NAtom,start,stop);
+	    }
 
 	    P2->mat_vec_mult(Vnew,res,1);
 	    c_daxpy(RP2->size,-beta1,rho,1,res,1);
 	    c_daxpy(RP2->size,beta1,doping,1,res,1);
 	    RP2->update_loc_diag(drho_dV,-beta1);
       
-	    if(mpi_loc_size==1){ 
-#ifdef HAVE_PARDISO
-	        solver = new Pardiso<double>(RP2,loc_comm);
-#else
-		solver = new Umfpack<double>(RP2,loc_comm);
-#endif
-		solver->prepare();
-	    }else{
-	        solver = new Aztec<double>(RP2,loc_comm);
-	    }
+            solver = new Hypre<double>(RP2,loc_comm);
 	    solver->solve_equation(delta_V,res,1);
-
 	    delete solver;
 
 	    iterate_V(Vnew,delta_V,FEM->poisson_index,FEM->NGrid);

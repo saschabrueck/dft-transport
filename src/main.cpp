@@ -42,18 +42,15 @@ int main (int argc, char **argv)
       material->initialize(nanowire->sc_dist_dep);
       Wire = new WireGenerator(parameter->lattype,0);
       Wire->execute_task(nanowire,material,0,MPI_COMM_WORLD);
-//      WireGenerator* Wire = new WireGenerator();
-//      Wire->execute_task(nanowire);
       FEM = new FEMGrid();
+      int worldsize;
+      MPI_Comm_size(MPI_COMM_WORLD,&worldsize);
       FEM->execute_task(Wire,nanowire,1,1,MPI_COMM_SELF,MPI_COMM_WORLD);
-//      FEM->execute_task(Wire,nanowire);
       OMEN_Poisson_Solver = new Poisson();
       OMEN_Poisson_Solver->init(Wire,nanowire,FEM,1,1,MPI_COMM_WORLD);
-//      OMEN_Poisson_Solver->init(nanowire,FEM);
    }
 #endif
 
-#ifdef libcp2k
    cp2k_init_without_mpi();
    force_env_t force_env;
    cp2k_create_force_env_comm(&force_env, argv[1], "__STD_OUT__", MPI_Comm_c2f(MPI_COMM_WORLD));
@@ -69,7 +66,6 @@ int main (int argc, char **argv)
    cp2k_get_positions(force_env, &pos[0], pos.size());
    cp2k_destroy_force_env(force_env);
    cp2k_finalize_without_mpi();
-#endif
 
 #ifdef HAVE_OMEN_POISSON
    if (argc>2) {

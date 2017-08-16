@@ -1,7 +1,6 @@
 #ifndef __LINEARSOLVER
 #define __LINEARSOLVER
 
-#include <vector>
 #include "Types.H"
 #include "CSR.H"
 #include "mpi.h"

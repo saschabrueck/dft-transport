@@ -8,11 +8,7 @@
 #include "Types.H"
 #include "FEMGrid.H"
 #include "CSR.H"
-#ifdef HAVE_PARDISO
-#include "Pardiso.H"
-#endif
-#include "Aztec.H"
-#include "Umfpack.H"
+#include "Hypre.H"
 #include "Fermi.H"
 
 class Poisson{
