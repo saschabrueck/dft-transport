@@ -157,28 +157,29 @@ void write_scaled_cp2k_csr_bin_remove_pbc(cp2k_csr_interop_type& cp2kCSRmat,cons
     int remaining_elements = cp2kCSRmat.nze_local - n_removed_elements;
 
     int *dist = new int[mpi_size];
-    int *disp = new int[mpi_size];
+    int *disp = new int[mpi_size+1];
     MPI_Allgather(&remaining_elements,1,MPI_INT,dist,1,MPI_INT,cp2k_comm);
     disp[0]=0;
-    for (int i=0;i<mpi_size-1;i++) {
+    for (int i=0;i<mpi_size;i++) {
         disp[i+1]=disp[i]+dist[i];
     }
+    delete[] dist;
 
     MPI_Offset offset = 0;
     if (rank) offset=(4*disp[rank]+3)*sizeof(double);
-    delete[] dist;
-    delete[] disp;
 
     MPI_File_seek(file,offset,MPI_SEEK_SET);
 
     if (!rank) {
         double head_1=(double) cp2kCSRmat.nrows_total;
-        double head_2=(double) cp2kCSRmat.nze_total;
+        double head_2=(double) disp[mpi_size];
         double head_3=(double) 1;
         MPI_File_write(file,&head_1,1,MPI_DOUBLE,&status);
         MPI_File_write(file,&head_2,1,MPI_DOUBLE,&status);
         MPI_File_write(file,&head_3,1,MPI_DOUBLE,&status);
     }
+
+    delete[] disp;
 
     for (int i=0;i<cp2kCSRmat.nrows_local;i++) {
         for (int e=cp2kCSRmat.rowptr_local[i]-1;e<cp2kCSRmat.rowptr_local[i+1]-1;e++) {
@@ -571,8 +572,6 @@ void c_scf_method(cp2k_transport_parameters cp2k_transport_params, cp2k_csr_inte
             orb_per_atom.push_back(orb_per_atom[i]+cp2k_transport_params.nsgf[cutout[0]+i]);
         }
 
-        //write_matrix(Overlap,KohnSham,wr_cutblocksize,wr_bw,wr_ndof);
-        //if (diagscalapack(Overlap,KohnSham,transport_params)) throw std::exception();
         if (transport_params.cp2k_method==cp2k_methods::WRITE_OUT) {
             write_scaled_cp2k_csr_bin_remove_pbc( S,"S_4.bin",1.0,contactvec[0].bandwidth,contactvec[0].ndof,MPI_COMM_WORLD);
             write_scaled_cp2k_csr_bin_remove_pbc(KS,"H_4.bin",cp2k_transport_params.evoltfactor,contactvec[0].bandwidth,contactvec[0].ndof,MPI_COMM_WORLD);
@@ -586,12 +585,12 @@ void c_scf_method(cp2k_transport_parameters cp2k_transport_params, cp2k_csr_inte
         } else {
             if (transport_params.get_fermi_neutral) {
                 Energyvector energyvector;
-                if (energyvector.Execute(S,KS,P,PImag,muvec,contactvec,Bsizes,orb_per_atom,NULL,NULL,transport_params)) throw std::exception();
+                if (energyvector.Execute(S,KS,P,PImag,muvec,contactvec,Bsizes,orb_per_atom,NULL,transport_params)) throw std::exception();
                 transport_params.update_fermi=false;
                 transport_params.get_fermi_neutral=false;
             }
             Energyvector energyvector;
-            if (energyvector.Execute(S,KS,P,PImag,muvec,contactvec,Bsizes,orb_per_atom,NULL,NULL,transport_params)) throw std::exception();
+            if (energyvector.Execute(S,KS,P,PImag,muvec,contactvec,Bsizes,orb_per_atom,NULL,transport_params)) throw std::exception();
         }
 
     }
