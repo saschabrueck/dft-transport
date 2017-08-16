@@ -15,26 +15,27 @@ int semiselfconsistent(cp2k_csr_interop_type S,cp2k_csr_interop_type KS,cp2k_csr
 
     if (FEM->NAtom != orb_per_atom.size()-1) return (LOGCERR, EXIT_FAILURE);
 
-    double *doping_atom = new double[FEM->NAtom];
-    for (int ia=0;ia<FEM->NAtom;ia++) {
-        doping_atom[ia]=FEM->doping[FEM->real_at_index[ia]];
-    }
     double dopingvec[2];
     for (int i_mu=0;i_mu<n_mu;i_mu++) {
         dopingvec[i_mu]=0;
         for (int ia=contactvec[i_mu].atomstart;ia<contactvec[i_mu].atomstart+contactvec[i_mu].natoms;ia++) {
-            dopingvec[i_mu]+=doping_atom[ia];
+            dopingvec[i_mu]+=FEM->doping[FEM->real_at_index[ia]];
         }
     }
-    delete[] doping_atom;
 
     double *Vnew = new double[FEM->NGrid]();
     double *Vold = new double[FEM->NGrid];
-    double *Vatom = new double[FEM->NAtom];
     double *rho_atom = new double[2*FEM->NAtom]();//ZERO IN THE SECOND COMPONENT
     double *rho_atom_previous = new double[2*FEM->NAtom];
     double *drho_atom_dV = new double[2*FEM->NAtom]();
     double *drho_atom_dV_previous = new double[2*FEM->NAtom];
+
+    int* atom_of_bf = new int[S.nrows_total];
+    int atom=0;
+    for (int i=0;i<S.nrows_total;i++) {
+        if (i==orb_per_atom[atom+1]) ++atom;
+        atom_of_bf[i]=atom;
+    }
 
     double Vs=voltage->Vsmin;
     double Vd=voltage->Vdmin;
@@ -133,13 +134,24 @@ rhofile.close();
     int max_iter=parameter->poisson_iteration;
     for (int i_iter=1;i_iter<=max_iter;i_iter++) {
 
-        for (int ia=0;ia<FEM->NAtom;ia++) {
-            Vatom[ia]=Vnew[FEM->real_at_index[ia]];//add Vm here?
-        }
         double sabtime=get_time(0.0);
-        Energyvector energyvector;
+        for(int i=0;i<KS.nrows_local;i++) {
+            int atom_i=atom_of_bf[i+KS.first_row];
+            for(int e=KS.rowptr_local[i]-1;e<KS.rowptr_local[i+1]-1;e++) {
+                int atom_j=atom_of_bf[KS.colind_local[e]-1];
+                KS.nzvals_local[e]+=(Vnew[FEM->real_at_index[atom_i]]+Vnew[FEM->real_at_index[atom_j]])/2.0/transport_params.evoltfactor*S.nzvals_local[e];//add Vm here?
+            }
+        }
         c_dscal(2*FEM->NAtom,0.0,rho_atom,1);
-        if (energyvector.Execute(S,KS,P,PImag,muvec,contactvec,Bsizes,orb_per_atom,Vatom,rho_atom,transport_params)) return (LOGCERR, EXIT_FAILURE);
+        Energyvector energyvector;
+        if (energyvector.Execute(S,KS,P,PImag,muvec,contactvec,Bsizes,orb_per_atom,rho_atom,transport_params)) return (LOGCERR, EXIT_FAILURE);
+        for(int i=0;i<KS.nrows_local;i++) {
+            int atom_i=atom_of_bf[i+KS.first_row];
+            for(int e=KS.rowptr_local[i]-1;e<KS.rowptr_local[i+1]-1;e++) {
+                int atom_j=atom_of_bf[KS.colind_local[e]-1];
+                KS.nzvals_local[e]-=(Vnew[FEM->real_at_index[atom_i]]+Vnew[FEM->real_at_index[atom_j]])/2.0/transport_params.evoltfactor*S.nzvals_local[e];//add Vm here?
+            }
+        }
         if (!iam) cout << "TIME FOR SCHROEDINGER " << get_time(sabtime) << endl;
 
 if(!iam){
@@ -193,11 +205,12 @@ rhofile.close();
 
     delete[] Vnew;
     delete[] Vold;
-    delete[] Vatom;
     delete[] rho_atom;
     delete[] rho_atom_previous;
     delete[] drho_atom_dV;
     delete[] drho_atom_dV_previous;
+
+    delete[] atom_of_bf;
 
     return 0;
 }

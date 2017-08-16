@@ -17,7 +17,7 @@ Energyvector::~Energyvector()
 {
 }
 
-int Energyvector::Execute(cp2k_csr_interop_type Overlap,cp2k_csr_interop_type KohnSham,cp2k_csr_interop_type *P,cp2k_csr_interop_type *PImag,std::vector<double> &muvec,std::vector<contact_type> contactvec,std::vector<int> Bsizes,std::vector<int> orb_per_at,double *Vatom,double *rho_atom,transport_parameters transport_params)
+int Energyvector::Execute(cp2k_csr_interop_type Overlap,cp2k_csr_interop_type KohnSham,cp2k_csr_interop_type *P,cp2k_csr_interop_type *PImag,std::vector<double> &muvec,std::vector<contact_type> contactvec,std::vector<int> Bsizes,std::vector<int> orb_per_at,double *rho_atom,transport_parameters transport_params)
 {
     std::vector<CPX> energyvector;
     std::vector<CPX> energyvector_real;
@@ -48,16 +48,16 @@ int Energyvector::Execute(cp2k_csr_interop_type Overlap,cp2k_csr_interop_type Ko
     }
 
     if (transport_params.tasks_per_point==transport_params.tasks_per_point_cc && distribution_method==distribution_method_cc) {
-        if (distribute_and_execute(energyvector,stepvector,drdmvector,energyvector_real,stepvector_real,propagating_sizes,distribution_method,transport_params.tasks_per_point,Overlap,KohnSham,P,PImag,muvec,contactvec,Bsizes,orb_per_at,Vatom,rho_atom,transport_params)) return (LOGCERR, EXIT_FAILURE);
+        if (distribute_and_execute(energyvector,stepvector,drdmvector,energyvector_real,stepvector_real,propagating_sizes,distribution_method,transport_params.tasks_per_point,Overlap,KohnSham,P,PImag,muvec,contactvec,Bsizes,orb_per_at,rho_atom,transport_params)) return (LOGCERR, EXIT_FAILURE);
     } else {
-        if (energyvector.size()) if (distribute_and_execute(energyvector,stepvector,drdmvector,std::vector<CPX>(),std::vector<CPX>(),propagating_sizes,distribution_method_cc,transport_params.tasks_per_point_cc,Overlap,KohnSham,P,PImag,muvec,contactvec,Bsizes,orb_per_at,Vatom,rho_atom,transport_params)) return (LOGCERR, EXIT_FAILURE);
+        if (energyvector.size()) if (distribute_and_execute(energyvector,stepvector,drdmvector,std::vector<CPX>(),std::vector<CPX>(),propagating_sizes,distribution_method_cc,transport_params.tasks_per_point_cc,Overlap,KohnSham,P,PImag,muvec,contactvec,Bsizes,orb_per_at,rho_atom,transport_params)) return (LOGCERR, EXIT_FAILURE);
         double *Ptmp = NULL;
         if (energyvector.size() && energyvector_real.size()) {
             Ptmp = new double[P->nze_local];
             c_dcopy(P->nze_local,P->nzvals_local,1,Ptmp,1);
             c_dscal(P->nze_local,0.0,P->nzvals_local,1);
         }
-        if (energyvector_real.size()) if (distribute_and_execute(std::vector<CPX>(),std::vector<CPX>(),std::vector<CPX>(),energyvector_real,stepvector_real,propagating_sizes,distribution_method,transport_params.tasks_per_point,Overlap,KohnSham,P,PImag,muvec,contactvec,Bsizes,orb_per_at,Vatom,rho_atom,transport_params)) return (LOGCERR, EXIT_FAILURE);
+        if (energyvector_real.size()) if (distribute_and_execute(std::vector<CPX>(),std::vector<CPX>(),std::vector<CPX>(),energyvector_real,stepvector_real,propagating_sizes,distribution_method,transport_params.tasks_per_point,Overlap,KohnSham,P,PImag,muvec,contactvec,Bsizes,orb_per_at,rho_atom,transport_params)) return (LOGCERR, EXIT_FAILURE);
         if (energyvector.size() && energyvector_real.size()) {
             c_daxpy(P->nze_local,1.0,Ptmp,1,P->nzvals_local,1);
             delete[] Ptmp;
@@ -68,7 +68,7 @@ int Energyvector::Execute(cp2k_csr_interop_type Overlap,cp2k_csr_interop_type Ko
     return 0;
 }
 
-int Energyvector::distribute_and_execute(std::vector<CPX> energyvector,std::vector<CPX> stepvector,std::vector<CPX> drdmvector,std::vector<CPX> energyvector_real,std::vector<CPX> stepvector_real,std::vector< std::vector<int> > propagating_sizes,distribution_methods::distribution_method_type distribution_method,int tasks_per_point,cp2k_csr_interop_type Overlap,cp2k_csr_interop_type KohnSham,cp2k_csr_interop_type *P,cp2k_csr_interop_type *PImag,std::vector<double> &muvec,std::vector<contact_type> contactvec,std::vector<int> Bsizes,std::vector<int> orb_per_at,double *Vatom,double *rho_atom,transport_parameters transport_params)
+int Energyvector::distribute_and_execute(std::vector<CPX> energyvector,std::vector<CPX> stepvector,std::vector<CPX> drdmvector,std::vector<CPX> energyvector_real,std::vector<CPX> stepvector_real,std::vector< std::vector<int> > propagating_sizes,distribution_methods::distribution_method_type distribution_method,int tasks_per_point,cp2k_csr_interop_type Overlap,cp2k_csr_interop_type KohnSham,cp2k_csr_interop_type *P,cp2k_csr_interop_type *PImag,std::vector<double> &muvec,std::vector<contact_type> contactvec,std::vector<int> Bsizes,std::vector<int> orb_per_at,double *rho_atom,transport_parameters transport_params)
 {
 double sabtime;
     std::vector<int> Tsizes = get_tsizes(distribution_method,Overlap.nrows_total-transport_params.cutl-transport_params.cutr,Bsizes,orb_per_at,transport_params.gpus_per_point,tasks_per_point);
@@ -95,10 +95,6 @@ sabtime=get_time(0.0);
         c_dscal(DensImag->n_nonzeros,0.0,DensImag->nnz,1);
     }
 if (!iam) cout << "TIME FOR DISTRIBUTING MATRICES " << get_time(sabtime) << endl;
-
-    if (transport_params.cp2k_method==cp2k_methods::LOCAL_SCF) {
-        KohnShamCollect->add_pot(OverlapCollect,&orb_per_at[0],Vatom);
-    }
 
 sabtime=get_time(0.0);
     std::vector<double> transmission(energyvector_real.size(),0.0);
@@ -362,9 +358,7 @@ int Energyvector::write_transmission_current(std::vector<CPX> energyvector,std::
             }
         }
         myfile.close();
-        if (transport_params.cp2k_method==cp2k_methods::TRANSPORT) {
-            cout << "CURRENT FROM TRANSMISSION " << transport_params.cp2k_scf_iter << " IS " << current << endl;
-        }
+        cout << "CURRENT FROM TRANSMISSION " << transport_params.cp2k_scf_iter << " IS " << current << endl;
     }
     if (!iam && transport_params.cp2k_method==cp2k_methods::TRANSMISSION) {
         ofstream myfile("CurrentFromTransmissionComplete");
