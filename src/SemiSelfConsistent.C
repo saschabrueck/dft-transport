@@ -172,7 +172,7 @@ rhofile.close();
 
         c_dcopy(FEM->NGrid,Vnew,1,Vold,1);
         double Temp=transport_params.temperature/transport_params.boltzmann_ev;
-        OMEN_Poisson_Solver->solve(Vnew,Vold,rho_atom_previous,NULL,1,NULL,FEM,Wire,Temp,&Vg,Vs,Vs,Vd,&residual,parameter->poisson_inner_criterion,parameter->poisson_inner_iteration,1,1,MPI_COMM_SELF,MPI_COMM_WORLD,1,MPI_COMM_WORLD,34);
+        OMEN_Poisson_Solver->solve(Vnew,Vold,rho_atom_previous,NULL,1,NULL,FEM,Wire,Temp,&Vg,Vs,Vs,Vd,&residual,parameter->poisson_inner_criterion,parameter->poisson_inner_iteration,procs,1,MPI_COMM_WORLD,MPI_COMM_WORLD,0,MPI_COMM_NULL,34);
 
 
 if(!iam){

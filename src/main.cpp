@@ -45,9 +45,9 @@ int main (int argc, char **argv)
       FEM = new FEMGrid();
       int worldsize;
       MPI_Comm_size(MPI_COMM_WORLD,&worldsize);
-      FEM->execute_task(Wire,nanowire,1,1,MPI_COMM_SELF,MPI_COMM_WORLD);
+      FEM->execute_task(Wire,nanowire,worldsize,1,MPI_COMM_WORLD,MPI_COMM_WORLD);
       OMEN_Poisson_Solver = new Poisson();
-      OMEN_Poisson_Solver->init(Wire,nanowire,FEM,1,1,MPI_COMM_WORLD);
+      OMEN_Poisson_Solver->init(Wire,nanowire,FEM,worldsize,1,MPI_COMM_WORLD);
    }
 #endif
 
