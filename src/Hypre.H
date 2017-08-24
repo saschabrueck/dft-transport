@@ -91,6 +91,41 @@ template <class T>
 void Hypre<T>::solve_equation(T* res, T* arg_rhs, int no_rhs)
 {
 
+    int maxiter=100;
+    double solvetol=1e-6;
+
+    int rank,commsize,start_row,start_ele;
+    MPI_Comm_rank(internal_comm,&rank);
+    MPI_Comm_size(internal_comm,&commsize);
+    int *rowindx=new int[P->size];
+    for (int i=0;i<P->size;i++) rowindx[i]=i+P->findx+P->first_row;
+    int *dist = new int[commsize];
+    int *disp = new int[commsize+1]();
+    if (P->size!=P->size_tot) {
+        MPI_Allgather(&P->size,1,MPI_INT,dist,1,MPI_INT,internal_comm);
+        for (int i=0;i<commsize;i++) {
+            disp[i+1]=disp[i]+dist[i];
+        }
+        start_row=0;
+        start_ele=0;
+    } else {
+        int loc_size_max=int(ceil(double(P->size_tot)/double(commsize)));
+        int sizepool=P->size_tot;
+        for (int i=0;i<commsize;i++) {
+            int loc_size_act=loc_size_max;
+            if (sizepool<loc_size_max) {
+                loc_size_act=sizepool;
+            }    
+            dist[i]=loc_size_act;
+            sizepool-=loc_size_act;
+            disp[i+1]=disp[i]+dist[i];
+        }
+        start_row=disp[rank];
+        start_ele=P->edge_i[start_row]-P->findx;
+    }
+    int ilower=disp[rank]+P->findx;
+    int iupper=disp[rank+1]-1+P->findx;
+
     HYPRE_IJMatrix A;
     HYPRE_IJVector b;
     HYPRE_IJVector x;
@@ -99,18 +134,13 @@ void Hypre<T>::solve_equation(T* res, T* arg_rhs, int no_rhs)
     HYPRE_ParCSRMatrix parcsr_A;
     HYPRE_ParVector par_b;
     HYPRE_ParVector par_x;
-
-    int ilower=P->first_row+P->findx;
-    int iupper=P->first_row+P->size-1+P->findx;
-    int rank;
-    MPI_Comm_rank(internal_comm,&rank);
     int info;
+
     if ( (info=HYPRE_IJMatrixCreate(internal_comm, ilower, iupper, ilower, iupper, &A)) ) throw H_Exception(__LINE__,__FILE__,rank,info);
     if ( (info=HYPRE_IJMatrixSetObjectType(A, HYPRE_PARCSR)) ) throw H_Exception(__LINE__,__FILE__,rank,info);
     if ( (info=HYPRE_IJMatrixInitialize(A)) ) throw H_Exception(__LINE__,__FILE__,rank,info);
-    int *II=new int[P->size];
-    for (int i=0;i<P->size;i++) II[i]=i+ilower;
-    if ( (info=HYPRE_IJMatrixSetValues(A, P->size, P->index_i, II, P->index_j, P->nnz)) ) throw H_Exception(__LINE__,__FILE__,rank,info);
+    if ( (info=HYPRE_IJMatrixSetValues(A, dist[rank], &P->index_i[start_row], &rowindx[start_row], &P->index_j[start_ele], &P->nnz[start_ele])) ) throw H_Exception(__LINE__,__FILE__,rank,info);
+    delete[] rowindx;
     if ( (info=HYPRE_IJMatrixAssemble(A)) ) throw H_Exception(__LINE__,__FILE__,rank,info);
     if ( (info=HYPRE_IJMatrixGetObject(A, (void**) &parcsr_A)) ) throw H_Exception(__LINE__,__FILE__,rank,info);
 
@@ -123,14 +153,14 @@ void Hypre<T>::solve_equation(T* res, T* arg_rhs, int no_rhs)
     if ( (info=HYPRE_IJVectorCreate(internal_comm, ilower, iupper,&b)) ) throw H_Exception(__LINE__,__FILE__,rank,info);
     if ( (info=HYPRE_IJVectorSetObjectType(b, HYPRE_PARCSR)) ) throw H_Exception(__LINE__,__FILE__,rank,info);
     if ( (info=HYPRE_IJVectorInitialize(b)) ) throw H_Exception(__LINE__,__FILE__,rank,info);
-    if ( (info=HYPRE_IJVectorSetValues(b, P->size, II, &arg_rhs[P->first_row])) ) throw H_Exception(__LINE__,__FILE__,rank,info);
+    if ( (info=HYPRE_IJVectorSetValues(b, dist[rank], NULL, &arg_rhs[disp[rank]])) ) throw H_Exception(__LINE__,__FILE__,rank,info);
     if ( (info=HYPRE_IJVectorAssemble(b)) ) throw H_Exception(__LINE__,__FILE__,rank,info);
     if ( (info=HYPRE_IJVectorGetObject(b, (void **) &par_b)) ) throw H_Exception(__LINE__,__FILE__,rank,info);
 
     if ( (info=HYPRE_ParCSRBiCGSTABCreate(internal_comm, &solver)) ) throw H_Exception(__LINE__,__FILE__,rank,info);
 
-    if ( (info=HYPRE_BiCGSTABSetMaxIter(solver, 100)) ) throw H_Exception(__LINE__,__FILE__,rank,info);
-    if ( (info=HYPRE_BiCGSTABSetTol(solver, 1e-6)) ) throw H_Exception(__LINE__,__FILE__,rank,info);
+    if ( (info=HYPRE_BiCGSTABSetMaxIter(solver, maxiter)) ) throw H_Exception(__LINE__,__FILE__,rank,info);
+    if ( (info=HYPRE_BiCGSTABSetTol(solver, solvetol)) ) throw H_Exception(__LINE__,__FILE__,rank,info);
 
     if ( (info=HYPRE_EuclidCreate(internal_comm, &precond)) ) throw H_Exception(__LINE__,__FILE__,rank,info);
     if ( (info=HYPRE_BiCGSTABSetPrecond(solver,(HYPRE_PtrToSolverFcn) HYPRE_EuclidSolve,(HYPRE_PtrToSolverFcn) HYPRE_EuclidSetup,precond)) ) throw H_Exception(__LINE__,__FILE__,rank,info);
@@ -142,13 +172,13 @@ void Hypre<T>::solve_equation(T* res, T* arg_rhs, int no_rhs)
     if ( (info=HYPRE_IJMatrixDestroy(A)) ) throw H_Exception(__LINE__,__FILE__,rank,info);
     if ( (info=HYPRE_IJVectorDestroy(b)) ) throw H_Exception(__LINE__,__FILE__,rank,info);
 
-    T *solution=new T[P->size_tot]();
-    if ( (info=HYPRE_IJVectorGetValues(x,P->size,II,&solution[P->first_row])) ) throw H_Exception(__LINE__,__FILE__,rank,info);
-
-    delete[] II;
+    T *solution=new T[dist[rank]];
+    if ( (info=HYPRE_IJVectorGetValues(x,dist[rank],NULL,solution)) ) throw H_Exception(__LINE__,__FILE__,rank,info);
     if ( (info=HYPRE_IJVectorDestroy(x)) ) throw H_Exception(__LINE__,__FILE__,rank,info);
 
-    MPI_Allreduce(solution,res,P->size_tot,give_me_MPI_datatype(solution),MPI_SUM,internal_comm);
+    MPI_Allgatherv(solution,dist[rank],give_me_MPI_datatype(solution),res,dist,disp,give_me_MPI_datatype(res),internal_comm);
+    delete[] dist;
+    delete[] disp;
     delete[] solution;
 
 }

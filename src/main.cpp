@@ -6,7 +6,6 @@
 #ifdef HAVE_OMEN_POISSON
 #include "Types.H"
 #include "InputParameter.H"
-#include "Material.H"
 #include "WireGenerator.H"
 #include "FEMGrid.H"
 #include "Poisson.H"
@@ -38,10 +37,8 @@ int main (int argc, char **argv)
       yyrestart(yyin);
       yyparse();
       fclose(yyin);
-      Material* material = new Material(parameter->mat_name,parameter->table_file,nanowire->read_hamiltonian,parameter->mat_binary_x,parameter->strain_model,parameter->Temp);
-      material->initialize(nanowire->sc_dist_dep);
       Wire = new WireGenerator(parameter->lattype,0);
-      Wire->execute_task(nanowire,material,0,MPI_COMM_WORLD);
+      Wire->execute_simple(nanowire,MPI_COMM_WORLD);
       FEM = new FEMGrid();
       int worldsize;
       MPI_Comm_size(MPI_COMM_WORLD,&worldsize);

@@ -15,6 +15,6 @@ extern FEMGrid *FEM;
 extern PARAM *parameter;
 extern VOLTAGE *voltage;
 
-int semiselfconsistent(cp2k_csr_interop_type,cp2k_csr_interop_type,cp2k_csr_interop_type*,cp2k_csr_interop_type*,std::vector<double>,std::vector<contact_type>,std::vector<int>,std::vector<int>,transport_parameters);
+int semiselfconsistent(cp2k_csr_interop_type,cp2k_csr_interop_type,cp2k_csr_interop_type*,cp2k_csr_interop_type*,std::vector<double>,std::vector<contact_type>,std::vector<int>,std::vector<int>,double,transport_parameters);
 
 #endif
