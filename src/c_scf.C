@@ -580,7 +580,7 @@ void c_scf_method(cp2k_transport_parameters cp2k_transport_params, cp2k_csr_inte
         if (transport_params.cp2k_method==cp2k_methods::LOCAL_SCF) {
 #ifdef HAVE_OMEN_POISSON
             transport_params.update_fermi=false;
-            if (semiselfconsistent(S,KS,P,PImag,muvec,contactvec,Bsizes,orb_per_atom,transport_params)) throw std::exception();
+            if (semiselfconsistent(S,KS,P,PImag,muvec,contactvec,Bsizes,orb_per_atom,dens_mixing,transport_params)) throw std::exception();
 #endif
         } else {
             if (transport_params.get_fermi_neutral) {

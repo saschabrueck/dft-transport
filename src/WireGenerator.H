@@ -22,6 +22,7 @@ public:
     WireGenerator(int,int);
     ~WireGenerator();
     
+    void execute_simple(WireStructure*,MPI_Comm comm);
     void execute_task(WireStructure*,Material*,int,MPI_Comm comm);
     void write_LM(const char*);
     void write_TLM(const char*);

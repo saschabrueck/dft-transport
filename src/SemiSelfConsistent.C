@@ -5,18 +5,17 @@
 #include <limits>
 #include "SemiSelfConsistent.H"
  
-int semiselfconsistent(cp2k_csr_interop_type S,cp2k_csr_interop_type KS,cp2k_csr_interop_type *P,cp2k_csr_interop_type *PImag,std::vector<double> muvec,std::vector<contact_type> contactvec,std::vector<int> Bsizes,std::vector<int> orb_per_atom,transport_parameters transport_params)
+int semiselfconsistent(cp2k_csr_interop_type S,cp2k_csr_interop_type KS,cp2k_csr_interop_type *P,cp2k_csr_interop_type *PImag,std::vector<double> muvec,std::vector<contact_type> contactvec,std::vector<int> Bsizes,std::vector<int> orb_per_atom,double mixing_parameter,transport_parameters transport_params)
 {
     int iam;MPI_Comm_rank(MPI_COMM_WORLD,&iam);
     int procs;MPI_Comm_size(MPI_COMM_WORLD,&procs);
 
-    int n_mu=muvec.size();
-    if (n_mu != 2) return (LOGCERR, EXIT_FAILURE);
+    if (muvec.size() != 2) return (LOGCERR, EXIT_FAILURE);
 
     if (FEM->NAtom != int(orb_per_atom.size())-1) return (LOGCERR, EXIT_FAILURE);
 
     double dopingvec[2];
-    for (int i_mu=0;i_mu<n_mu;i_mu++) {
+    for (uint i_mu=0;i_mu<muvec.size();i_mu++) {
         dopingvec[i_mu]=0;
         for (int ia=contactvec[i_mu].atomstart;ia<contactvec[i_mu].atomstart+contactvec[i_mu].natoms;ia++) {
             dopingvec[i_mu]+=FEM->doping[FEM->real_at_index[ia]];
@@ -35,41 +34,31 @@ int semiselfconsistent(cp2k_csr_interop_type S,cp2k_csr_interop_type KS,cp2k_csr
         atom_of_bf[i]=atom;
     }
 
-    double Vs=voltage->Vsmin;
-    double Vd=voltage->Vdmin;
-    double Vg=-voltage->Vgmin[0];
-    //double Vm;
     double min_cond_band_edge;
     ifstream fermilevelfile("OMEN_F");
     if (fermilevelfile) {
-        for (int i_mu=0;i_mu<n_mu;i_mu++) fermilevelfile >> muvec[i_mu];
-        //Vm=std::accumulate(muvec.begin(),muvec.end(),0.0)/n_mu;
-        for (int i_mu=0;i_mu<n_mu;i_mu++) fermilevelfile >> muvec[i_mu];
+        for (uint i_mu=0;i_mu<muvec.size();i_mu++) fermilevelfile >> muvec[i_mu];
         fermilevelfile >> min_cond_band_edge;
         fermilevelfile.close();
     } else {
         Singularities singularities(transport_params,contactvec);
         if ( singularities.Execute(KS,S) ) return (LOGCERR, EXIT_FAILURE);
-        for (int i_mu=0;i_mu<n_mu;i_mu++) muvec[i_mu]=singularities.determine_fermi(contactvec[i_mu].n_ele,i_mu);
-        //Vm=std::accumulate(muvec.begin(),muvec.end(),0.0)/n_mu;
-        muvec[0]=singularities.determine_fermi(contactvec[0].n_ele+dopingvec[0],0);
-        muvec[1]=singularities.determine_fermi(contactvec[1].n_ele+dopingvec[1],1);
+        for (uint i_mu=0;i_mu<muvec.size();i_mu++) muvec[i_mu]=singularities.determine_fermi(contactvec[i_mu].n_ele+dopingvec[i_mu],i_mu);
         min_cond_band_edge=*min_element(singularities.energies_cb.begin(),singularities.energies_cb.end());
     }
     double dV=(muvec[0]-muvec[1])/2.0;
-    double mu_avg=std::accumulate(muvec.begin(),muvec.end(),0.0)/n_mu;
-    Vg+=mu_avg-min_cond_band_edge;
+    double mu_avg=std::accumulate(muvec.begin(),muvec.end(),0.0)/muvec.size();
+    double Vs=voltage->Vsmin;
+    double Vd=voltage->Vdmin;
+    double Vg=mu_avg-min_cond_band_edge-voltage->Vgmin[0]+nanowire->phi_m-nanowire->Xi_wire;
     muvec[0]=mu_avg-Vs;
     muvec[1]=mu_avg-Vd;
 
-if (!iam) cout << "FERMI LEVEL FROM LOCAL SCF LEFT " << muvec[0] << " RIGHT " << muvec[1] << endl;
-if (!iam) cout << "GATE POTENTIAL " << Vg << endl;
+    enum choose_initial_guess {ramp,ferm,file};
+    choose_initial_guess initial_guess=ramp;
 
     double Ls=nanowire->Ls;
     double Lc=nanowire->Lc;
-
-    enum choose_initial_guess {ramp,ferm,file};
-    choose_initial_guess initial_guess=ramp;
     ifstream potgridinfile;
     if (initial_guess==file) potgridinfile.open("potgrid.input");
     for (int IX=0;IX<FEM->NGrid;IX++) {
@@ -132,7 +121,7 @@ rhofile.close();
             int atom_i=atom_of_bf[i+KS.first_row];
             for(int e=KS.rowptr_local[i]-1;e<KS.rowptr_local[i+1]-1;e++) {
                 int atom_j=atom_of_bf[KS.colind_local[e]-1];
-                KS.nzvals_local[e]+=(Vnew[FEM->real_at_index[atom_i]]+Vnew[FEM->real_at_index[atom_j]])/2.0/transport_params.evoltfactor*S.nzvals_local[e];//add Vm here?
+                KS.nzvals_local[e]+=(Vnew[FEM->real_at_index[atom_i]]+Vnew[FEM->real_at_index[atom_j]])/2.0/transport_params.evoltfactor*S.nzvals_local[e];
             }
         }
         c_dscal(2*FEM->NAtom,0.0,rho_atom,1);
@@ -162,8 +151,6 @@ rhofile.close();
         }
         density_old=density_new;
 
-//        double mixing_parameter = 0.8;
-        double mixing_parameter = 1.0;
         if (i_iter==1) {
             c_dcopy(2*FEM->NAtom,rho_atom,1,rho_atom_previous,1);
         }

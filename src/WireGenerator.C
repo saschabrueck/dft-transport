@@ -232,6 +232,57 @@ void WireGenerator::delete_variables()
 
 /************************************************************************************************/
 
+void WireGenerator::execute_simple(WireStructure* nanowire,MPI_Comm int_comm)
+{
+    if(!mpi_rank){
+        printf("Generating the atomic structure\n");
+    }
+
+    wg_comm = int_comm;
+    MPI_Comm_size(wg_comm,&mpi_size);
+    MPI_Comm_rank(wg_comm,&mpi_rank);
+
+    if(nanowire->hydrogen_passivation){
+        nanowire->dsp3 = 0.0;
+    }
+
+    nwire   = nanowire;
+    make_unit_cell(nanowire->first_atom,nanowire->a0,nanowire->c0,nanowire->u0);
+    change_orientation(nanowire->x,nanowire->y,nanowire->z,nanowire->dsp3);
+
+    if(!nanowire->NDim){
+        Layer_Matrix = NULL;
+        orb_per_at = NULL;
+    }else{
+        check_dimension(nanowire);
+        calc_info(nanowire);
+        make_wire(nanowire);
+        make_connections(nanowire);
+        hydrogen_passivation(nanowire);    
+        generate_roughness(nanowire,0);
+        replicate_unit_cell(nanowire->replicate_unit_cell,nanowire);
+        read_atom_position(nanowire->read_atom_pos,nanowire);
+	check_periodicity(nanowire);
+        init_variables(nanowire);
+	cut_boundary_slab(nanowire);
+        update_atom_pos(nanowire,NULL);
+	generate_alloy_disorder(nanowire);
+        cut_layer(nanowire);
+        separate_dimension(nanowire);
+        convert_position(nanowire);
+	update_periodicity(nanowire);
+        get_qm_region(nanowire);
+        orb_per_at = NULL;
+        EMidGap = NULL;
+        EGap = NULL;
+        add_strain(nanowire->strain,nanowire->no_strain_domain,\
+                   nanowire->strain_domain,nanowire->update_at);
+        atomic_mass = NULL;
+    }    
+}
+
+/************************************************************************************************/
+
 void WireGenerator::execute_task(WireStructure* nanowire,Material *material,int sample_id,\
 				 MPI_Comm int_comm)
 {
