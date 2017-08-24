@@ -1,11 +1,8 @@
-#include "libcp2k.h"
 #include "CSR.H"
 #ifdef HAVE_OMEN_POISSON
 #include "SemiSelfConsistent.H"
 #endif
 #include "EnergyVector.H"
-//#include "DiagScaLapack.H"
-//#include "WriteMatrix.H"
 
 void write_cp2k_csr(cp2k_csr_interop_type& cp2kCSRmat,const char* filename)
 {
