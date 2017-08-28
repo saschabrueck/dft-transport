@@ -393,28 +393,24 @@ int Energyvector::write_transmission_current(std::vector<CPX> energyvector,std::
 int Energyvector::determine_energyvector(std::vector<CPX> &energyvector_cc,std::vector<CPX> &stepvector_cc,std::vector<CPX> &drdmvector_cc,std::vector<CPX> &energyvector,std::vector<CPX> &stepvector,std::vector< std::vector<int> > &propagating_sizes,cp2k_csr_interop_type KohnSham,cp2k_csr_interop_type Overlap,std::vector<double> &muvec,std::vector<contact_type> contactvec,transport_parameters transport_params)
 {
     Singularities singularities(transport_params,contactvec);
-    int determine_singularities = !(transport_params.real_int_method!=real_int_methods::GAUSSCHEBYSHEV && transport_params.cp2k_method==cp2k_methods::LOCAL_SCF);
     int propagating_from_bs = (transport_params.real_int_method==real_int_methods::GAUSSCHEBYSHEV);
-    double bands_start=-1.0E6;
-    if (determine_singularities) {
 double sabtime=get_time(0.0);
-        if ( singularities.Execute(KohnSham,Overlap) ) return (LOGCERR, EXIT_FAILURE);
-        if (transport_params.update_fermi) for (uint i_mu=0;i_mu<muvec.size();i_mu++) muvec[i_mu]=singularities.determine_fermi(contactvec[i_mu].n_ele,i_mu);
-        if (!iam && contactvec.size()==muvec.size()+1) {
-            double gate_charge=contactvec[muvec.size()].n_ele;
-            double doping=contactvec[0].n_ele-gate_charge;
-            double intrinsic_charge=singularities.determine_charge(muvec[0],muvec.size(),0)-gate_charge;
-            cout << "Conduction band charge on gate from bandstructure: " << intrinsic_charge << " Built-in potential: " << transport_params.temperature*log(doping/intrinsic_charge) << endl;
-            double free_charge_lead=singularities.determine_free_charge(muvec[0],0);
-            double free_charge_gate=singularities.determine_free_charge(muvec[0],muvec.size());
-            cout << "Free charge lead: " << free_charge_lead << " Free charge gate: " << free_charge_gate << " Built-in potential: " << transport_params.temperature*log(free_charge_lead/free_charge_gate) << endl;
-        }
-        bands_start=singularities.energy_gs;
-if (!iam) cout << "TIME FOR SINGULARITIES " << get_time(sabtime) << endl;
-        int follow_bands = (transport_params.real_int_method==real_int_methods::GAUSSCHEBYSHEV);
-        int debugout = 0;
-        for (uint i_mu=0;i_mu<contactvec.size();i_mu++) singularities.write_bandstructure(i_mu,transport_params.cp2k_scf_iter,follow_bands,debugout);
+    if ( singularities.Execute(KohnSham,Overlap) ) return (LOGCERR, EXIT_FAILURE);
+    if (transport_params.update_fermi) for (uint i_mu=0;i_mu<muvec.size();i_mu++) muvec[i_mu]=singularities.determine_fermi(contactvec[i_mu].n_ele,i_mu);
+    if (!iam && contactvec.size()==muvec.size()+1) {
+        double gate_charge=contactvec[muvec.size()].n_ele;
+        double doping=contactvec[0].n_ele-gate_charge;
+        double intrinsic_charge=singularities.determine_charge(muvec[0],muvec.size(),0)-gate_charge;
+        cout << "Conduction band charge on gate from bandstructure: " << intrinsic_charge << " Built-in potential: " << transport_params.temperature*log(doping/intrinsic_charge) << endl;
+        double free_charge_lead=singularities.determine_free_charge(muvec[0],0);
+        double free_charge_gate=singularities.determine_free_charge(muvec[0],muvec.size());
+        cout << "Free charge lead: " << free_charge_lead << " Free charge gate: " << free_charge_gate << " Built-in potential: " << transport_params.temperature*log(free_charge_lead/free_charge_gate) << endl;
     }
+    double bands_start=singularities.energy_gs;
+if (!iam) cout << "TIME FOR SINGULARITIES " << get_time(sabtime) << endl;
+    int follow_bands = (transport_params.real_int_method==real_int_methods::GAUSSCHEBYSHEV);
+    int debugout = 0;
+    for (uint i_mu=0;i_mu<contactvec.size();i_mu++) singularities.write_bandstructure(i_mu,transport_params.cp2k_scf_iter,follow_bands,debugout);
  
     double Temp=transport_params.temperature;
     double delta_eps_fermi=-log(transport_params.eps_fermi)*Temp;
@@ -537,16 +533,8 @@ int Energyvector::assign_real_axis_energies(double nonequi_start,double nonequi_
         evecfile.close();
     } else if (transport_params.real_int_method==real_int_methods::TRAPEZOIDAL) {
         for (int istep=0;istep<int(abs(nonequi_end-nonequi_start)/transport_params.energy_interval)+1;istep++) {
-            energyvector.push_back(nonequi_start+istep*transport_params.energy_interval);
-        }
-        if (energyvector.size()==1) {
-            stepvector.push_back(1.0);
-        } else {
-            stepvector.push_back((energyvector[1]-energyvector[0])/2.0);
-            for (uint istep=1;istep<energyvector.size()-1;istep++) {
-                stepvector.push_back((energyvector[istep+1]-energyvector[istep-1])/2.0);
-            }
-            stepvector.push_back((energyvector[energyvector.size()-1]-energyvector[energyvector.size()-2])/2.0);
+            energyvector.push_back(nonequi_start+(istep+0.5)*transport_params.energy_interval);
+            stepvector.push_back(transport_params.energy_interval);
         }
     } else if (transport_params.real_int_method==real_int_methods::GAUSSCHEBYSHEV) {
         std::vector<double> energylist;
