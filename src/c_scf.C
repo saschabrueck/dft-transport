@@ -213,14 +213,8 @@ void write_scaled_cp2k_csr_bin_remove_pbc(cp2k_csr_interop_type& cp2kCSRmat,cons
  *   \brief Takes the overlap (S) and Kohn-Sham (KS) matrices as input and returns a density matrix (P).
  *          This function acts as the gate to the CP2K's world. 
  */
-#ifdef HAVE_PIMAG
 void c_scf_method(cp2k_transport_parameters cp2k_transport_params, cp2k_csr_interop_type S, cp2k_csr_interop_type KS, cp2k_csr_interop_type * P, cp2k_csr_interop_type * PImag)
 {
-#else
-void c_scf_method(cp2k_transport_parameters cp2k_transport_params, cp2k_csr_interop_type S, cp2k_csr_interop_type KS, cp2k_csr_interop_type * P)
-{
-    cp2k_csr_interop_type * PImag = NULL;
-#endif
 #ifdef HAVE_SPLITSOLVE
     char gpu_string[255];
     set_gpu(0,gpu_string);

@@ -278,23 +278,21 @@ if (!iam) cout << "TIME FOR DENSITY " << get_time(sabtime) << endl;
         DensReal->copy_shifted(DensRealCollect,0,OverlapCollect->size_tot,transport_params.cutl,OverlapCollect->size_tot);
         delete DensReal;
         DensReal = DensRealCollect;
-#ifdef HAVE_PIMAG
-        if (transport_params.cp2k_method!=cp2k_methods::LOCAL_SCF) {
+        if (transport_params.cp2k_method!=cp2k_methods::LOCAL_SCF && PImag!=NULL) {
             TCSR<double> *DensImagCollect = new TCSR<double>(*PImag,MPI_COMM_WORLD,&Tsizes[0],Tsizes.size(),transport_params.cutl,transport_params.cutr,&matrix_comm);
             c_dscal(DensImagCollect->n_nonzeros,double(Tsizes.size())/double(nprocs),DensImagCollect->nnz,1);
             DensImag->copy_shifted(DensImagCollect,0,OverlapCollect->size_tot,transport_params.cutl,OverlapCollect->size_tot);
             delete DensImag;
             DensImag = DensImagCollect;
         }
-#endif
     }
     if (transport_params.cp2k_method!=cp2k_methods::LOCAL_SCF) {
         if (!(transport_params.cp2k_method==cp2k_methods::TRANSMISSION && transport_params.extra_scf)) {
             DensReal->distribute_back(*P,MPI_COMM_WORLD,&Tsizes[0],Tsizes.size(),transport_params.cutl,transport_params.cutr,matrix_comm);
         }
-#ifdef HAVE_PIMAG
-        DensImag->distribute_back(*PImag,MPI_COMM_WORLD,&Tsizes[0],Tsizes.size(),transport_params.cutl,transport_params.cutr,matrix_comm);
-#endif
+        if (PImag!=NULL) {
+            DensImag->distribute_back(*PImag,MPI_COMM_WORLD,&Tsizes[0],Tsizes.size(),transport_params.cutl,transport_params.cutr,matrix_comm);
+        }
     } else {
         DensReal->atom_allocate(OverlapCollect,&orb_per_at[0],rho_atom,2.0);
         MPI_Allreduce(MPI_IN_PLACE,rho_atom,orb_per_at.size()-1,MPI_DOUBLE,MPI_SUM,MPI_COMM_WORLD);

@@ -1,6 +1,6 @@
 /*****************************************************************************
  *  CP2K: A general program to perform molecular dynamics simulations        *
- *  Copyright (C) 2000 - 2016  CP2K developers group                         *
+ *  Copyright (C) 2000 - 2017  CP2K developers group                         *
  *****************************************************************************/
 
 #include <stdbool.h>
@@ -57,7 +57,7 @@ void cp2k_create_force_env(force_env_t* new_force_env, const char* input_file_pa
  * \param output_file_path Path to a file where CP2K is going to write its output.
  *                         Will be created if not existent, otherwise appended.
  * \param mpi_comm MPI_COMM if MPI is not managed by CP2K
- * \warning You are supposed to call cp2k_destroy_force_env_comm() to cleanup, before cp2k_finalize().
+ * \warning You are supposed to call cp2k_destroy_force_env() to cleanup, before cp2k_finalize().
  */
 void cp2k_create_force_env_comm(force_env_t* new_force_env, const char* input_file_path, const char* output_file_path, int mpi_comm);
 
@@ -222,7 +222,7 @@ typedef struct {
 
 /** \brief Function pointer type for the externally evaluated density matrix
  *
- * Function pointer type pointing to a C routine that takes the S and H matrices as input and outputs a P and PImag matrix.
+ * Function pointer type pointing to a C routine that takes the S and H matrices as input and outputs a P matrix.
  *
  * Function definition example:
  * \code{.c}
@@ -236,8 +236,6 @@ typedef struct {
  * \endcode
  * \sa cp2k_transport_parameters, cp2k_csr_interop_type
  */
-
-#ifdef HAVE_PIMAG
 typedef void (*ext_method_callback_f_ptr) (
     cp2k_transport_parameters, // Transport parameters
     cp2k_csr_interop_type,  // S-Matrix
@@ -245,29 +243,6 @@ typedef void (*ext_method_callback_f_ptr) (
     cp2k_csr_interop_type*, // P-Matrix
     cp2k_csr_interop_type*  // PImag-Matrix
     );
-
-void c_scf_method(
-    cp2k_transport_parameters cp2k_transport_params,
-    cp2k_csr_interop_type S,
-    cp2k_csr_interop_type KS,
-    cp2k_csr_interop_type* P,
-    cp2k_csr_interop_type* PImag
-    );
-#else
-typedef void (*ext_method_callback_f_ptr) (
-    cp2k_transport_parameters, // Transport parameters
-    cp2k_csr_interop_type,  // S-Matrix
-    cp2k_csr_interop_type,  // H-Matrix
-    cp2k_csr_interop_type* // P-Matrix
-    );
-
-void c_scf_method(
-    cp2k_transport_parameters cp2k_transport_params,
-    cp2k_csr_interop_type S,
-    cp2k_csr_interop_type KS,
-    cp2k_csr_interop_type* P
-    );
-#endif
 
 /** \brief Set the function callback for the externally evaluated density matrix
  */
