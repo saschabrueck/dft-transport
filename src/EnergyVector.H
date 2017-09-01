@@ -13,6 +13,7 @@ THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLI
 #define __ENERGYVECTOR
 
 #include "libcp2k.h"
+#include <vector>
 
 namespace distribution_methods {
     enum distribution_method_type {
