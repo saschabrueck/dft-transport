@@ -37,6 +37,14 @@ FEMGrid *FEM;
 Poisson *OMEN_Poisson_Solver;
 #endif
 
+void c_scf_method(
+    cp2k_transport_parameters cp2k_transport_params,
+    cp2k_csr_interop_type S,
+    cp2k_csr_interop_type KS,
+    cp2k_csr_interop_type* P,
+    cp2k_csr_interop_type* PImag
+    );
+
 int main (int argc, char **argv)
 {
    MPI_Init(&argc,&argv);
