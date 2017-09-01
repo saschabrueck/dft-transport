@@ -21,11 +21,11 @@
       &END
       LINEAR_SOLVER MUMPS
       MATRIX_INVERSION_METHOD PEXSI
-      &PRINT
-       &CURRENT
-        STRIDE 1 1 1
-       &END
-      &END
+!      &PRINT
+!       &CURRENT
+!        STRIDE 1 1 1
+!       &END
+!      &END
     &END
     BASIS_SET_FILE_NAME BASIS_ZIJLSTRA
     POTENTIAL_FILE_NAME POTENTIAL 
