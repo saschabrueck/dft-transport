@@ -1,9 +1,0 @@
-#!/bin/bash
-for ((i=3; i<24*32+3; i=i+16))
-do
-sed -i ''"$i"'s/C/N/' cnt8.xyz
-done
-for ((i=(24+24)*32+3; i<72*32+3; i=i+16))
-do
-sed -i ''"$i"'s/C/N/' cnt8.xyz
-done
