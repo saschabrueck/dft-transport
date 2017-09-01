@@ -1,6 +1,0 @@
-#!/bin/bash
-if [ $# -ne 1 ];
-    then echo "specify kind of job to start"
-else
-for p in `seq 0.4 +0.2 0.6`; do  mkdir gate_${p}; cd gate_${p}; sed s/XXXPOTXXX/${p}/g < ../$1.inp > $1.inp; sed s/XXXPOTXXX/${p}/g < ../job_$1 > job; sbatch job; cd ..; done
-fi
