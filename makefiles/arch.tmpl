@@ -1,0 +1,48 @@
+# source 
+#
+LEX      = flex
+YACC     = bison
+
+CPP      = mpic++ 
+GCC      = gcc 
+NVCC     = nvcc 
+
+CFLAGS    = -g -w -Wall -fopenmp 
+CXXFLAGS  = -std=c++11 $(CFLAGS)
+NVCCFLAGS = 
+
+TOP_DIR       = 
+LIB_TOP       = 
+TOOLCHAIN     = 
+
+# Common include paths
+INCMUMPS      = 
+INCHYPRE      = 
+INCQHULL      = 
+INCSSPARSE    = 
+INCPEXSI      = 
+INCSLUDIST    = 
+
+# Common library paths
+LIBPARMETIS   = 
+LIBMUMPS      = 
+LIBHYPRE      = 
+LIBQHULL      = 
+LIBSSPARSE    =
+LIBSLUDIST    = 
+LIBPEXSI      = 
+LIBCP2K       = 
+
+LFLAGS   = -L$(LIBCP2K) -L$(LIBSSPARSE) -L$(LIBPEXSI) -L$(LIBPARMETIS) \
+	-L$(LIBMUMPS) -L$(LIBSSPARSE) -L$(LIBSLUDIST) -L$(LIBHYPRE) -L$(LIBQHULL)
+
+DFLAGS   = -Dlibcp2k -DAdd_ 
+
+LIBS     = -lrt -ldl -lstdc++ -lcp2k -lfftw3 -lpexsi \
+	-lumfpack -lamd -lcholmod -lcolamd -lccolamd -lcamd -lsuitesparseconfig \
+	-lparmetis -lmetis -lzmumps -ldmumps -lmumps_common -lpord -lsuperlu_dist \
+	-lHYPRE -lscalapack -llapack -lopenblas -lqhullstatic \
+	-lxsmmf -lxsmm -lderiv -lint -lxcf90 -lxc -lgfortran -lmpifort
+
+INCLUDES = -I$(INCSLUDIST) -I$(INCHYPRE) -I$(INCSSPARSE) -I$(INCMUMPS) -I$(INCQHULL) -I$(INCPEXSI)
+
