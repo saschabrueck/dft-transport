@@ -11,7 +11,7 @@ THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLI
 
 #include "FEMGrid.H"
 extern "C" {
-#include <qhull.h>
+#include <libqhull.h>
 #include <qset.h>
 }
 

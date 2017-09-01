@@ -25,6 +25,8 @@ Problem: results may be unstable
 #include "umfpack.h"
 #include "amd.h"
 
+typedef SuiteSparse_long UF_long;
+
 template <class T>
 class Umfpack : public LinearSolver<T>{
 	
@@ -65,7 +67,7 @@ Umfpack<T>::Umfpack(TCSR<T>* mat,MPI_Comm solver_comm)
     Control[UMFPACK_STRATEGY]            = 0;       //0 for automatic choice
     Control[UMFPACK_ALLOC_INIT]          = 0.7;
     Control[UMFPACK_IRSTEP]              = 0;       //No iterative refinement
-    Control[UMFPACK_2BY2_TOLERANCE]      = 0.01;
+//    Control[UMFPACK_2BY2_TOLERANCE]      = 0.01;
     Control[UMFPACK_FIXQ]                = 0;
     Control[UMFPACK_AMD_DENSE]           = 10;
     Control[UMFPACK_SYM_PIVOT_TOLERANCE] = 0.001;

@@ -14,6 +14,7 @@ THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLI
 #include "SemiSelfConsistent.H"
 #endif
 #include "EnergyVector.H"
+#include <numeric>
 
 void write_cp2k_csr(cp2k_csr_interop_type& cp2kCSRmat,const char* filename)
 {

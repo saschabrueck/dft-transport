@@ -15,6 +15,8 @@ THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLI
  */
 #ifndef __DENSITY_H
 #define __DENSITY_H
+#include <numeric>
+#include <vector>
 
 #include "CSR.H"
 
