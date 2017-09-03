@@ -17,7 +17,6 @@ LIB_TOP       = /project/s662/omendft_libraries
 LDIR          = /project/s662/hbani/cp2k-omen/cp2k/cp2k/tools/toolchain/install
 
 # Common include paths
-INCAZT        = -I$(LIB_TOP)/../OMEN_XC50/AZTEC/lib/
 INCHYP        = -I/project/s662/hbani/cp2k-omen/omen/install/libs/hypre/include/
 INCQHU        = -I$(LIB_TOP)/../OMEN_XC50/QHULL/src/
 INCAMD        = -I$(LIB_TOP)/../OMEN_XC50/AMD/Include/
@@ -27,7 +26,6 @@ INCMAG        = -I$(LIB_TOP)/magma-2.2.0/include/
 INCPEX        = -I$(LDIR)/pexsi-0.10.1/include/
 
 # Common library paths
-AZTECLIB      = -L$(LIB_TOP)/../OMEN_XC50/AZTEC/lib/ 
 HYPRELIB      = -L/project/s662/hbani/cp2k-omen/omen/install/libs/hypre/lib/
 QHULLLIB      = -L$(LIB_TOP)/../OMEN_XC50/QHULL/src/ 
 UMFPACKLIB    = -L$(LIB_TOP)/../OMEN_XC50/UMFPACK/Lib/ 
@@ -44,14 +42,14 @@ CP2KLIB  = -L/project/s662/hbani/cp2k-omen/cp2k/cp2k/lib/local_new/psmp
 
 DMALLOC  = -L/apps/common/UES/SLES12/ddt/6.1.2/lib/64/ -ldmallocthcxx -z muldefs
 
-LFLAGS   = $(CP2KLIB) $(LIBELPA) $(LIBXSMM) $(LIBINT) $(LIBXC) $(UMFPACKLIB) $(AMDLIB) $(AZTECLIB) $(HYPRELIB) $(QHULLLIB) $(PEXSILIB) $(MAGMALIB)
+LFLAGS   = $(CP2KLIB) $(LIBELPA) $(LIBXSMM) $(LIBINT) $(LIBXC) $(UMFPACKLIB) $(AMDLIB) $(HYPRELIB) $(QHULLLIB) $(PEXSILIB) $(MAGMALIB)
 DFLAGS   = -DAdd_ -Dlibcp2k 
 
 LIBS  = -lcp2k -lelpa_openmp -lxsmmf -lxsmm -ldl -lxcf90 -lxc -lderiv -lint -lpexsi \
-	-lHYPRE -laztec -lqhull -lumfpack -lamd -lmagma \
+	-lHYPRE -lqhull -lumfpack -lamd -lmagma \
 	-lzmumps -lsuperlu_dist -lptscotch -lptscotcherr -lscotch \
 	-lcuda -lcudart -lcublas -lcufft -lcusparse -lmagma \
 	-lm -lrt -fopenmp -lgfortran -lstdc++
 
-INCLUDES = $(INCUFC) $(INCUMF) $(INCAMD) $(INCAZT) $(INCHYP) $(INCQHU) $(INCPEX) $(INCMAG)
+INCLUDES = $(INCUFC) $(INCUMF) $(INCAMD) $(INCHYP) $(INCQHU) $(INCPEX) $(INCMAG)
 
