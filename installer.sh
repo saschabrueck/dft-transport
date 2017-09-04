@@ -16,6 +16,11 @@ libsDIR=${installDIR}/libs
 
 machine="mont-fort1"
 
+# with or without CUDA (needed for SplitSolve and MAGMA)  
+# Note: MAGMA v >2.0 requires CUDA v >5.0
+withCUDA="no"
+cudaDIR="/usr/local/cuda-7.5"
+
 # specify the cp2k VERSION for the last step (compilation):
 cp2k_target="popt"
 
@@ -28,7 +33,9 @@ cp2k_target="popt"
 echo "installing CP2K ==========================================="
 cd ${TOPDIR} 
 
+# install either the currnet trunk or the latest release  
 svn checkout http://svn.code.sf.net/p/cp2k/code/trunk cp2k
+#svn checkout http://svn.code.sf.net/p/cp2k/code/branches/cp2k-4_1-branch cp2k
 
 cp2k_toolchainDIR=${cp2kDIR}/cp2k/tools/toolchain
 
@@ -48,14 +55,17 @@ source ${cp2k_toolchainDIR}/install/setup
 # get versions of libraries that have been just installed by CP2K toolchain
 source ${cp2k_toolchainDIR}/scripts/package_versions.sh
 
-# STEP 2: ******************************************************************************************
+source ${cp2k_toolchainDIR}/scripts/common_vars.sh
 
-# install OMEN solvers: ===================================================
-# specify the versions here 
+## STEP 2: ******************************************************************************************
+#
+## install OMEN solvers: ===================================================
+## specify the versions here 
 hypreVER="2.11.2"
 SuiteSparseVER="4.5.5"
 qhullVER="2015-src-7.2.0"
 mumpsVER="5.1.1"
+magmaVER="2.2.0"
 
 # the following are installed by CP2K toolchain
 parmetisVER=${parmetis_ver}
@@ -64,6 +74,7 @@ scalapackVER=${scalapack_ver}
 mpichVER=${mpich_ver}
 superluVER=${superlu_ver}
 pexsiVER=${pexsi_ver}
+openblasVER=${openblas_ver}
 # -------------------------------------------------------------------------
 mkdir -p ${installDIR}
 mkdir -p ${libsDIR}
@@ -171,6 +182,35 @@ sed -e "/^#.*LMETISDIR *=/s/^#//" \
 make alllib > install.log
 cp -r ${buildDIR}/MUMPS/lib/ ${buildDIR}/MUMPS/include/ ${libsDIR}/MUMPS
 
+# install MAGMA:
+# -------------------------------------------------------------------------
+if [ "${withCUDA}" = "yes" ] ; then
+   echo "installing MAGMA =========================================="
+   mkdir -p ${libsDIR}/magma
+   cd ${buildDIR}
+   
+   wget http://icl.cs.utk.edu/projectsfiles/magma/downloads/magma-${magmaVER}.tar.gz
+   mkdir -p ${buildDIR}/magma
+   tar -xf magma-${magmaVER}.tar.gz -C magma/ --strip-components 1
+   
+   cd ${buildDIR}/magma
+   
+   cp ${buildDIR}/magma/make.inc-examples/make.inc.openblas ${buildDIR}/magma/
+   
+   sed -e "/^#.*OPENBLASDIR *?=/s/^#//" \
+       -e "/^#.*CUDADIR *?=/s/^#//" \
+       -e "s|\(OPENBLASDIR *?=\).*|\1 ${cp2k_toolchainDIR}/install/openblas-${openblasVER}|g" \
+       -e "s|\(CUDADIR *?=\).*|\1 ${cudaDIR}|g" \
+       -e "s|\(NVCC *=\).*|\1 ${cudaDIR}/bin/nvcc -Xcompiler=--std=gnu++98 -D__GNUC__=4 -D__GNUC_MINOR__=9|g" \
+       -e "/^NVCCFLAGS/ s/$/ -w/" \
+       -e "/^-.*include/s/^-/#-/" \
+          make.inc.openblas > make.inc
+   
+   make install prefix=${libsDIR}/magma > install.log
+else
+   echo "MAGMA will not be installed. In order to install MAGMA, please set withCUDA="yes"."
+fi
+
 # install PARDISO:
 # -------------------------------------------------------------------------
 # this script does not install PARDISO.
@@ -189,21 +229,38 @@ sed -e "s|\(source \).*|\1 ${cp2k_toolchainDIR}/install/setup|g" \
     -e "s|\(TOP_DIR *=\).*|\1 ${installDIR}|g" \
     -e "s|\(LIB_TOP *=\).*|\1 \$(TOP_DIR)/libs|g" \
     -e "s|\(TOOLCHAIN *=\).*|\1 ${cp2k_toolchainDIR}|g" \
+        ${omenDIR}/makefiles/arch.tmpl > ${omenDIR}/makefiles/${machine}.mk
+
+sed -i \
+    -e "s|\(INCSSPARSE *=\).*|\1 \$(LIB_TOP)/SuiteSparse/include/|g" \
     -e "s|\(INCMUMPS *=\).*|\1 \$(LIB_TOP)/MUMPS/include/|g" \
     -e "s|\(INCHYPRE *=\).*|\1 \$(LIB_TOP)/hypre/include/|g" \
     -e "s|\(INCQHULL *=\).*|\1 \$(LIB_TOP)/qhull/include/libqhull/|g" \
-    -e "s|\(INCSSPARSE *=\).*|\1 \$(LIB_TOP)/SuiteSparse/include/|g" \
-    -e "s|\(INCPEXSI *=\).*|\1 \$(TOOLCHAIN)/install/pexsi-${pexsiVER}/include/|g" \
     -e "s|\(INCSLUDIST *=\).*|\1 \$(TOOLCHAIN)/install/superlu_dist-${superluVER}/include/|g" \
-    -e "s|\(LIBPARMETIS *=\).*|\1 \$(TOOLCHAIN)/install/parmetis-${parmetisVER}/lib|g" \
-    -e "s|\(LIBMUMPS *=\).*|\1 \$(LIB_TOP)/MUMPS/lib|g" \
-    -e "s|\(LIBHYPRE *=\).*|\1 \$(LIB_TOP)/hypre/lib|g" \
-    -e "s|\(LIBQHULL *=\).*|\1 \$(LIB_TOP)/qhull/lib|g" \
-    -e "s|\(LIBSSPARSE *=\).*|\1 \$(LIB_TOP)/SuiteSparse/static|g" \
-    -e "s|\(LIBSLUDIST *=\).*|\1 \$(TOOLCHAIN)/install/superlu_dist-${superluVER}/lib|g" \
-    -e "s|\(LIBPEXSI *=\).*|\1 \$(TOOLCHAIN)/install/pexsi-${pexsiVER}/lib|g" \
-    -e "s|\(LIBCP2K *=\).*|\1 ${cp2kDIR}/cp2k/lib/local/${cp2k_target}|g" \
-       ${omenDIR}/makefiles/arch.tmpl > ${omenDIR}/makefiles/${machine}.mk
+    -e "s|\(INCPEXSI *=\).*|\1 \$(TOOLCHAIN)/install/pexsi-${pexsiVER}/include/|g" \
+        ${omenDIR}/makefiles/${machine}.mk
+
+sed -i \
+    -e "s|\(LIBSSPARSE *=\).*|\1 \$(LIB_TOP)/SuiteSparse/static -lumfpack -lamd -lcholmod -lcolamd -lccolamd -lcamd -lsuitesparseconfig |g" \
+    -e "s|\(LIBMUMPS *=\).*|\1 \$(LIB_TOP)/MUMPS/lib -lzmumps -ldmumps -lmumps_common -lpord -lscalapack |g" \
+    -e "s|\(LIBHYPRE *=\).*|\1 \$(LIB_TOP)/hypre/lib -lHYPRE |g" \
+    -e "s|\(LIBQHULL *=\).*|\1 \$(LIB_TOP)/qhull/lib -lqhullstatic |g" \
+    -e "s|\(LIBPARMETIS *=\).*|\1 \$(TOOLCHAIN)/install/parmetis-${parmetisVER}/lib -lparmetis -lmetis |g" \
+    -e "s|\(LIBSLUDIST *=\).*|\1 \$(TOOLCHAIN)/install/superlu_dist-${superluVER}/lib -lsuperlu_dist |g" \
+    -e "s|\(LIBPEXSI *=\).*|\1 \$(TOOLCHAIN)/install/pexsi-${pexsiVER}/lib -lpexsi |g" \
+    -e "s|\(LIBCP2K *=\).*|\1 ${cp2kDIR}/cp2k/lib/local/${cp2k_target} -lcp2k -lxsmmf -lxsmm -lderiv -lint -lxcf90 -lxc -lfftw3 |g" \
+        ${omenDIR}/makefiles/${machine}.mk
+
+if [ "${withCUDA}" = "yes" ] ; then
+   sed -i \
+       -e "s|\(NVCC *=\).*|\1 ${cudaDIR}/bin/nvcc|g" \
+       -e "s|\(NVCCFLAGS *=\).*|\1 -Xcompiler=--std=gnu++98 -D__GNUC__=4 -D__GNUC_MINOR__=9 -w |g" \
+       -e "s|\(INCCUDA *=\).*|\1 ${cudaDIR}/include/ |g" \
+       -e "s|\(LIBCUDA *=\).*|\1 ${cudaDIR}/lib64/ -lcudart -lcublas -lcusparse -lblas |g" \
+       -e "s|\(INCMAGMA *=\).*|\1 \$(LIB_TOP)/magma/include/|g" \
+       -e "s|\(LIBMAGMA *=\).*|\1 \$(LIB_TOP)/magma/lib -lmagma |g" \
+           ${omenDIR}/makefiles/${machine}.mk
+fi
 
 echo "Done! ====================================================="
 echo " "

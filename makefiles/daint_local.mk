@@ -46,7 +46,7 @@ LFLAGS   = $(CP2KLIB) $(LIBELPA) $(LIBXSMM) $(LIBINT) $(LIBXC) $(UMFPACKLIB) $(A
 DFLAGS   = -DAdd_  
 
 LIBS  = -lcp2k -lelpa_openmp -lxsmmf -lxsmm -ldl -lxcf90 -lxc -lderiv -lint -lpexsi \
-	-lHYPRE -lqhull -lumfpack -lamd -lmagma \
+	-lHYPRE -lqhull -lumfpack -lamd \
 	-lzmumps -lsuperlu_dist -lptscotch -lptscotcherr -lscotch \
 	-lcuda -lcudart -lcublas -lcufft -lcusparse -lmagma \
 	-lm -lrt -fopenmp -lgfortran -lstdc++
