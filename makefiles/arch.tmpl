@@ -5,7 +5,7 @@ YACC     = bison
 
 CPP      = mpic++ 
 GCC      = gcc 
-NVCC     = nvcc 
+NVCC     =  
 
 CFLAGS    = -g -w -Wall -fopenmp 
 CXXFLAGS  = -std=c++11 $(CFLAGS)
@@ -16,33 +16,34 @@ LIB_TOP       =
 TOOLCHAIN     = 
 
 # Common include paths
+INCSSPARSE    = 
 INCMUMPS      = 
 INCHYPRE      = 
 INCQHULL      = 
-INCSSPARSE    = 
-INCPEXSI      = 
+INCMAGMA      =
 INCSLUDIST    = 
+INCPEXSI      = 
+
+INCCUDA       =
 
 # Common library paths
-LIBPARMETIS   = 
+LIBSSPARSE    =
 LIBMUMPS      = 
 LIBHYPRE      = 
 LIBQHULL      = 
-LIBSSPARSE    =
+LIBMAGMA      =
+LIBPARMETIS   = 
 LIBSLUDIST    = 
 LIBPEXSI      = 
 LIBCP2K       = 
 
-LFLAGS   = -L$(LIBCP2K) -L$(LIBSSPARSE) -L$(LIBPEXSI) -L$(LIBPARMETIS) \
-	-L$(LIBMUMPS) -L$(LIBSSPARSE) -L$(LIBSLUDIST) -L$(LIBHYPRE) -L$(LIBQHULL)
+LIBCUDA       =
+
+LFLAGS   = -L$(LIBCP2K) -L$(LIBPEXSI) -L$(LIBPARMETIS) -L$(LIBSLUDIST) -L$(LIBSSPARSE) -L$(LIBMUMPS) -L$(LIBHYPRE) -L$(LIBQHULL) -L$(LIBCUDA) -L$(LIBMAGMA)
 
 DFLAGS   = -DAdd_ 
 
-LIBS     = -lrt -ldl -lstdc++ -lcp2k -lfftw3 -lpexsi \
-	-lumfpack -lamd -lcholmod -lcolamd -lccolamd -lcamd -lsuitesparseconfig \
-	-lparmetis -lmetis -lzmumps -ldmumps -lmumps_common -lpord -lsuperlu_dist \
-	-lHYPRE -lscalapack -llapack -lopenblas -lqhullstatic \
-	-lxsmmf -lxsmm -lderiv -lint -lxcf90 -lxc -lgfortran -lmpifort
+LIBS     = -lrt -ldl -lstdc++ -lgfortran -lmpifort -lopenblas
 
-INCLUDES = -I$(INCSLUDIST) -I$(INCHYPRE) -I$(INCSSPARSE) -I$(INCMUMPS) -I$(INCQHULL) -I$(INCPEXSI)
+INCLUDES = -I$(INCPEXSI) -I$(INCSLUDIST) -I$(INCSSPARSE) -I$(INCMUMPS) -I$(INCHYPRE) -I$(INCQHULL) -I$(INCCUDA) -I$(INCMAGMA)
 
