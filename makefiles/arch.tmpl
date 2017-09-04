@@ -36,7 +36,7 @@ LIBCP2K       =
 LFLAGS   = -L$(LIBCP2K) -L$(LIBSSPARSE) -L$(LIBPEXSI) -L$(LIBPARMETIS) \
 	-L$(LIBMUMPS) -L$(LIBSSPARSE) -L$(LIBSLUDIST) -L$(LIBHYPRE) -L$(LIBQHULL)
 
-DFLAGS   = -Dlibcp2k -DAdd_ 
+DFLAGS   = -DAdd_ 
 
 LIBS     = -lrt -ldl -lstdc++ -lcp2k -lfftw3 -lpexsi \
 	-lumfpack -lamd -lcholmod -lcolamd -lccolamd -lcamd -lsuitesparseconfig \

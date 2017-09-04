@@ -44,7 +44,7 @@ PEXSILIB      = $(LIB_TOP)/pexsi_v0.10.2/src/libpexsi_daint.a
 DMALLOC = -L/apps/common/UES/SLES12/ddt/6.1.2/lib/64/ -ldmallocthcxx -z muldefs
 
 LFLAGS = -L$(LIB_TOP)/cp2k/lib/pexsi/popt/
-DFLAGS = -DAdd_ -Dlibcp2k -DHAVE_MUMPS -DHAVE_SUPERLU -DHAVE_PEXSI -DHAVE_SPLITSOLVE -DHAVE_OMEN_POISSON -DHAVE_PIMAG
+DFLAGS = -DAdd_ -DHAVE_MUMPS -DHAVE_SUPERLU -DHAVE_PEXSI -DHAVE_SPLITSOLVE -DHAVE_OMEN_POISSON 
 LIBS = -lcp2k \
 	$(UMFPACKLIB) $(AMDLIB) $(AZTECLIB) $(QHULLLIB) $(PEXSILIB) $(MAGMALIB) \
 	-lzmumps -lsuperlu_dist -lptscotch -lptscotcherr -lscotch \

@@ -43,7 +43,7 @@ CP2KLIB  = -L/project/s662/hbani/cp2k-omen/cp2k/cp2k/lib/local_new/psmp
 DMALLOC  = -L/apps/common/UES/SLES12/ddt/6.1.2/lib/64/ -ldmallocthcxx -z muldefs
 
 LFLAGS   = $(CP2KLIB) $(LIBELPA) $(LIBXSMM) $(LIBINT) $(LIBXC) $(UMFPACKLIB) $(AMDLIB) $(HYPRELIB) $(QHULLLIB) $(PEXSILIB) $(MAGMALIB)
-DFLAGS   = -DAdd_ -Dlibcp2k 
+DFLAGS   = -DAdd_  
 
 LIBS  = -lcp2k -lelpa_openmp -lxsmmf -lxsmm -ldl -lxcf90 -lxc -lderiv -lint -lpexsi \
 	-lHYPRE -lqhull -lumfpack -lamd -lmagma \
