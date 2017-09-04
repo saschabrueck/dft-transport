@@ -4,8 +4,8 @@ LEX  = flex
 YACC = bison
 
 #SCOREP = scorep
-CPP  = $(SCOREP) CC
-GCC  = cc
+CXX  = $(SCOREP) CC
+CC   = cc
 NVCC = nvcc
 
 CFLAGS    = -Wall -fopenmp -O3 -ffast-math -funroll-loops -march=native

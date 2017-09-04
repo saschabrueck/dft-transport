@@ -1,8 +1,8 @@
 LEX      = flex
 YACC     = bison
 
-CPP      = mpic++ 
-GCC      = gcc 
+CXX      = mpic++ 
+CC       = gcc 
 NVCC     = nvcc
 
 CFLAGS    = -g -w -Wall -fopenmp 

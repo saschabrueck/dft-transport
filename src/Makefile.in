@@ -10,28 +10,28 @@ SOLVERS = @pardiso_dflag@ @mumps_dflag@ @superlu_dflag@ @pexsi_dflag@ @splitsolv
 LDFLAGS = $(LFLAGS) $(DFLAGS) $(SOLVERS) 
 
 MAIN = main.cpp
-SOURCES_CPP = 
+SOURCES_CXX = 
 EXCLUDE_C_LIST = @pardiso@ @semi_self_consistent@ 
 SOURCES_C = $(filter-out $(EXCLUDE_C_LIST), $(wildcard *.C))
 EXCLUDE_c_LIST = @parsers@ 
 SOURCES_c = $(filter-out $(EXCLUDE_c_LIST), $(wildcard *.c))
 SOURCES_cu = @splitsolve@
-OBJECTS = $(SOURCES_CPP:.cpp=.o) $(SOURCES_C:.C=.o) $(SOURCES_c:.c=.o) $(SOURCES_cu:.cu=.o)
+OBJECTS = $(SOURCES_CXX:.cpp=.o) $(SOURCES_C:.C=.o) $(SOURCES_c:.c=.o) $(SOURCES_cu:.cu=.o)
 EXECUTABLE = transport
 
-all: $(SOURCES_CPP) $(SOURCES_C) $(SOURCES_c) $(SOURCES_cu) $(EXECUTABLE)
+all: $(SOURCES_CXX) $(SOURCES_C) $(SOURCES_c) $(SOURCES_cu) $(EXECUTABLE)
 
 $(EXECUTABLE): $(MAIN:.cpp=.o) $(OBJECTS)
-	$(CPP) $(CXXFLAGS) $(INCLUDES) -o $@ $(MAIN:.cpp=.o) $(OBJECTS) $(LDFLAGS) $(LIBS)
+	$(CXX) $(CXXFLAGS) $(INCLUDES) -o $@ $(MAIN:.cpp=.o) $(OBJECTS) $(LDFLAGS) $(LIBS)
 
 %.o: %.cpp
-	$(CPP) $(CXXFLAGS) $(INCLUDES) $(LDFLAGS) -c $< -o $@
+	$(CXX) $(CXXFLAGS) $(INCLUDES) $(LDFLAGS) -c $< -o $@
 
 %.o: %.C
-	$(CPP) $(CXXFLAGS) $(INCLUDES) $(LDFLAGS) -c $< -o $@
+	$(CXX) $(CXXFLAGS) $(INCLUDES) $(LDFLAGS) -c $< -o $@
 
 %.o: %.c
-	$(GCC) $(CFLAGS) $(INCLUDES) $(LDFLAGS) -c $< -o $@
+	$(CC) $(CFLAGS) $(INCLUDES) $(LDFLAGS) -c $< -o $@
 
 %.o: %.cu
 	$(NVCC) $(NVCCFLAGS) $(INCLUDES) $(LDFLAGS) -c $< -o $@
