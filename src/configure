@@ -1848,7 +1848,7 @@ else
 	{ $as_echo "$as_me:$LINENO: No FEM-based Poisson solver." >&5
 $as_echo "$as_me: No FEM-based Poisson solver." >&6;}
 
-	semi_self_consistent='SemiSelfConsistent.C InputParameter.C'
+	semi_self_consistent='FEMGrid.C Fermi.C SemiSelfConsistent.C InputParameter.C Poisson.C WireGenerator.C'
 
 	parsers='y.tab.c lex.yy.c'
 
