@@ -35,11 +35,12 @@ LIBMAGMA      = $(LIB_TOP)/magma/lib -lmagma
 LIBPARMETIS   = $(TOOLCHAIN)/install/parmetis-4.0.3/lib -lparmetis -lmetis 
 LIBSLUDIST    = $(TOOLCHAIN)/install/superlu_dist-5.1.2/lib -lsuperlu_dist 
 LIBPEXSI      = $(TOOLCHAIN)/install/pexsi-0.10.1/lib -lpexsi 
+LIBPARDISO    = $(LIB_TOP)/pardiso/lib/ -lpardiso500-MPI-GNU472-X86-64
 LIBCP2K       = /home/seyedb/cp2k-omen/cp2k/cp2k/lib/local/popt -lcp2k -lxsmmf -lxsmm -lderiv -lint -lxcf90 -lxc -lfftw3 
 
 LIBCUDA       = /usr/local/cuda-7.5/lib64/ -lcudart -lcublas -lcusparse -lblas
 
-LFLAGS   = -L$(LIBCP2K) -L$(LIBPEXSI) -L$(LIBPARMETIS) -L$(LIBSLUDIST) -L$(LIBSSPARSE) -L$(LIBMUMPS) -L$(LIBHYPRE) -L$(LIBQHULL) -L$(LIBCUDA) -L$(LIBMAGMA)
+LFLAGS   = -L$(LIBCP2K) -L$(LIBPEXSI) -L$(LIBPARDISO) -L$(LIBPARMETIS) -L$(LIBSLUDIST) -L$(LIBSSPARSE) -L$(LIBMUMPS) -L$(LIBHYPRE) -L$(LIBQHULL) -L$(LIBCUDA) -L$(LIBMAGMA)
 
 DFLAGS   = -DAdd_ 
 
