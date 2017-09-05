@@ -13,7 +13,7 @@ NVCCFLAGS = -Xcompiler=--std=gnu++98 -D__GNUC__=4 -D__GNUC_MINOR__=9 -w
 
 TOP_DIR       = /home/seyedb/cp2k-omen
 LIB_TOP       = $(TOP_DIR)/libs
-TOOLCHAIN     = /scratch/seyedb/cp2k/cp2k/tools/toolchain
+TOOLCHAIN     = /home/seyedb/cp2k-omen/cp2k/cp2k/tools/toolchain
 
 # Common include paths
 INCSSPARSE    = $(LIB_TOP)/SuiteSparse/include/
@@ -35,7 +35,7 @@ LIBMAGMA      = $(LIB_TOP)/magma/lib -lmagma
 LIBPARMETIS   = $(TOOLCHAIN)/install/parmetis-4.0.3/lib -lparmetis -lmetis 
 LIBSLUDIST    = $(TOOLCHAIN)/install/superlu_dist-5.1.2/lib -lsuperlu_dist 
 LIBPEXSI      = $(TOOLCHAIN)/install/pexsi-0.10.1/lib -lpexsi 
-LIBCP2K       = /scratch/seyedb/cp2k/cp2k/lib/local/popt -lcp2k -lxsmmf -lxsmm -lderiv -lint -lxcf90 -lxc -lfftw3 
+LIBCP2K       = /home/seyedb/cp2k-omen/cp2k/cp2k/lib/local/popt -lcp2k -lxsmmf -lxsmm -lderiv -lint -lxcf90 -lxc -lfftw3 
 
 LIBCUDA       = /usr/local/cuda-7.5/lib64/ -lcudart -lcublas -lcusparse -lblas
 
