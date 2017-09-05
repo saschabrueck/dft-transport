@@ -213,7 +213,15 @@ fi
 
 # install PARDISO:
 # -------------------------------------------------------------------------
-# this script does not install PARDISO.
+# Downloading PARDISO needs registration on their website. Therefore, this 
+# script does not automatically install PARDISO. If you have the .so file, 
+# specify the name of the shared object file and the path to the files here, 
+# otherwise leave the following two variables unset:
+
+#pardisoSOFILE="libpardiso500-MPI-GNU472-X86-64.so"
+#pardisoDIR=${libsDIR}/pardiso/lib
+pardisoSOFILE=
+pardisoDIR=
 
 echo "Done! ====================================================="
 echo " "
@@ -250,6 +258,13 @@ sed -i \
     -e "s|\(LIBPEXSI *=\).*|\1 \$(TOOLCHAIN)/install/pexsi-${pexsiVER}/lib -lpexsi |g" \
     -e "s|\(LIBCP2K *=\).*|\1 ${cp2kDIR}/cp2k/lib/local/${cp2k_target} -lcp2k -lxsmmf -lxsmm -lderiv -lint -lxcf90 -lxc -lfftw3 |g" \
         ${omenDIR}/makefiles/${machine}.mk
+
+if [ ! -z ${pardisoDIR} ]; then
+   pardiso_lib=${pardisoSOFILE/"lib"/ -l}
+   sed -i \
+       -e "s|\(LIBPARDISO *=\).*|\1 ${pardisoDIR}/${pardiso_lib/".so"/ } |g" \
+           ${omenDIR}/makefiles/${machine}.mk
+fi
 
 if [ "${withCUDA}" = "yes" ] ; then
    sed -i \
