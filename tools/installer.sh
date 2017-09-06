@@ -1,11 +1,22 @@
 #!/bin/bash -e
 
-# ========================================================================
+# =========================================================================
 # \brief    script for installing CP2K-OMEN 
+# This script installs CP2K-OMEN and compiles the code in 4 steps:
+# STEP 1: installing CP2K;
+# STEP 2: installing solvers/libraries that may be used by OMEN;
+# STEP 3: generating a .mk file (machine specific Makefile) for OMEN; 
+# STEP 4: compiling CP2K-OMEN.
+#
+# Although all the steps can be done manually, for convenience and to have 
+# a well-matched installation, it is advised to use the script for at least 
+# the first two steps. 
+#
 # \history  created: 22-07-2017 
 # \author   Mohammad Hossein Bani-Hashemian 
-# ========================================================================
+# =========================================================================
 
+# First, set the following variables:
 TOPDIR=/scratch/seyedb
 cp2kDIR=${TOPDIR}/cp2k
 omenDIR=${TOPDIR}/omen
@@ -14,21 +25,41 @@ installDIR=${omenDIR}/install
 buildDIR=${installDIR}/build
 libsDIR=${installDIR}/libs
 
-machine="mont-fort1"
-
-# with or without CUDA (needed for SplitSolve and MAGMA)  
-# Note: MAGMA v >2.0 requires CUDA v >5.0
+# preparation for STEP 2: 
+# with or without CUDA (needed for SplitSolve and MAGMA):
+# Note that MAGMA v >2.0 requires CUDA v >5.0
 withCUDA="no"
 cudaDIR="/usr/local/cuda-7.5"
 
-# specify the cp2k VERSION for the last step (compilation):
+# Specify the versions of the solvers that you would like to install:
+hypreVER="2.11.2"
+SuiteSparseVER="4.5.5"
+qhullVER="2015-src-7.2.0"
+mumpsVER="5.1.1"
+magmaVER="2.2.0"
+
+# If you have downloaded the shared library file of PARDISO, specify the 
+# name of the file and the path to it here, otherwise, leave the following 
+# two variables unset:
+
+#pardisoSOFILE="libpardiso500-MPI-GNU472-X86-64.so"
+#pardisoDIR=${libsDIR}/pardiso/lib
+pardisoSOFILE=
+pardisoDIR=
+
+# preparation for STEP 3:
+# specify the name of your machine:
+machine="mont-fort1"
+
+# preparation for STEP 4:
+# specify the cp2k VERSION for compilation:
 cp2k_target="popt"
 
 # STEP 1: ******************************************************************************************
 
 # install CP2K: ===========================================================
-# Note that, to have a well-matched installation, this script uses the CP2K
-# toolchain script to install CP2K with PEXSI, SuperLU_DIST, and ParMETIS. 
+# Here the script uses the CP2K toolchain script to install CP2K together
+# with PEXSI, SuperLU_DIST, and ParMETIS that all are used by OMEN as well.
 # -------------------------------------------------------------------------
 echo "installing CP2K ==========================================="
 cd ${TOPDIR} 
@@ -60,13 +91,6 @@ source ${cp2k_toolchainDIR}/scripts/common_vars.sh
 # STEP 2: ******************************************************************************************
 
 # install OMEN solvers: ===================================================
-# specify the versions here 
-hypreVER="2.11.2"
-SuiteSparseVER="4.5.5"
-qhullVER="2015-src-7.2.0"
-mumpsVER="5.1.1"
-magmaVER="2.2.0"
-
 # the following are installed by CP2K toolchain
 parmetisVER=${parmetis_ver}
 reflapackVER=${reflapack_ver}
@@ -83,12 +107,11 @@ mkdir -p ${buildDIR}
 echo "installing OMEN solvers ==================================="
 echo " "
 
+# PEXSI -------------------------------------------------------------------
 # copy PEXSI headers that are not copied via CP2K toolchain script 
-# -------------------------------------------------------------------------
 cp -r ${cp2k_toolchainDIR}/build/pexsi_v${pexsiVER}/include/pexsi/ ${cp2k_toolchainDIR}/install/pexsi-${pexsiVER}/include/
 
-# install hypre:
-# -------------------------------------------------------------------------
+# HYPRE -------------------------------------------------------------------
 echo "installing hypre =========================================="
 mkdir -p ${libsDIR}/hypre
 mkdir -p ${libsDIR}/hypre/bin
@@ -110,8 +133,7 @@ cd ${buildDIR}/hypre-${hypreVER}/src
 
 make install > install.log
 
-# install SuiteSparse:
-# -------------------------------------------------------------------------
+# SuiteSparse -------------------------------------------------------------
 echo "installing SuiteSparse ===================================="
 mkdir -p ${libsDIR}/SuiteSparse
 mkdir -p ${libsDIR}/SuiteSparse/static
@@ -132,8 +154,7 @@ make install INSTALL_LIB=${libsDIR}/SuiteSparse/lib \
 
 find . -name "*.a" -type f -exec cp {} ${libsDIR}/SuiteSparse/static \;
 
-# install qhull:
-# -------------------------------------------------------------------------
+# Qhull -------------------------------------------------------------------
 echo "installing qhull =========================================="
 mkdir -p ${libsDIR}/qhull
 cd ${buildDIR}
@@ -150,8 +171,7 @@ sed -e "s|\(DESTDIR *=\).*|\1 ${libsDIR}/qhull|g" \
 make all > install.log 
 make install
 
-# install MUMPS:
-# -------------------------------------------------------------------------
+# MUMPS -------------------------------------------------------------------
 echo "installing MUMPS =========================================="
 mkdir -p ${libsDIR}/MUMPS
 cd ${buildDIR}
@@ -182,8 +202,7 @@ sed -e "/^#.*LMETISDIR *=/s/^#//" \
 make alllib > install.log
 cp -r ${buildDIR}/MUMPS/lib/ ${buildDIR}/MUMPS/include/ ${libsDIR}/MUMPS
 
-# install MAGMA:
-# -------------------------------------------------------------------------
+# MAGMA -------------------------------------------------------------------
 if [ "${withCUDA}" = "yes" ] ; then
    echo "installing MAGMA =========================================="
    mkdir -p ${libsDIR}/magma
@@ -211,17 +230,9 @@ else
    echo "MAGMA will not be installed. In order to install MAGMA, please set withCUDA="yes"."
 fi
 
-# install PARDISO:
-# -------------------------------------------------------------------------
+# PARDISO -----------------------------------------------------------------
 # Downloading PARDISO needs registration on their website. Therefore, this 
-# script does not automatically install PARDISO. If you have the .so file, 
-# specify the name of the shared object file and the path to the files here, 
-# otherwise leave the following two variables unset:
-
-#pardisoSOFILE="libpardiso500-MPI-GNU472-X86-64.so"
-#pardisoDIR=${libsDIR}/pardiso/lib
-pardisoSOFILE=
-pardisoDIR=
+# script does not automatically install PARDISO.  
 
 echo "Done! ====================================================="
 echo " "
