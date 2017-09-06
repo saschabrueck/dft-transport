@@ -14,7 +14,7 @@ SOURCES_CXX =
 EXCLUDE_C_LIST = @pardiso@ @semi_self_consistent@ 
 SOURCES_C = $(filter-out $(EXCLUDE_C_LIST), $(wildcard *.C))
 EXCLUDE_c_LIST = @parsers@ 
-SOURCES_c = $(filter-out $(EXCLUDE_c_LIST), $(wildcard *.c))
+SOURCES_c = $(filter-out $(EXCLUDE_c_LIST), $(wildcard *.c) @parser_c@)
 SOURCES_cu = @splitsolve@
 OBJECTS = $(SOURCES_CXX:.cpp=.o) $(SOURCES_C:.C=.o) $(SOURCES_c:.c=.o) $(SOURCES_cu:.cu=.o)
 EXECUTABLE = transport

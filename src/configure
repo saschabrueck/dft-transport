@@ -600,6 +600,7 @@ PACKAGE_BUGREPORT=''
 
 ac_subst_vars='LTLIBOBJS
 LIBOBJS
+parser_c
 parsers
 semi_self_consistent
 fem_poisson_dflag
@@ -1844,6 +1845,8 @@ $as_echo "$as_me: OMEN (FEM-based) Poisson solver enabled." >&6;}
 
 
 
+	parser_c='y.tab.c lex.yy.c'
+
 else
 	{ $as_echo "$as_me:$LINENO: No FEM-based Poisson solver." >&5
 $as_echo "$as_me: No FEM-based Poisson solver." >&6;}
@@ -1851,6 +1854,7 @@ $as_echo "$as_me: No FEM-based Poisson solver." >&6;}
 	semi_self_consistent='FEMGrid.C Fermi.C SemiSelfConsistent.C InputParameter.C Poisson.C WireGenerator.C'
 
 	parsers='y.tab.c lex.yy.c'
+
 
 fi
 
