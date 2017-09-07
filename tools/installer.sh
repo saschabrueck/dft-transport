@@ -33,7 +33,7 @@
 # \author   Mohammad Hossein Bani-Hashemian 
 # =========================================================================
 
-# * set the following paths *******
+# * Set the following paths *******
 TOPDIR=/scratch/seyedb
 cp2kDIR=${TOPDIR}/cp2k
 omenDIR=${TOPDIR}/omen
@@ -42,23 +42,23 @@ installDIR=${omenDIR}/install
 buildDIR=${installDIR}/build
 libsDIR=${installDIR}/libs
 
-# * preparation for STEP 1 ********
-# install either the current truck version of CP2K or a release version (>=4.1)
+# * Preparation for STEP 1 ********
+# Install either the current truck version of CP2K or a release version (>=4.1)
 cp2kTRUNK="yes"
 cp2kRELEASE="no"
 cp2kRELEASEVER="4_1"
 
-# * preparation for STEP 2 ********
-# with or without CUDA (needed for SplitSolve and MAGMA):
-# Note that MAGMA v >2.0 requires CUDA v >5.0
-withCUDA="no"
-cudaDIR="/usr/local/cuda-7.5"
-
+# * Preparation for STEP 2 ********
 # Specify the versions of the solvers that you would like to install:
+# An unset version would mean the solver will not be installed.  
 hypreVER="2.11.2"
 SuiteSparseVER="4.5.5"
 qhullVER="2015-src-7.2.0"
 mumpsVER="5.1.1"
+
+# If you would like to use SplitSolve, set magmaVER. 
+# Note that SplitSolve uses MAGMA and MAGMA ver>=2.0 requires CUDA ver>=5.0
+cudaDIR="/usr/local/cuda-7.5"
 magmaVER="2.2.0"
 
 # If you have downloaded the shared library file of PARDISO, specify the name 
@@ -67,17 +67,17 @@ pardisoSOFILE="libpardiso500-MPI-GNU472-X86-64.so"
 #pardisoDIR=${libsDIR}/pardiso/lib
 pardisoDIR=
 
-# * preparation for STEP 3 ********
-# specify the name of your machine:
+# * Preparation for STEP 3 ********
+# Specify the name of your machine:
 machine="mont-fort1"
 
-# * preparation for STEP 4 ********
-# specify the cp2k VERSION for compilation:
+# * Preparation for STEP 4 ********
+# Specify the cp2k VERSION for compilation:
 cp2k_target="popt"
-# set the OMEN's configure flags, i.e. solvers to be enabled:
+# Set the OMEN's configure flags, i.e. solvers to be enabled:
 omenCONFIGURE_ARGS="--with-pexsi --with-mumps"
 
-# * you should not need to change anything below this line, unless you would like to 
+# * You should not need to change anything below this line, unless you would like to 
 #   edit some steps or skip them by commenting them out.
 
 # STEP 1: ******************************************************************************************
@@ -112,8 +112,10 @@ source ${cp2k_toolchainDIR}/install/setup
 
 # get versions of libraries that have been just installed by CP2K toolchain
 source ${cp2k_toolchainDIR}/scripts/package_versions.sh
-
 source ${cp2k_toolchainDIR}/scripts/common_vars.sh
+
+# define lib path for .mk file (STEP 3)
+lib_cp2k="-L${cp2kDIR}/cp2k/lib/local/${cp2k_target} -lcp2k -lxsmmf -lxsmm -lderiv -lint -lxcf90 -lxc -lfftw3"
 
 # STEP 2: ******************************************************************************************
 
@@ -138,99 +140,130 @@ echo " "
 # copy PEXSI headers that are not copied via CP2K toolchain script 
 cp -r ${cp2k_toolchainDIR}/build/pexsi_v${pexsiVER}/include/pexsi/ ${cp2k_toolchainDIR}/install/pexsi-${pexsiVER}/include/
 
+# define include and lib paths for .mk file (STEP 3)
+lib_parmetis="-L\$(TOOLCHAIN)/install/parmetis-${parmetisVER}/lib -lparmetis -lmetis"
+inc_sludist="-I\$(TOOLCHAIN)/install/superlu_dist-${superluVER}/include/"
+lib_sludist="-L\$(TOOLCHAIN)/install/superlu_dist-${superluVER}/lib -lsuperlu_dist"
+inc_pexsi="-I\$(TOOLCHAIN)/install/pexsi-${pexsiVER}/include/"
+lib_pexsi="-L\$(TOOLCHAIN)/install/pexsi-${pexsiVER}/lib -lpexsi"
+
 # HYPRE -------------------------------------------------------------------
-echo "installing hypre =========================================="
-mkdir -p ${libsDIR}/hypre
-mkdir -p ${libsDIR}/hypre/bin
-mkdir -p ${libsDIR}/hypre/libexec
-mkdir -p ${libsDIR}/hypre/lib
-mkdir -p ${libsDIR}/hypre/include
-cd ${buildDIR}
+if [ ! -z ${hypreVER} ]; then
+   echo "installing hypre =========================================="
+   mkdir -p ${libsDIR}/hypre
+   mkdir -p ${libsDIR}/hypre/bin
+   mkdir -p ${libsDIR}/hypre/libexec
+   mkdir -p ${libsDIR}/hypre/lib
+   mkdir -p ${libsDIR}/hypre/include
+   cd ${buildDIR}
+   
+   wget https://computation.llnl.gov/projects/hypre-scalable-linear-solvers-multigrid-methods/download/hypre-${hypreVER}.tar.gz
+   tar -xf hypre-"${hypreVER}".tar.gz
+   
+   cd ${buildDIR}/hypre-${hypreVER}/src
+   
+   ./configure -q --bindir=${libsDIR}/hypre/bin \
+                  --libexecdir=${libsDIR}/hypre/libexec \
+                  --libdir=${libsDIR}/hypre/lib \
+                  --includedir=${libsDIR}/hypre/include \
+                  --without-superlu
+   
+   make install > install.log
 
-wget https://computation.llnl.gov/projects/hypre-scalable-linear-solvers-multigrid-methods/download/hypre-${hypreVER}.tar.gz
-tar -xf hypre-"${hypreVER}".tar.gz
-
-cd ${buildDIR}/hypre-${hypreVER}/src
-
-./configure -q --bindir=${libsDIR}/hypre/bin \
-               --libexecdir=${libsDIR}/hypre/libexec \
-               --libdir=${libsDIR}/hypre/lib \
-               --includedir=${libsDIR}/hypre/include \
-               --without-superlu
-
-make install > install.log
+   # define include and lib paths for .mk file (STEP 3)
+   inc_hypre="-I\$(LIB_TOP)/hypre/include/"
+   lib_hypre="-L\$(LIB_TOP)/hypre/lib -lHYPRE"
+fi
 
 # SuiteSparse -------------------------------------------------------------
-echo "installing SuiteSparse ===================================="
-mkdir -p ${libsDIR}/SuiteSparse
-mkdir -p ${libsDIR}/SuiteSparse/static
-cd ${buildDIR}
+if [ ! -z ${SuiteSparseVER} ]; then
+   echo "installing SuiteSparse ===================================="
+   mkdir -p ${libsDIR}/SuiteSparse
+   mkdir -p ${libsDIR}/SuiteSparse/static
+   cd ${buildDIR}
+   
+   wget http://faculty.cse.tamu.edu/davis/SuiteSparse/SuiteSparse-${SuiteSparseVER}.tar.gz
+   tar -xf SuiteSparse-${SuiteSparseVER}.tar.gz
+   
+   cd ${buildDIR}/SuiteSparse
+   
+   make install INSTALL_LIB=${libsDIR}/SuiteSparse/lib \
+                INSTALL_INCLUDE=${libsDIR}/SuiteSparse/include \
+                AUTOCC=no \
+                CUDA=no \
+                MY_METIS_LIB=${cp2k_toolchainDIR}/install/parmetis-${parmetisVER}/lib/libmetis.a \
+                MY_METIS_INC=${cp2k_toolchainDIR}/install/parmetis-${parmetisVER}/include \
+                > install.log
+   
+   find . -name "*.a" -type f -exec cp {} ${libsDIR}/SuiteSparse/static \;
 
-wget http://faculty.cse.tamu.edu/davis/SuiteSparse/SuiteSparse-${SuiteSparseVER}.tar.gz
-tar -xf SuiteSparse-${SuiteSparseVER}.tar.gz
-
-cd ${buildDIR}/SuiteSparse
-
-make install INSTALL_LIB=${libsDIR}/SuiteSparse/lib \
-             INSTALL_INCLUDE=${libsDIR}/SuiteSparse/include \
-             AUTOCC=no \
-             CUDA=no \
-             MY_METIS_LIB=${cp2k_toolchainDIR}/install/parmetis-${parmetisVER}/lib/libmetis.a \
-             MY_METIS_INC=${cp2k_toolchainDIR}/install/parmetis-${parmetisVER}/include \
-             > install.log
-
-find . -name "*.a" -type f -exec cp {} ${libsDIR}/SuiteSparse/static \;
+   # define include and lib paths for .mk file (STEP 3)
+   inc_ssparse="-I\$(LIB_TOP)/SuiteSparse/include/"
+   lib_ssparse="-L\$(LIB_TOP)/SuiteSparse/static -lumfpack -lamd -lcholmod -lcolamd -lccolamd -lcamd -lsuitesparseconfig"
+fi
 
 # Qhull -------------------------------------------------------------------
-echo "installing qhull =========================================="
-mkdir -p ${libsDIR}/qhull
-cd ${buildDIR}
+if [ ! -z ${qhullVER} ]; then
+   echo "installing qhull =========================================="
+   mkdir -p ${libsDIR}/qhull
+   cd ${buildDIR}
+   
+   wget http://www.qhull.org/download/qhull-${qhullVER}.tgz
+   mkdir -p ${buildDIR}/qhull
+   tar -xf qhull-${qhullVER}.tgz -C qhull/ --strip-components 1
+   
+   cd ${buildDIR}/qhull
+   
+   mv ${buildDIR}/qhull/Makefile ${buildDIR}/qhull/Makefile.orig
+   sed -e "s|\(DESTDIR *=\).*|\1 ${libsDIR}/qhull|g" \
+       -e "s|\(CC *=\).*|\1 gcc -w|g" ${buildDIR}/qhull/Makefile.orig > ${buildDIR}/qhull/Makefile
+   make all > install.log 
+   make install
 
-wget http://www.qhull.org/download/qhull-${qhullVER}.tgz
-mkdir -p ${buildDIR}/qhull
-tar -xf qhull-${qhullVER}.tgz -C qhull/ --strip-components 1
-
-cd ${buildDIR}/qhull
-
-mv ${buildDIR}/qhull/Makefile ${buildDIR}/qhull/Makefile.orig
-sed -e "s|\(DESTDIR *=\).*|\1 ${libsDIR}/qhull|g" \
-    -e "s|\(CC *=\).*|\1 gcc -w|g" ${buildDIR}/qhull/Makefile.orig > ${buildDIR}/qhull/Makefile
-make all > install.log 
-make install
+   # define include and lib paths for .mk file (STEP 3)
+   inc_qhull="-I\$(LIB_TOP)/qhull/include/libqhull/"
+   lib_qhull="-L\$(LIB_TOP)/qhull/lib -lqhullstatic"
+fi
 
 # MUMPS -------------------------------------------------------------------
-echo "installing MUMPS =========================================="
-mkdir -p ${libsDIR}/MUMPS
-cd ${buildDIR}
+if [ ! -z ${mumpsVER} ]; then
+   echo "installing MUMPS =========================================="
+   mkdir -p ${libsDIR}/MUMPS
+   cd ${buildDIR}
+   
+   wget http://mumps.enseeiht.fr/MUMPS_${mumpsVER}.tar.gz
+   mkdir -p ${buildDIR}/MUMPS
+   tar -xf MUMPS_${mumpsVER}.tar.gz -C MUMPS/ --strip-components 1
+   
+   cd ${buildDIR}/MUMPS
+   
+   sed -e "/^#.*LMETISDIR *=/s/^#//" \
+       -e "/^#.*IMETIS *=/s/^#//" \
+       -e "s|\(LMETISDIR *=\).*|\1 ${cp2k_toolchainDIR}/install/parmetis-${parmetisVER}/lib|g" \
+       -e "s|\(IMETIS *=\).*|\1 -I${cp2k_toolchainDIR}/install/parmetis-${parmetisVER}/include|g" \
+       -e "/^#.*-lparmetis/s/^#//" \
+       -e "s|\(CC *=\).*|\1 gcc|g" \
+       -e "s|\(FC *=\).*|\1 mpif90|g" \
+       -e "s|\(FL *=\).*|\1 mpif90|g" \
+       -e "s|\(LAPACK *=\).*|\1 -L/${cp2k_toolchainDIR}/install/lapack-${reflapackVER}/lib -llapack|g" \
+       -e "s|\(SCALAP *=\).*|\1 -L/${cp2k_toolchainDIR}/install/lapack-${scalapackVER}/lib -lscalapack|g" \
+       -e "s|\(INCPAR *=\).*|\1 -I/${cp2k_toolchainDIR}/install/mpich-${mpichVER}/include|g" \
+       -e "s|\(LIBPAR *=\).*|\1 \$(SCALAP) \$(LAPACK) -L/${cp2k_toolchainDIR}/install/mpich-${mpichVER}/lib -lmpi -lgfortran|g" \
+       -e "s|\(LIBBLAS *=\).*|\1 -L/${cp2k_toolchainDIR}/install/lapack-${scalapackVER}/lib -lblas|g" \
+       -e "s|\(OPTF *=\).*|\1 -O -w|g" \
+       -e "s|\(OPTC *=\).*|\1 -O3 -w|g" \
+          Make.inc/Makefile.inc.generic > Makefile.inc
+   
+   make alllib > install.log
+   cp -r ${buildDIR}/MUMPS/lib/ ${buildDIR}/MUMPS/include/ ${libsDIR}/MUMPS
 
-wget http://mumps.enseeiht.fr/MUMPS_${mumpsVER}.tar.gz
-mkdir -p ${buildDIR}/MUMPS
-tar -xf MUMPS_${mumpsVER}.tar.gz -C MUMPS/ --strip-components 1
-
-cd ${buildDIR}/MUMPS
-
-sed -e "/^#.*LMETISDIR *=/s/^#//" \
-    -e "/^#.*IMETIS *=/s/^#//" \
-    -e "s|\(LMETISDIR *=\).*|\1 ${cp2k_toolchainDIR}/install/parmetis-${parmetisVER}/lib|g" \
-    -e "s|\(IMETIS *=\).*|\1 -I${cp2k_toolchainDIR}/install/parmetis-${parmetisVER}/include|g" \
-    -e "/^#.*-lparmetis/s/^#//" \
-    -e "s|\(CC *=\).*|\1 gcc|g" \
-    -e "s|\(FC *=\).*|\1 mpif90|g" \
-    -e "s|\(FL *=\).*|\1 mpif90|g" \
-    -e "s|\(LAPACK *=\).*|\1 -L/${cp2k_toolchainDIR}/install/lapack-${reflapackVER}/lib -llapack|g" \
-    -e "s|\(SCALAP *=\).*|\1 -L/${cp2k_toolchainDIR}/install/lapack-${scalapackVER}/lib -lscalapack|g" \
-    -e "s|\(INCPAR *=\).*|\1 -I/${cp2k_toolchainDIR}/install/mpich-${mpichVER}/include|g" \
-    -e "s|\(LIBPAR *=\).*|\1 \$(SCALAP) \$(LAPACK) -L/${cp2k_toolchainDIR}/install/mpich-${mpichVER}/lib -lmpi -lgfortran|g" \
-    -e "s|\(LIBBLAS *=\).*|\1 -L/${cp2k_toolchainDIR}/install/lapack-${scalapackVER}/lib -lblas|g" \
-    -e "s|\(OPTF *=\).*|\1 -O -w|g" \
-    -e "s|\(OPTC *=\).*|\1 -O3 -w|g" \
-       Make.inc/Makefile.inc.generic > Makefile.inc
-
-make alllib > install.log
-cp -r ${buildDIR}/MUMPS/lib/ ${buildDIR}/MUMPS/include/ ${libsDIR}/MUMPS
+   # define include and lib paths for .mk file (STEP 3)
+   inc_mumps="-I\$(LIB_TOP)/MUMPS/include/"
+   lib_mumps="-L\$(LIB_TOP)/MUMPS/lib -lzmumps -ldmumps -lmumps_common -lpord -lscalapack"
+fi
 
 # MAGMA -------------------------------------------------------------------
-if [ "${withCUDA}" = "yes" ] ; then
+if [ ! -z ${magmaVER} ]; then
    echo "installing MAGMA =========================================="
    mkdir -p ${libsDIR}/magma
    cd ${buildDIR}
@@ -253,13 +286,25 @@ if [ "${withCUDA}" = "yes" ] ; then
           make.inc.openblas > make.inc
    
    make install prefix=${libsDIR}/magma > install.log
-else
-   echo "MAGMA will not be installed. In order to install MAGMA, please set withCUDA="yes"."
+
+   # define include and lib paths for .mk file (STEP 3)
+   nvcc_path="${cudaDIR}/bin/nvcc"
+   nvcc_flags="-Xcompiler=--std=gnu++98 -D__GNUC__=4 -D__GNUC_MINOR__=9 -w"
+   inc_cuda="-I${cudaDIR}/include/"
+   lib_cuda="-L${cudaDIR}/lib64/ -lcudart -lcublas -lcusparse -lblas"
+   inc_magma="-I\$(LIB_TOP)/magma/include/"
+   lib_magma="-L\$(LIB_TOP)/magma/lib -lmagma"
 fi
 
 # PARDISO -----------------------------------------------------------------
 # Downloading PARDISO needs registration on their website. Therefore, this 
 # script does not automatically install PARDISO.  
+
+# define include and lib paths for .mk file (STEP 3)
+if [ ! -z ${pardisoDIR} ]; then
+   pardiso_file=${pardisoSOFILE/"lib"/ -l}
+   lib_pardiso="-L${pardisoDIR}/${pardiso_file/".so"/}"
+fi
 
 echo "Done! ====================================================="
 echo " "
@@ -271,49 +316,35 @@ echo " "
 echo "generate a .mk file ======================================="
 cd ${omenDIR}
 
-sed -e "s|\(source \).*|\1 ${cp2k_toolchainDIR}/install/setup|g" \
-    -e "s|\(TOP_DIR *=\).*|\1 ${installDIR}|g" \
-    -e "s|\(LIB_TOP *=\).*|\1 \$(TOP_DIR)/libs|g" \
-    -e "s|\(TOOLCHAIN *=\).*|\1 ${cp2k_toolchainDIR}|g" \
+topdir=${installDIR}
+libtop="\$(TOP_DIR)/libs"
+
+sed -e "s|\(source \).*|\1 ${cp2k_toolchainDIR}/install/setup |g" \
+    -e "s|\(TOP_DIR *=\).*|\1 ${topdir} |g" \
+    -e "s|\(LIB_TOP *=\).*|\1 ${libtop} |g" \
+    -e "s|\(TOOLCHAIN *=\).*|\1 ${cp2k_toolchainDIR} |g" \
+    -e "s|\(INCSSPARSE *=\).*|\1 ${inc_ssparse} |g" \
+    -e "s|\(INCMUMPS *=\).*|\1 ${inc_mumps} |g" \
+    -e "s|\(INCHYPRE *=\).*|\1 ${inc_hypre} |g" \
+    -e "s|\(INCQHULL *=\).*|\1 ${inc_qhull} |g" \
+    -e "s|\(INCSLUDIST *=\).*|\1 ${inc_sludist} |g" \
+    -e "s|\(INCPEXSI *=\).*|\1 ${inc_pexsi} |g" \
+    -e "s|\(LIBSSPARSE *=\).*|\1 ${lib_ssparse} |g" \
+    -e "s|\(LIBMUMPS *=\).*|\1 ${lib_mumps} |g" \
+    -e "s|\(LIBHYPRE *=\).*|\1 ${lib_hypre} |g" \
+    -e "s|\(LIBQHULL *=\).*|\1 ${lib_qhull} |g" \
+    -e "s|\(LIBPARMETIS *=\).*|\1 ${lib_parmetis} |g" \
+    -e "s|\(LIBSLUDIST *=\).*|\1 ${lib_sludist} |g" \
+    -e "s|\(LIBPEXSI *=\).*|\1 ${lib_pexsi} |g" \
+    -e "s|\(LIBCP2K *=\).*|\1 ${lib_cp2k} |g" \
+    -e "s|\(LIBPARDISO *=\).*|\1 ${lib_pardiso} |g" \
+    -e "s|\(NVCC *=\).*|\1 ${nvcc_path} |g" \
+    -e "s|\(NVCCFLAGS *=\).*|\1 ${nvcc_flags} |g" \
+    -e "s|\(INCCUDA *=\).*|\1 ${inc_cuda} |g" \
+    -e "s|\(LIBCUDA *=\).*|\1 ${lib_cuda} |g" \
+    -e "s|\(INCMAGMA *=\).*|\1 ${inc_magma} |g" \
+    -e "s|\(LIBMAGMA *=\).*|\1 ${lib_magma} |g" \
         ${omenDIR}/makefiles/arch.tmpl > ${omenDIR}/makefiles/${machine}.mk
-
-sed -i \
-    -e "s|\(INCSSPARSE *=\).*|\1 -I\$(LIB_TOP)/SuiteSparse/include/|g" \
-    -e "s|\(INCMUMPS *=\).*|\1 -I\$(LIB_TOP)/MUMPS/include/|g" \
-    -e "s|\(INCHYPRE *=\).*|\1 -I\$(LIB_TOP)/hypre/include/|g" \
-    -e "s|\(INCQHULL *=\).*|\1 -I\$(LIB_TOP)/qhull/include/libqhull/|g" \
-    -e "s|\(INCSLUDIST *=\).*|\1 -I\$(TOOLCHAIN)/install/superlu_dist-${superluVER}/include/|g" \
-    -e "s|\(INCPEXSI *=\).*|\1 -I\$(TOOLCHAIN)/install/pexsi-${pexsiVER}/include/|g" \
-        ${omenDIR}/makefiles/${machine}.mk
-
-sed -i \
-    -e "s|\(LIBSSPARSE *=\).*|\1 -L\$(LIB_TOP)/SuiteSparse/static -lumfpack -lamd -lcholmod -lcolamd -lccolamd -lcamd -lsuitesparseconfig |g" \
-    -e "s|\(LIBMUMPS *=\).*|\1 -L\$(LIB_TOP)/MUMPS/lib -lzmumps -ldmumps -lmumps_common -lpord -lscalapack |g" \
-    -e "s|\(LIBHYPRE *=\).*|\1 -L\$(LIB_TOP)/hypre/lib -lHYPRE |g" \
-    -e "s|\(LIBQHULL *=\).*|\1 -L\$(LIB_TOP)/qhull/lib -lqhullstatic |g" \
-    -e "s|\(LIBPARMETIS *=\).*|\1 -L\$(TOOLCHAIN)/install/parmetis-${parmetisVER}/lib -lparmetis -lmetis |g" \
-    -e "s|\(LIBSLUDIST *=\).*|\1 -L\$(TOOLCHAIN)/install/superlu_dist-${superluVER}/lib -lsuperlu_dist |g" \
-    -e "s|\(LIBPEXSI *=\).*|\1 -L\$(TOOLCHAIN)/install/pexsi-${pexsiVER}/lib -lpexsi |g" \
-    -e "s|\(LIBCP2K *=\).*|\1 -L${cp2kDIR}/cp2k/lib/local/${cp2k_target} -lcp2k -lxsmmf -lxsmm -lderiv -lint -lxcf90 -lxc -lfftw3 |g" \
-        ${omenDIR}/makefiles/${machine}.mk
-
-if [ ! -z ${pardisoDIR} ]; then
-   pardiso_lib=${pardisoSOFILE/"lib"/ -l}
-   sed -i \
-       -e "s|\(LIBPARDISO *=\).*|\1 -L${pardisoDIR}/${pardiso_lib/".so"/ } |g" \
-           ${omenDIR}/makefiles/${machine}.mk
-fi
-
-if [ "${withCUDA}" = "yes" ] ; then
-   sed -i \
-       -e "s|\(NVCC *=\).*|\1 ${cudaDIR}/bin/nvcc|g" \
-       -e "s|\(NVCCFLAGS *=\).*|\1 -Xcompiler=--std=gnu++98 -D__GNUC__=4 -D__GNUC_MINOR__=9 -w |g" \
-       -e "s|\(INCCUDA *=\).*|\1 -I${cudaDIR}/include/ |g" \
-       -e "s|\(LIBCUDA *=\).*|\1 -L${cudaDIR}/lib64/ -lcudart -lcublas -lcusparse -lblas |g" \
-       -e "s|\(INCMAGMA *=\).*|\1 -I\$(LIB_TOP)/magma/include/|g" \
-       -e "s|\(LIBMAGMA *=\).*|\1 -L\$(LIB_TOP)/magma/lib -lmagma |g" \
-           ${omenDIR}/makefiles/${machine}.mk
-fi
 
 echo "Done! ====================================================="
 echo " "
