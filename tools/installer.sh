@@ -16,7 +16,7 @@
 # \author   Mohammad Hossein Bani-Hashemian 
 # =========================================================================
 
-# First, set the following variables:
+# * set the following paths *******
 TOPDIR=/scratch/seyedb
 cp2kDIR=${TOPDIR}/cp2k
 omenDIR=${TOPDIR}/omen
@@ -25,7 +25,13 @@ installDIR=${omenDIR}/install
 buildDIR=${installDIR}/build
 libsDIR=${installDIR}/libs
 
-# preparation for STEP 2: 
+# * preparation for STEP 1 ********
+# install either the current truck version of CP2K or a release version (>=4.1)
+cp2kTRUNK="yes"
+cp2kRELEASE="no"
+cp2kRELEASEVER="4_1"
+
+# * preparation for STEP 2 ********
 # with or without CUDA (needed for SplitSolve and MAGMA):
 # Note that MAGMA v >2.0 requires CUDA v >5.0
 withCUDA="no"
@@ -38,22 +44,24 @@ qhullVER="2015-src-7.2.0"
 mumpsVER="5.1.1"
 magmaVER="2.2.0"
 
-# If you have downloaded the shared library file of PARDISO, specify the 
-# name of the file and the path to it here, otherwise, leave the following 
-# two variables unset:
-
-#pardisoSOFILE="libpardiso500-MPI-GNU472-X86-64.so"
+# If you have downloaded the shared library file of PARDISO, specify the name 
+# of the file and the path to it here, otherwise, leave pardisoDIR unset:
+pardisoSOFILE="libpardiso500-MPI-GNU472-X86-64.so"
 #pardisoDIR=${libsDIR}/pardiso/lib
-pardisoSOFILE=
 pardisoDIR=
 
-# preparation for STEP 3:
+# * preparation for STEP 3 ********
 # specify the name of your machine:
 machine="mont-fort1"
 
-# preparation for STEP 4:
+# * preparation for STEP 4 ********
 # specify the cp2k VERSION for compilation:
 cp2k_target="popt"
+# set the OMEN's configure flags, i.e. solvers to be enabled:
+omenCONFIGURE_ARGS="--with-pexsi --with-mumps"
+
+# * you should not need to change anything below this line, unless you would like to 
+#   edit some steps or skip them by commenting them out.
 
 # STEP 1: ******************************************************************************************
 
@@ -64,9 +72,11 @@ cp2k_target="popt"
 echo "installing CP2K ==========================================="
 cd ${TOPDIR} 
 
-# install either the currnet trunk or the latest release  
-svn checkout http://svn.code.sf.net/p/cp2k/code/trunk cp2k
-#svn checkout http://svn.code.sf.net/p/cp2k/code/branches/cp2k-4_1-branch cp2k
+if [ "${cp2kTRUNK}" = "yes" ] ; then
+   svn checkout http://svn.code.sf.net/p/cp2k/code/trunk cp2k
+elif [ "${cp2kRELEASE}" = "yes" ] ; then 
+   svn checkout http://svn.code.sf.net/p/cp2k/code/branches/cp2k-${cp2kRELEASEVER}-branch cp2k
+fi
 
 cp2k_toolchainDIR=${cp2kDIR}/cp2k/tools/toolchain
 
@@ -296,17 +306,17 @@ echo " "
 # 
 # compile CP2K-OMEN:
 # -------------------------------------------------------------------------
-# example: compile CP2K popt
+# compile CP2K
 echo "compiling cp2k with target ${cp2k_target} libcp2k ========="
 cd ${cp2kDIR}/cp2k/src
 ln -sf ../makefiles/Makefile .
 make -j ARCH=local VERSION=${cp2k_target} 
 make -j ARCH=local VERSION=${cp2k_target} libcp2k
 
-# example: compile OMEN with PEXSI and MUMPS
+# compile OMEN
 echo "compiling OMEN ============================================"
 cd ${omenDIR}/src
-./configure --with-arch=${machine}.mk --with-pexsi --with-mumps
+./configure --with-arch=${machine}.mk ${omenCONFIGURE_ARGS}
 make -j 
 
 cd ${omenDIR}
