@@ -77,8 +77,7 @@ cp2k_target="popt"
 # Set the OMEN's configure flags, i.e. solvers to be enabled:
 omenCONFIGURE_ARGS="--with-pexsi --with-mumps"
 
-# * You should not need to change anything below this line, unless you would like to 
-#   edit some steps or skip them by commenting them out.
+# * You should not need to change anything below this line, unless you would like to modify the steps.
 
 # STEP 1: ******************************************************************************************
 
@@ -319,31 +318,31 @@ cd ${omenDIR}
 topdir=${installDIR}
 libtop="\$(TOP_DIR)/libs"
 
-sed -e "s|\(source \).*|\1 ${cp2k_toolchainDIR}/install/setup |g" \
-    -e "s|\(TOP_DIR *=\).*|\1 ${topdir} |g" \
-    -e "s|\(LIB_TOP *=\).*|\1 ${libtop} |g" \
-    -e "s|\(TOOLCHAIN *=\).*|\1 ${cp2k_toolchainDIR} |g" \
-    -e "s|\(INCSSPARSE *=\).*|\1 ${inc_ssparse} |g" \
-    -e "s|\(INCMUMPS *=\).*|\1 ${inc_mumps} |g" \
-    -e "s|\(INCHYPRE *=\).*|\1 ${inc_hypre} |g" \
-    -e "s|\(INCQHULL *=\).*|\1 ${inc_qhull} |g" \
-    -e "s|\(INCSLUDIST *=\).*|\1 ${inc_sludist} |g" \
-    -e "s|\(INCPEXSI *=\).*|\1 ${inc_pexsi} |g" \
-    -e "s|\(LIBSSPARSE *=\).*|\1 ${lib_ssparse} |g" \
-    -e "s|\(LIBMUMPS *=\).*|\1 ${lib_mumps} |g" \
-    -e "s|\(LIBHYPRE *=\).*|\1 ${lib_hypre} |g" \
-    -e "s|\(LIBQHULL *=\).*|\1 ${lib_qhull} |g" \
-    -e "s|\(LIBPARMETIS *=\).*|\1 ${lib_parmetis} |g" \
-    -e "s|\(LIBSLUDIST *=\).*|\1 ${lib_sludist} |g" \
-    -e "s|\(LIBPEXSI *=\).*|\1 ${lib_pexsi} |g" \
-    -e "s|\(LIBCP2K *=\).*|\1 ${lib_cp2k} |g" \
-    -e "s|\(LIBPARDISO *=\).*|\1 ${lib_pardiso} |g" \
-    -e "s|\(NVCC *=\).*|\1 ${nvcc_path} |g" \
-    -e "s|\(NVCCFLAGS *=\).*|\1 ${nvcc_flags} |g" \
-    -e "s|\(INCCUDA *=\).*|\1 ${inc_cuda} |g" \
-    -e "s|\(LIBCUDA *=\).*|\1 ${lib_cuda} |g" \
-    -e "s|\(INCMAGMA *=\).*|\1 ${inc_magma} |g" \
-    -e "s|\(LIBMAGMA *=\).*|\1 ${lib_magma} |g" \
+sed -e "s|\(source \).*|\1 ${cp2k_toolchainDIR}/install/setup|g" \
+    -e "s|\(TOP_DIR *=\).*|\1 ${topdir}|g" \
+    -e "s|\(LIB_TOP *=\).*|\1 ${libtop}|g" \
+    -e "s|\(TOOLCHAIN *=\).*|\1 ${cp2k_toolchainDIR}|g" \
+    -e "s|\(INCSSPARSE *=\).*|\1 ${inc_ssparse}|g" \
+    -e "s|\(INCMUMPS *=\).*|\1 ${inc_mumps}|g" \
+    -e "s|\(INCHYPRE *=\).*|\1 ${inc_hypre}|g" \
+    -e "s|\(INCQHULL *=\).*|\1 ${inc_qhull}|g" \
+    -e "s|\(INCSLUDIST *=\).*|\1 ${inc_sludist}|g" \
+    -e "s|\(INCPEXSI *=\).*|\1 ${inc_pexsi}|g" \
+    -e "s|\(LIBSSPARSE *=\).*|\1 ${lib_ssparse}|g" \
+    -e "s|\(LIBMUMPS *=\).*|\1 ${lib_mumps}|g" \
+    -e "s|\(LIBHYPRE *=\).*|\1 ${lib_hypre}|g" \
+    -e "s|\(LIBQHULL *=\).*|\1 ${lib_qhull}|g" \
+    -e "s|\(LIBPARMETIS *=\).*|\1 ${lib_parmetis}|g" \
+    -e "s|\(LIBSLUDIST *=\).*|\1 ${lib_sludist}|g" \
+    -e "s|\(LIBPEXSI *=\).*|\1 ${lib_pexsi}|g" \
+    -e "s|\(LIBCP2K *=\).*|\1 ${lib_cp2k}|g" \
+    -e "s|\(LIBPARDISO *=\).*|\1 ${lib_pardiso}|g" \
+    -e "s|\(NVCC *=\).*|\1 ${nvcc_path}|g" \
+    -e "s|\(NVCCFLAGS *=\).*|\1 ${nvcc_flags}|g" \
+    -e "s|\(INCCUDA *=\).*|\1 ${inc_cuda}|g" \
+    -e "s|\(LIBCUDA *=\).*|\1 ${lib_cuda}|g" \
+    -e "s|\(INCMAGMA *=\).*|\1 ${inc_magma}|g" \
+    -e "s|\(LIBMAGMA *=\).*|\1 ${lib_magma}|g" \
         ${omenDIR}/makefiles/arch.tmpl > ${omenDIR}/makefiles/${machine}.mk
 
 echo "Done! ====================================================="
