@@ -93,7 +93,7 @@ echo "installing CP2K ==========================================="
 cd ${TOPDIR} 
 
 if [ "${cp2kTRUNK}" = "yes" ] ; then
-
+   svn checkout http://svn.code.sf.net/p/cp2k/code/trunk cp2k
 elif [ "${cp2kRELEASE}" = "yes" ] ; then 
    svn checkout http://svn.code.sf.net/p/cp2k/code/branches/cp2k-${cp2kRELEASEVER}-branch cp2k
 fi
