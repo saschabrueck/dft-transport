@@ -1,4 +1,4 @@
-# source  /home/seyedb/cp2k-omen/cp2k/cp2k/tools/toolchain/install/setup
+# source  /home/seyedb/cp2k-omen/cp2k/cp2k/tools/toolchain/install/setup ; source /home/seyedb/cp2k-omen/omen/cp2komen_envsetup 
 #
 LEX      = flex
 YACC     = bison

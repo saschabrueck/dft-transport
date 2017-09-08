@@ -62,10 +62,12 @@ cudaDIR="/usr/local/cuda-7.5"
 magmaVER="2.2.0"
 
 # If you have downloaded the shared library file of PARDISO, specify the name 
-# of the file and the path to it here, otherwise, leave pardisoDIR unset:
+# of the file and the path to it here, otherwise, leave pardisoLIBDIR unset:
 pardisoSOFILE="libpardiso500-MPI-GNU472-X86-64.so"
-#pardisoDIR=${libsDIR}/pardiso/lib
-pardisoDIR=
+#pardisoLIBDIR=${libsDIR}/pardiso/lib
+#pardisoLICPATH=${libsDIR}/pardiso/lib
+pardisoLIBDIR=
+pardisoLICPATH=
 
 # * Preparation for STEP 3 ********
 # This step is optional
@@ -134,6 +136,12 @@ openblasVER=${openblas_ver}
 mkdir -p ${installDIR}
 mkdir -p ${libsDIR}
 mkdir -p ${buildDIR}
+
+# script for setting environment variables
+cp2komenENVSETUP="${installDIR}/cp2komen_envsetup"
+cat <<EOF > ${cp2komenENVSETUP}
+#!/bin/bash
+EOF
 
 echo "installing OMEN solvers ==================================="
 echo " "
@@ -296,6 +304,17 @@ if [ ! -z ${magmaVER} ]; then
    lib_cuda="-L${cudaDIR}/lib64/ -lcudart -lcublas -lcusparse -lblas"
    inc_magma="-I\$(LIB_TOP)/magma/include/"
    lib_magma="-L\$(LIB_TOP)/magma/lib -lmagma"
+
+# set CUDA related environment variables 
+cat <<EOF >> ${cp2komenENVSETUP}
+LD_LIBRARY_PATH=${cudaDIR}/lib64:\$LD_LIBRARY_PATH
+PATH=${cudaDIR}/bin:\$PATH
+EOF
+
+# add path to the MAGMA shared library files to LD_LIBRARY_PATH
+cat <<EOF >> ${cp2komenENVSETUP}
+LD_LIBRARY_PATH=${libsDIR}/magma/lib:\$LD_LIBRARY_PATH
+EOF
 fi
 
 # PARDISO -----------------------------------------------------------------
@@ -303,9 +322,16 @@ fi
 # script does not automatically install PARDISO.  
 
 # define include and lib paths for .mk file (STEP 3)
-if [ ! -z ${pardisoDIR} ]; then
+if [ ! -z ${pardisoLIBDIR} ]; then
    pardiso_file=${pardisoSOFILE/"lib"/ -l}
-   lib_pardiso="-L${pardisoDIR}/${pardiso_file/".so"/}"
+   lib_pardiso="-L${pardisoLIBDIR}/${pardiso_file/".so"/}"
+
+# add path to the PARDISO shared library file to LD_LIBRARY_PATH
+# add path to pardiso.lic to PATH
+cat <<EOF >> ${cp2komenENVSETUP}
+LD_LIBRARY_PATH=${pardisoLIBDIR}:\$LD_LIBRARY_PATH
+PARDISO_LIC_PATH=${pardisoLICPATH}
+EOF
 fi
 
 echo "Done! ====================================================="
@@ -322,7 +348,7 @@ if [ "${generate_makefile}" = "yes" ] ; then
    topdir=${installDIR}
    libtop="\$(TOP_DIR)/libs"
    
-   sed -e "s|\(source \).*|\1 ${cp2k_toolchainDIR}/install/setup|g" \
+   sed -e "s|\(source \).*|\1 ${cp2k_toolchainDIR}/install/setup ; source ${cp2komenENVSETUP}|g" \
        -e "s|\(TOP_DIR *=\).*|\1 ${topdir}|g" \
        -e "s|\(LIB_TOP *=\).*|\1 ${libtop}|g" \
        -e "s|\(TOOLCHAIN *=\).*|\1 ${cp2k_toolchainDIR}|g" \
@@ -358,6 +384,8 @@ fi
 # compile CP2K-OMEN:
 # -------------------------------------------------------------------------
 if [ "${compile_cp2komen}" = "yes" ] ; then
+
+   source ${cp2k_toolchainDIR}/install/setup
    # compile CP2K
    echo "compiling cp2k with target ${cp2k_target} libcp2k ========="
    cd ${cp2kDIR}/cp2k/src
@@ -365,6 +393,7 @@ if [ "${compile_cp2komen}" = "yes" ] ; then
    make -j ARCH=local VERSION=${cp2k_target} 
    make -j ARCH=local VERSION=${cp2k_target} libcp2k
    
+   source ${cp2komenENVSETUP}
    # compile OMEN
    echo "compiling OMEN ============================================"
    cd ${omenDIR}/src
