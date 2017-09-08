@@ -68,10 +68,14 @@ pardisoSOFILE="libpardiso500-MPI-GNU472-X86-64.so"
 pardisoDIR=
 
 # * Preparation for STEP 3 ********
+# This step is optional
+generate_makefile="yes"
 # Specify the name of your machine:
 machine="mont-fort1"
 
 # * Preparation for STEP 4 ********
+# This step is optional
+compile_cp2komen="yes"
 # Specify the cp2k VERSION for compilation:
 cp2k_target="popt"
 # Set the OMEN's configure flags, i.e. solvers to be enabled:
@@ -89,7 +93,7 @@ echo "installing CP2K ==========================================="
 cd ${TOPDIR} 
 
 if [ "${cp2kTRUNK}" = "yes" ] ; then
-   svn checkout http://svn.code.sf.net/p/cp2k/code/trunk cp2k
+
 elif [ "${cp2kRELEASE}" = "yes" ] ; then 
    svn checkout http://svn.code.sf.net/p/cp2k/code/branches/cp2k-${cp2kRELEASEVER}-branch cp2k
 fi
@@ -111,7 +115,6 @@ source ${cp2k_toolchainDIR}/install/setup
 
 # get versions of libraries that have been just installed by CP2K toolchain
 source ${cp2k_toolchainDIR}/scripts/package_versions.sh
-source ${cp2k_toolchainDIR}/scripts/common_vars.sh
 
 # define lib path for .mk file (STEP 3)
 lib_cp2k="-L${cp2kDIR}/cp2k/lib/local/${cp2k_target} -lcp2k -lxsmmf -lxsmm -lderiv -lint -lxcf90 -lxc -lfftw3"
@@ -312,59 +315,62 @@ echo " "
 
 # generate a .mk file:
 # -------------------------------------------------------------------------
-echo "generate a .mk file ======================================="
-cd ${omenDIR}
-
-topdir=${installDIR}
-libtop="\$(TOP_DIR)/libs"
-
-sed -e "s|\(source \).*|\1 ${cp2k_toolchainDIR}/install/setup|g" \
-    -e "s|\(TOP_DIR *=\).*|\1 ${topdir}|g" \
-    -e "s|\(LIB_TOP *=\).*|\1 ${libtop}|g" \
-    -e "s|\(TOOLCHAIN *=\).*|\1 ${cp2k_toolchainDIR}|g" \
-    -e "s|\(INCSSPARSE *=\).*|\1 ${inc_ssparse}|g" \
-    -e "s|\(INCMUMPS *=\).*|\1 ${inc_mumps}|g" \
-    -e "s|\(INCHYPRE *=\).*|\1 ${inc_hypre}|g" \
-    -e "s|\(INCQHULL *=\).*|\1 ${inc_qhull}|g" \
-    -e "s|\(INCSLUDIST *=\).*|\1 ${inc_sludist}|g" \
-    -e "s|\(INCPEXSI *=\).*|\1 ${inc_pexsi}|g" \
-    -e "s|\(LIBSSPARSE *=\).*|\1 ${lib_ssparse}|g" \
-    -e "s|\(LIBMUMPS *=\).*|\1 ${lib_mumps}|g" \
-    -e "s|\(LIBHYPRE *=\).*|\1 ${lib_hypre}|g" \
-    -e "s|\(LIBQHULL *=\).*|\1 ${lib_qhull}|g" \
-    -e "s|\(LIBPARMETIS *=\).*|\1 ${lib_parmetis}|g" \
-    -e "s|\(LIBSLUDIST *=\).*|\1 ${lib_sludist}|g" \
-    -e "s|\(LIBPEXSI *=\).*|\1 ${lib_pexsi}|g" \
-    -e "s|\(LIBCP2K *=\).*|\1 ${lib_cp2k}|g" \
-    -e "s|\(LIBPARDISO *=\).*|\1 ${lib_pardiso}|g" \
-    -e "s|\(NVCC *=\).*|\1 ${nvcc_path}|g" \
-    -e "s|\(NVCCFLAGS *=\).*|\1 ${nvcc_flags}|g" \
-    -e "s|\(INCCUDA *=\).*|\1 ${inc_cuda}|g" \
-    -e "s|\(LIBCUDA *=\).*|\1 ${lib_cuda}|g" \
-    -e "s|\(INCMAGMA *=\).*|\1 ${inc_magma}|g" \
-    -e "s|\(LIBMAGMA *=\).*|\1 ${lib_magma}|g" \
-        ${omenDIR}/makefiles/arch.tmpl > ${omenDIR}/makefiles/${machine}.mk
-
-echo "Done! ====================================================="
-echo " "
+if [ "${generate_makefile}" = "yes" ] ; then
+   echo "generate a .mk file ======================================="
+   cd ${omenDIR}
+   
+   topdir=${installDIR}
+   libtop="\$(TOP_DIR)/libs"
+   
+   sed -e "s|\(source \).*|\1 ${cp2k_toolchainDIR}/install/setup|g" \
+       -e "s|\(TOP_DIR *=\).*|\1 ${topdir}|g" \
+       -e "s|\(LIB_TOP *=\).*|\1 ${libtop}|g" \
+       -e "s|\(TOOLCHAIN *=\).*|\1 ${cp2k_toolchainDIR}|g" \
+       -e "s|\(INCSSPARSE *=\).*|\1 ${inc_ssparse}|g" \
+       -e "s|\(INCMUMPS *=\).*|\1 ${inc_mumps}|g" \
+       -e "s|\(INCHYPRE *=\).*|\1 ${inc_hypre}|g" \
+       -e "s|\(INCQHULL *=\).*|\1 ${inc_qhull}|g" \
+       -e "s|\(INCSLUDIST *=\).*|\1 ${inc_sludist}|g" \
+       -e "s|\(INCPEXSI *=\).*|\1 ${inc_pexsi}|g" \
+       -e "s|\(LIBSSPARSE *=\).*|\1 ${lib_ssparse}|g" \
+       -e "s|\(LIBMUMPS *=\).*|\1 ${lib_mumps}|g" \
+       -e "s|\(LIBHYPRE *=\).*|\1 ${lib_hypre}|g" \
+       -e "s|\(LIBQHULL *=\).*|\1 ${lib_qhull}|g" \
+       -e "s|\(LIBPARMETIS *=\).*|\1 ${lib_parmetis}|g" \
+       -e "s|\(LIBSLUDIST *=\).*|\1 ${lib_sludist}|g" \
+       -e "s|\(LIBPEXSI *=\).*|\1 ${lib_pexsi}|g" \
+       -e "s|\(LIBCP2K *=\).*|\1 ${lib_cp2k}|g" \
+       -e "s|\(LIBPARDISO *=\).*|\1 ${lib_pardiso}|g" \
+       -e "s|\(NVCC *=\).*|\1 ${nvcc_path}|g" \
+       -e "s|\(NVCCFLAGS *=\).*|\1 ${nvcc_flags}|g" \
+       -e "s|\(INCCUDA *=\).*|\1 ${inc_cuda}|g" \
+       -e "s|\(LIBCUDA *=\).*|\1 ${lib_cuda}|g" \
+       -e "s|\(INCMAGMA *=\).*|\1 ${inc_magma}|g" \
+       -e "s|\(LIBMAGMA *=\).*|\1 ${lib_magma}|g" \
+           ${omenDIR}/makefiles/arch.tmpl > ${omenDIR}/makefiles/${machine}.mk
+   
+   echo "Done! ====================================================="
+   echo " "
+fi
 
 # STEP 4: ******************************************************************************************
-# Feel free to comment out the following lines and do this step manually.
-# 
+
 # compile CP2K-OMEN:
 # -------------------------------------------------------------------------
-# compile CP2K
-echo "compiling cp2k with target ${cp2k_target} libcp2k ========="
-cd ${cp2kDIR}/cp2k/src
-ln -sf ../makefiles/Makefile .
-make -j ARCH=local VERSION=${cp2k_target} 
-make -j ARCH=local VERSION=${cp2k_target} libcp2k
-
-# compile OMEN
-echo "compiling OMEN ============================================"
-cd ${omenDIR}/src
-./configure --with-arch=${machine}.mk ${omenCONFIGURE_ARGS}
-make -j 
+if [ "${compile_cp2komen}" = "yes" ] ; then
+   # compile CP2K
+   echo "compiling cp2k with target ${cp2k_target} libcp2k ========="
+   cd ${cp2kDIR}/cp2k/src
+   ln -sf ../makefiles/Makefile .
+   make -j ARCH=local VERSION=${cp2k_target} 
+   make -j ARCH=local VERSION=${cp2k_target} libcp2k
+   
+   # compile OMEN
+   echo "compiling OMEN ============================================"
+   cd ${omenDIR}/src
+   ./configure --with-arch=${machine}.mk ${omenCONFIGURE_ARGS}
+   make -j 
+fi
 
 cd ${omenDIR}
 
