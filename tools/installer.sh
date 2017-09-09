@@ -62,10 +62,13 @@ cudaDIR="/usr/local/cuda-7.5"
 magmaVER="2.2.0"
 
 # If you have downloaded the shared library file of PARDISO, specify the name 
-# of the file and the path to it here, otherwise, leave pardisoLIBDIR unset:
-pardisoSOFILE="libpardiso500-MPI-GNU472-X86-64.so"
+# of the file (pardisoSOFILE), the path to the .so file (pardisoLIBDIR), and
+# the path to the license file (pardisoLICPATH). 
+# If you do not wish to use PARDISO, leave pardisoLIBDIR unset. 
+#pardisoSOFILE="libpardiso500-MPI-GNU472-X86-64.so"
 #pardisoLIBDIR=${libsDIR}/pardiso/lib
 #pardisoLICPATH=${libsDIR}/pardiso/lib
+pardisoSOFILE=
 pardisoLIBDIR=
 pardisoLICPATH=
 
