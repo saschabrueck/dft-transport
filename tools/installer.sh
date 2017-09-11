@@ -43,9 +43,8 @@ buildDIR=${installDIR}/build
 libsDIR=${installDIR}/libs
 
 # * Preparation for STEP 1 ********
-# Install either the current truck version of CP2K or a release version (>=4.1)
-cp2kTRUNK="yes"
-cp2kRELEASE="no"
+# Install either the current truck version (trunk) of CP2K or a release version (release) (>=4.1)
+cp2kTRUNKorRELEASE="trunk"
 cp2kRELEASEVER="4_1"
 
 # * Preparation for STEP 2 ********
@@ -99,9 +98,13 @@ omenCONFIGURE_ARGS="--with-pexsi --with-mumps"
 echo "installing CP2K ==========================================="
 cd ${TOPDIR} 
 
-if [ "${cp2kTRUNK}" = "yes" ] ; then
+if [ "${cp2kTRUNKorRELEASE}" = "trunk" ] ; then
    svn checkout http://svn.code.sf.net/p/cp2k/code/trunk cp2k
-elif [ "${cp2kRELEASE}" = "yes" ] ; then 
+elif [ "${cp2kTRUNKorRELEASE}" = "release" ] ; then 
+   if [ -z ${cp2kRELEASEVER} ]; then
+      echo "CP2K release version (cp2kRELEASEVER) needs to be set."
+      exit 1
+   fi
    svn checkout http://svn.code.sf.net/p/cp2k/code/branches/cp2k-${cp2kRELEASEVER}-branch cp2k
 fi
 
@@ -171,18 +174,18 @@ if [ ! -z ${hypreVER} ]; then
    mkdir -p ${libsDIR}/hypre/lib
    mkdir -p ${libsDIR}/hypre/include
    cd ${buildDIR}
-   
+
    wget https://computation.llnl.gov/projects/hypre-scalable-linear-solvers-multigrid-methods/download/hypre-${hypreVER}.tar.gz
    tar -xf hypre-"${hypreVER}".tar.gz
-   
+
    cd ${buildDIR}/hypre-${hypreVER}/src
-   
+
    ./configure -q --bindir=${libsDIR}/hypre/bin \
                   --libexecdir=${libsDIR}/hypre/libexec \
                   --libdir=${libsDIR}/hypre/lib \
                   --includedir=${libsDIR}/hypre/include \
                   --without-superlu
-   
+
    make install > install.log
 
    # define include and lib paths for .mk file (STEP 3)
@@ -196,12 +199,12 @@ if [ ! -z ${SuiteSparseVER} ]; then
    mkdir -p ${libsDIR}/SuiteSparse
    mkdir -p ${libsDIR}/SuiteSparse/static
    cd ${buildDIR}
-   
+
    wget http://faculty.cse.tamu.edu/davis/SuiteSparse/SuiteSparse-${SuiteSparseVER}.tar.gz
    tar -xf SuiteSparse-${SuiteSparseVER}.tar.gz
-   
+
    cd ${buildDIR}/SuiteSparse
-   
+
    make install INSTALL_LIB=${libsDIR}/SuiteSparse/lib \
                 INSTALL_INCLUDE=${libsDIR}/SuiteSparse/include \
                 AUTOCC=no \
@@ -209,7 +212,7 @@ if [ ! -z ${SuiteSparseVER} ]; then
                 MY_METIS_LIB=${cp2k_toolchainDIR}/install/parmetis-${parmetisVER}/lib/libmetis.a \
                 MY_METIS_INC=${cp2k_toolchainDIR}/install/parmetis-${parmetisVER}/include \
                 > install.log
-   
+
    find . -name "*.a" -type f -exec cp {} ${libsDIR}/SuiteSparse/static \;
 
    # define include and lib paths for .mk file (STEP 3)
@@ -222,13 +225,13 @@ if [ ! -z ${qhullVER} ]; then
    echo "installing qhull =========================================="
    mkdir -p ${libsDIR}/qhull
    cd ${buildDIR}
-   
+
    wget http://www.qhull.org/download/qhull-${qhullVER}.tgz
    mkdir -p ${buildDIR}/qhull
    tar -xf qhull-${qhullVER}.tgz -C qhull/ --strip-components 1
-   
+
    cd ${buildDIR}/qhull
-   
+
    mv ${buildDIR}/qhull/Makefile ${buildDIR}/qhull/Makefile.orig
    sed -e "s|\(DESTDIR *=\).*|\1 ${libsDIR}/qhull|g" \
        -e "s|\(CC *=\).*|\1 gcc -w|g" ${buildDIR}/qhull/Makefile.orig > ${buildDIR}/qhull/Makefile
@@ -245,13 +248,13 @@ if [ ! -z ${mumpsVER} ]; then
    echo "installing MUMPS =========================================="
    mkdir -p ${libsDIR}/MUMPS
    cd ${buildDIR}
-   
+
    wget http://mumps.enseeiht.fr/MUMPS_${mumpsVER}.tar.gz
    mkdir -p ${buildDIR}/MUMPS
    tar -xf MUMPS_${mumpsVER}.tar.gz -C MUMPS/ --strip-components 1
-   
+
    cd ${buildDIR}/MUMPS
-   
+
    sed -e "/^#.*LMETISDIR *=/s/^#//" \
        -e "/^#.*IMETIS *=/s/^#//" \
        -e "s|\(LMETISDIR *=\).*|\1 ${cp2k_toolchainDIR}/install/parmetis-${parmetisVER}/lib|g" \
@@ -268,7 +271,7 @@ if [ ! -z ${mumpsVER} ]; then
        -e "s|\(OPTF *=\).*|\1 -O -w|g" \
        -e "s|\(OPTC *=\).*|\1 -O3 -w|g" \
           Make.inc/Makefile.inc.generic > Makefile.inc
-   
+
    make alllib > install.log
    cp -r ${buildDIR}/MUMPS/lib/ ${buildDIR}/MUMPS/include/ ${libsDIR}/MUMPS
 
@@ -282,15 +285,20 @@ if [ ! -z ${magmaVER} ]; then
    echo "installing MAGMA =========================================="
    mkdir -p ${libsDIR}/magma
    cd ${buildDIR}
-   
+
    wget http://icl.cs.utk.edu/projectsfiles/magma/downloads/magma-${magmaVER}.tar.gz
    mkdir -p ${buildDIR}/magma
    tar -xf magma-${magmaVER}.tar.gz -C magma/ --strip-components 1
-   
+
    cd ${buildDIR}/magma
-   
+
    cp ${buildDIR}/magma/make.inc-examples/make.inc.openblas ${buildDIR}/magma/
-   
+
+   if [ -z ${cudaDIR} ]; then
+      echo "Path to the CUDA Toolkit (cudaDIR) needs to be set."
+      exit 1
+   fi
+
    sed -e "/^#.*OPENBLASDIR *?=/s/^#//" \
        -e "/^#.*CUDADIR *?=/s/^#//" \
        -e "s|\(OPENBLASDIR *?=\).*|\1 ${cp2k_toolchainDIR}/install/openblas-${openblasVER}|g" \
@@ -299,7 +307,7 @@ if [ ! -z ${magmaVER} ]; then
        -e "/^NVCCFLAGS/ s/$/ -w/" \
        -e "/^-.*include/s/^-/#-/" \
           make.inc.openblas > make.inc
-   
+
    make install prefix=${libsDIR}/magma > install.log
 
    # define include and lib paths for .mk file (STEP 3)
@@ -349,10 +357,10 @@ echo " "
 if [ "${generate_makefile}" = "yes" ] ; then
    echo "generate a .mk file ======================================="
    cd ${omenDIR}
-   
+
    topdir=${installDIR}
    libtop="\$(TOP_DIR)/libs"
-   
+
    sed -e "s|\(source \).*|\1 ${cp2k_toolchainDIR}/install/setup ; source ${cp2komenENVSETUP}|g" \
        -e "s|\(TOP_DIR *=\).*|\1 ${topdir}|g" \
        -e "s|\(LIB_TOP *=\).*|\1 ${libtop}|g" \
@@ -379,7 +387,7 @@ if [ "${generate_makefile}" = "yes" ] ; then
        -e "s|\(INCMAGMA *=\).*|\1 ${inc_magma}|g" \
        -e "s|\(LIBMAGMA *=\).*|\1 ${lib_magma}|g" \
            ${omenDIR}/makefiles/arch.tmpl > ${omenDIR}/makefiles/${machine}.mk
-   
+
    echo "Done! ====================================================="
    echo " "
 fi
@@ -389,7 +397,6 @@ fi
 # compile CP2K-OMEN:
 # -------------------------------------------------------------------------
 if [ "${compile_cp2komen}" = "yes" ] ; then
-
    source ${cp2k_toolchainDIR}/install/setup
    # compile CP2K
    echo "compiling cp2k with target ${cp2k_target} libcp2k ========="
@@ -397,7 +404,7 @@ if [ "${compile_cp2komen}" = "yes" ] ; then
    ln -sf ../makefiles/Makefile .
 #   make -j ${Nproc} ARCH=local VERSION=${cp2k_target} 
    make -j ${Nproc} ARCH=local VERSION=${cp2k_target} libcp2k
-   
+
    source ${cp2komenENVSETUP}
    # compile OMEN
    echo "compiling OMEN ============================================"
