@@ -81,6 +81,8 @@ machine="mont-fort1"
 # * Preparation for STEP 4 ********
 # This step is optional
 compile_cp2komen="yes"
+# Specify the number of processes for compilation:
+Nproc=
 # Specify the cp2k VERSION for compilation:
 cp2k_target="popt"
 # Set the OMEN's configure flags, i.e. solvers to be enabled:
@@ -393,15 +395,15 @@ if [ "${compile_cp2komen}" = "yes" ] ; then
    echo "compiling cp2k with target ${cp2k_target} libcp2k ========="
    cd ${cp2kDIR}/cp2k/src
    ln -sf ../makefiles/Makefile .
-   make -j ARCH=local VERSION=${cp2k_target} 
-   make -j ARCH=local VERSION=${cp2k_target} libcp2k
+#   make -j ${Nproc} ARCH=local VERSION=${cp2k_target} 
+   make -j ${Nproc} ARCH=local VERSION=${cp2k_target} libcp2k
    
    source ${cp2komenENVSETUP}
    # compile OMEN
    echo "compiling OMEN ============================================"
    cd ${omenDIR}/src
    ./configure --with-arch=${machine}.mk ${omenCONFIGURE_ARGS}
-   make -j 
+   make -j ${Nproc} 
 fi
 
 cd ${omenDIR}
