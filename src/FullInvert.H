@@ -14,6 +14,11 @@ THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLI
 
 #include "CSR.H"
 
+/*! \class Full
+ *  
+ *  \brief Interface for dense matrix inversion
+ *  
+ */
 class FullInvert{
 	
 public:

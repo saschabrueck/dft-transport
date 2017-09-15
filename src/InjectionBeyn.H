@@ -33,6 +33,8 @@ THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLI
 #endif
 #include "Injection.H"
 
+/*!  \brief Computes the eigenvalues between two circles around 0 and the corresponding eigenvectors of a polynomial eigenvalue problem
+ */
 template<class T>
 class InjectionBeyn : public Injection<T>{
 public:
@@ -110,6 +112,37 @@ InjectionBeyn<T>::InjectionBeyn(int pslab_per_bc,double pcontour_radius)
 
 /************************************************************************************************/
 
+/*! \brief Constructor
+ *
+ *
+ * \param[in]           pslab_per_bc
+ *                      Interaction range,
+ *                      the degree of the polynomial eigenvalue problem is two times this value
+ *
+ * \param[in]           pcontour_radius
+ *                      Radius of the circle around 0
+ *
+ * \param[in]           psv
+ *                      Relative factor to distinguish zero and nonzero singular values,
+ *
+ * \param[in]           pNQ
+ *                      Number of quadrature points per circle
+ *
+ * \param[in]           pNC
+ *                      Number of circles where the LU decomposition is performed.
+ *                      If equal to two, the inner/outer circle is close to 1 and the outer/inner
+ *                      circle is the specified radius/the inverse of the specified radius
+ *                      depending on the sign of injection_sign specified in execute().
+ *                      If equal to one, only the outer circle with specified radius is computed.
+ *                      The value at the inner circle with the inverse of the specified radius
+ *                      is not needed because of symmetry reasons. However, the number of singualar
+ *                      values and eigenvalues is twice as high, degrading performance.
+ *  \param[in]          pslc
+ *                      The number of processors per quadrature point that solve one linear system
+ *                      The default value of 0 sets this number as small as possible, solving many
+ *                      different systems in parallel. A higher number may be required if memory
+ *                      is not sufficient. This might degrade performance.
+ */
 template<class T>
 InjectionBeyn<T>::InjectionBeyn(int pslab_per_bc,double pcontour_radius,double psv,int pNQ,int pNC,int pslc)
 {
@@ -298,6 +331,32 @@ void InjectionBeyn<T>::calc_kphase(TCSR<T> *D,TCSR<T> *P,TCSR<CPX> *T01,int ND,i
 
 /************************************************************************************************/
 
+/*! \brief Main routine of Beyn solver
+ *
+ *
+ * \param[in]           **A
+ *                      Pointer to 2*slab_per_bc+1 sparse matrices holding the coefficient
+ *                      matrices of the polynomial eigenvalue problem
+ *
+ * \param[in]           NR
+ *                      Size of the matrices
+ *
+ * \param[in]           NM
+ *                      Number of test vectors, an estimate for the number of eigenvalues
+ *                      inside the contour
+ *
+ * \param[out]          *lambdaR
+ *                      Pointer to the eigenvalues, must be size NM
+ *                   
+ * \param[out]          *YF
+ *                      Pointer to the eigenvectors, must be size NR*NM
+ *
+ * \param[in]           sign
+ *                      Injection sign, determines if modes decaying to left or right are wanted
+ *
+ * \param[in]           comm
+ *                      MPI Communicator
+ */
 template <class T>
 int InjectionBeyn<T>::execute(TCSR<CPX> **A,int NR,int NM,CPX *lambdaR,CPX *YF, \
                                int sign,MPI_Comm comm)

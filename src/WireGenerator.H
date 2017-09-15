@@ -22,7 +22,7 @@ THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLI
 #include <string.h>
 
 #include "Utilities.H"
-#include "Material.H"
+//#include "Material.H"
 #include "Blas.H"
 //#include "AtomStrain.H"
 
@@ -34,7 +34,7 @@ public:
     ~WireGenerator();
     
     void execute_simple(WireStructure*,MPI_Comm comm);
-    void execute_task(WireStructure*,Material*,int,MPI_Comm comm);
+//    void execute_task(WireStructure*,Material*,int,MPI_Comm comm);
     void write_LM(const char*);
     void write_TLM(const char*);
     void write_AM(const char*);
@@ -92,9 +92,9 @@ protected:
 			   double*,StrainDomain*);
     void make_wire(WireStructure*);
     void make_bulk_layer_matrix(WireStructure*,int*);    
-    void update_atom_pos(WireStructure*,Material*);
+//    void update_atom_pos(WireStructure*,Material*);
     void get_orbital_per_atom(int*);
-    void get_mid_gap_energy(Material*);
+//    void get_mid_gap_energy(Material*);
     void get_bulk_orbital_per_atom(int*);
     void generate_roughness(WireStructure*,int);
     void generate_alloy_disorder(WireStructure*);
@@ -138,7 +138,7 @@ protected:
     void check_periodicity(WireStructure*);
     void update_periodicity(WireStructure*);
     void hydrogen_passivation(WireStructure*);
-    void adapt_parameters(Material*);
+//    void adapt_parameters(Material*);
     void get_d_matrix(double*,double,double,double);
 
     int tb,N3D,N2D,N1D,no_element,NA_per_slice;
