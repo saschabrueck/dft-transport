@@ -245,6 +245,7 @@ void c_scf_method(cp2k_transport_parameters cp2k_transport_params, cp2k_csr_inte
     int cndof_mid=0;
     int cbw_pbc=0;
     int cbw_mid=0;
+    int cstart_mid=0;
     for (int system=0;system<=int(static_cast<cp2k_methods::cp2k_method_type>(cp2k_transport_params.method)==cp2k_methods::TRANSPORT);system++) {
         transport_parameters transport_params;
         transport_params.cp2k_scf_iter               = (1-2*system)*cp2k_transport_params.iscf;
@@ -313,8 +314,13 @@ void c_scf_method(cp2k_transport_parameters cp2k_transport_params, cp2k_csr_inte
         cutout[1]=cp2k_transport_params.cutout[1];
         if (transport_params.cp2k_method==cp2k_methods::TRANSPORT) {
             transport_params.extra_scf = false;
-            cutout[system]=0;
-            cutout[1-system]=cp2k_transport_params.n_atoms/2;
+            if (cutout[0]==0 && cutout[1]==0) {
+                cutout[system]=0;
+                cutout[1-system]=cp2k_transport_params.n_atoms/2;
+            } else { // input parameters cutout 0 and 1 specify the size of the first or second system
+                cutout[1-system]=cp2k_transport_params.n_atoms-cutout[system];
+                cutout[system]=0;
+            }
         }
         transport_params.obc                         = cp2k_transport_params.obc_equilibrium || cutout[0] || cutout[1];
 
@@ -568,6 +574,7 @@ void c_scf_method(cp2k_transport_parameters cp2k_transport_params, cp2k_csr_inte
         if (system) {
             cndof_mid=contactvec[0].ndof;
             cbw_mid=contactvec[0].bandwidth;
+            cstart_mid=transport_params.cutl;
         }
 
         std::vector<int> orb_per_atom(1,0);
@@ -600,9 +607,9 @@ void c_scf_method(cp2k_transport_parameters cp2k_transport_params, cp2k_csr_inte
 
     int overwrite_first_last_diag_block=0;
     if (cndof_pbc) {
+        int cndof=cndof_pbc;
         int size_tot=S.nrows_total;
         int offset=0;
-        int cndof=cndof_pbc;
         for (int i=0;i<cbw_pbc;i++) {
             for (int ii=0;ii<=i;ii++) {
                 add_from_to_scaled_cp2k_csr(*P,0.5,0.0,\
@@ -646,10 +653,11 @@ void c_scf_method(cp2k_transport_parameters cp2k_transport_params, cp2k_csr_inte
                     cndof,cndof,MPI_COMM_WORLD);
         }
     }
-    if (cndof_mid) {
-        int size_tot=S.nrows_total;
-        int mid=size_tot/2;
+    int default_cutout=cp2k_transport_params.cutout[0]==0 && cp2k_transport_params.cutout[1]==0;
+    int no_overlapping_systems=cp2k_transport_params.cutout[0]+cp2k_transport_params.cutout[1]==cp2k_transport_params.n_atoms;
+    if (cndof_mid && (default_cutout || no_overlapping_systems)) {
         int cndof=cndof_mid;
+        int mid=cstart_mid;
         for (int i=0;i<cbw_mid;i++) {
             for (int ii=0;ii<=i;ii++) {
                 add_from_to_scaled_cp2k_csr(*P,0.5,0.0,\

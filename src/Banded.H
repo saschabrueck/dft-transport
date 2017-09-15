@@ -16,6 +16,11 @@ THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLI
 #include "Types.H"
 #include "LinearSolver.H"
 
+/*! \class Banded
+ *  
+ *  \brief Interface for banded matrix solver
+ *  
+ */
 template <class T>
 class Banded : public LinearSolver<T>{
 	

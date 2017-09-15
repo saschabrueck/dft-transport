@@ -276,7 +276,6 @@ void WireGenerator::execute_simple(WireStructure* nanowire,MPI_Comm int_comm)
 	check_periodicity(nanowire);
         init_variables(nanowire);
 	cut_boundary_slab(nanowire);
-        update_atom_pos(nanowire,NULL);
 	generate_alloy_disorder(nanowire);
         cut_layer(nanowire);
         separate_dimension(nanowire);
@@ -290,121 +289,6 @@ void WireGenerator::execute_simple(WireStructure* nanowire,MPI_Comm int_comm)
                    nanowire->strain_domain,nanowire->update_at);
         atomic_mass = NULL;
     }    
-}
-
-/************************************************************************************************/
-
-void WireGenerator::execute_task(WireStructure* nanowire,Material *material,int sample_id,\
-				 MPI_Comm int_comm)
-{
-    if(!mpi_rank){
-        printf("Generating the atomic structure\n");
-    }
-
-    wg_comm = int_comm;
-    MPI_Comm_size(wg_comm,&mpi_size);
-    MPI_Comm_rank(wg_comm,&mpi_rank);
-
-    if(nanowire->hydrogen_passivation){
-        nanowire->dsp3 = 0.0;
-    }
-
-    nwire   = nanowire;
-    make_unit_cell(nanowire->first_atom,nanowire->a0,nanowire->c0,nanowire->u0);
-    change_orientation(nanowire->x,nanowire->y,nanowire->z,nanowire->dsp3);
-
-    if(!nanowire->NDim){
-
-        if(nanowire->strain->on){
-            make_strained_unit_cell(nanowire->strain);    
-        }
-        make_bulk_layer_matrix(nanowire,material->no_orb);
-            
-    }else{
-        check_dimension(nanowire);
-        calc_info(nanowire);
-        make_wire(nanowire);
-        make_connections(nanowire);
-        hydrogen_passivation(nanowire);    
-        generate_roughness(nanowire,sample_id);
-        replicate_unit_cell(nanowire->replicate_unit_cell,nanowire);
-        read_atom_position(nanowire->read_atom_pos,nanowire);
-	check_periodicity(nanowire);
-        init_variables(nanowire);
-	cut_boundary_slab(nanowire);
-        update_atom_pos(nanowire,material);
-	generate_alloy_disorder(nanowire);
-        cut_layer(nanowire);
-        separate_dimension(nanowire);
-        convert_position(nanowire);
-	update_periodicity(nanowire);
-        get_qm_region(nanowire);
-        get_orbital_per_atom(material->no_orb);
-        get_mid_gap_energy(material);
-        add_strain(nanowire->strain,nanowire->no_strain_domain,\
-                   nanowire->strain_domain,nanowire->update_at);
-        adapt_parameters(material);
-    }    
-}
-
-/************************************************************************************************/
-
-void WireGenerator::update_atom_pos(WireStructure* nanowire,Material *material)
-{
-    int IA,IP,IZ;
-    int IPmax[2] = {N3D+1,SLM};
-
-    if(nanowire->update_at){
-        FILE *F = fopen(nanowire->at_file,"r");
-        switch(nanowire->NDim){
-	case 1:
-	    for(IA=0;IA<No_Atom;IA++){
-	        for(IP=0;IP<IPmax[nanowire->update_at-1];IP++){
-		    fscanf(F,"%lg",&Layer_Matrix[SLM*IA+IP]);
-		}
-	    }
-	    fclose(F);
-	    break;
-	case 2:
-	    for(IA=0;IA<No_Atom;IA=IA+3*NzFold){
-	        for(IZ=0;IZ<NzFold;IZ++){
-		    for(IP=0;IP<IPmax[nanowire->update_at-1];IP++){
-		        fscanf(F,"%lg",&Layer_Matrix[SLM*(IA+IZ)+IP]);
-		    }
-		    c_dcopy(IPmax[nanowire->update_at-1],&Layer_Matrix[SLM*(IA+IZ)],1,\
-			    &Layer_Matrix[SLM*(IA+IZ+NzFold)],1);
-		    c_dcopy(IPmax[nanowire->update_at-1],&Layer_Matrix[SLM*(IA+IZ)],1,\
-			    &Layer_Matrix[SLM*(IA+IZ+2*NzFold)],1);
-		    Layer_Matrix[SLM*(IA+IZ)+2]          = Layer_Matrix[SLM*(IA+IZ)+2]-Lz;
-		    Layer_Matrix[SLM*(IA+IZ+2*NzFold)+2] = Layer_Matrix[SLM*(IA+IZ+2*NzFold)+2]+Lz;
-		}
-	    }
-	    fclose(F);
-	    break;
-	case 3:
-	    for(IA=0;IA<No_Atom;IA++){
-	        for(IP=0;IP<IPmax[nanowire->update_at-1];IP++){
-		    fscanf(F,"%lg",&Layer_Matrix[SLM*IA+IP]);
-		}
-	    }
-	    fclose(F);
-	    break;
-	}
-    }else{
-        if (nanowire->relax_atoms){
-	  /*
-	    MacoptStrain *strain = new MacoptStrain(this, material);
-
-	    strain->relax_atoms();
-	    delete strain;
-	  */
-	}
-    }
-
-    if((nanowire->update_at)||(nanowire->relax_atoms)){
-        get_cell_width();
-        update_boundary_slab(nanowire);
-    }
 }
 
 /************************************************************************************************/
@@ -1543,69 +1427,6 @@ void WireGenerator::get_orbital_per_atom(int *no_orb)
         orb_per_at[IA+1] = orb_per_at[IA]+no_orb[Round(Layer_Matrix[SLM*ch_pos[IA]+3])-1];
     }
 
-}
-
-/************************************************************************************************/
-
-void WireGenerator::get_mid_gap_energy(Material *material)
-{
-    int IA,IB,neigh_pos;
-    int typeA,typeB;
-    double no_neigh;
-
-    EMidGap = new double[No_Atom];
-    EGap    = new double[No_Atom];
-
-    init_var(EMidGap,No_Atom);
-    init_var(EGap,No_Atom);
-    
-    EVmaxL = 0.0;
-    EVmaxR = 0.0;
-    ECminL = 0.0;
-    ECminR = 0.0;
-    
-    EMGL   = 0.0;
-    EMGR   = 0.0;
-
-    for(IA=0;IA<No_Atom;IA++){
-        typeA    = Round(Layer_Matrix[SLM*ch_pos[IA]+3])-1;
-        no_neigh = 0.0;
-        for(IB=0;IB<NB;IB++){
-	    if(Layer_Matrix[SLM*ch_pos[IA]+4+IB]>0){
-	        neigh_pos   = Round(Layer_Matrix[SLM*ch_pos[IA]+4+IB])-1;
-	        typeB       = Round(Layer_Matrix[SLM*neigh_pos+3])-1;
-		EMidGap[IA] = EMidGap[IA]+material->mid_gap_energy[typeA][typeB];
-		EGap[IA]    = EGap[IA]+material->band_gap_table[typeA][typeB];
-		no_neigh    = no_neigh+1.0;
-	    }
-	}
-	if(no_neigh>0){
-	    EMidGap[IA] = EMidGap[IA]/no_neigh;
-	    EGap[IA]    = EGap[IA]/no_neigh;
-	}else{
-	    typeB       = (typeA+1)%2;
-	    EMidGap[IA] = material->mid_gap_energy[typeA][typeB];
-	    EGap[IA]    = material->band_gap_table[typeA][typeB];
-	}
-	if((IA>=Smin[0])&&(IA<=Smax[0])){
-	    EVmaxL = EVmaxL+(EMidGap[IA]-EGap[IA]/2.0);
-	    ECminL = ECminL+(EMidGap[IA]+EGap[IA]/2.0);
-	    EMGL   = EMGL+EMidGap[IA];
-	}
-	if((IA>=Smin[NSlab-1])&&(IA<=Smax[NSlab-1])){
-	    EVmaxR = EVmaxR+(EMidGap[IA]-EGap[IA]/2.0);
-	    ECminR = ECminR+(EMidGap[IA]+EGap[IA]/2.0);
-	    EMGR   = EMGR+EMidGap[IA];
-	}
-    }
-
-    EVmaxL = EVmaxL/(Smax[0]-Smin[0]+1.0);
-    ECminL = ECminL/(Smax[0]-Smin[0]+1.0);
-    EMGL   = EMGL/(Smax[0]-Smin[0]+1.0);
-
-    EVmaxR = EVmaxR/(Smax[NSlab-1]-Smin[NSlab-1]+1.0);
-    ECminR = ECminR/(Smax[NSlab-1]-Smin[NSlab-1]+1.0);
-    EMGR   = EMGR/(Smax[NSlab-1]-Smin[NSlab-1]+1.0);
 }
 
 /************************************************************************************************/
@@ -4484,32 +4305,6 @@ void WireGenerator::get_qm_region(WireStructure* nanowire)
 	  printf("There is a problem with the definition of the Quantum Mechanical Region\n");
 	  abort();
       }
-    }
-
-}
-
-/************************************************************************************************/
-
-void WireGenerator::adapt_parameters(Material *material)
-{
-
-    int IL,IA;
-
-    int vec_size = max((transport_type==1)*No_Atom,1);
-    atomic_mass  = new double[vec_size];
-
-    if(transport_type==1){
-
-        for(IL=0;IL<NLayer;IL++){
-	    neighbor_layer[IL] = layer_per_slab;
-	}
-
-	orb_per_at[0] = 0;
-	for(IA=0;IA<No_Atom;IA++){
-	    orb_per_at[IA+1] = orb_per_at[IA]+N3D;
-	    atomic_mass[IA]  = material->atomic_mass[Round(Layer_Matrix[SLM*ch_pos[IA]+3])-1];
-	}
-
     }
 
 }

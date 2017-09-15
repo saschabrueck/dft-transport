@@ -19,7 +19,8 @@ THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLI
 #include <ctime>
 #include <math.h>
 #include <cmath>
-#include "LinkedList.H"
+//#include "LinkedList.H"
+#include "CSR.H"
 
 #ifdef CUDA
 //#include <cuda.h>
