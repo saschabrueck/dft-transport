@@ -33,8 +33,9 @@ An example input file, `gnr.inp` , for a graphene nanoribbon system composed of 
 
 References
 ----------
-1. S. Brück, M. Calderara, M. H. Bani-Hashemian, J. VandeVondele, and M. Luisier. *Towards Ab-Initio Simulations of Nanowire Field-Effect Transistors*. Proceedings of the International Workshop on Computational Electronics (IWCE), June 2014, Paris, France. doi: [10.1109/IWCE.2014.6865831](http://doi.org/10.1109/IWCE.2014.6865831).
-2. S. Brück, M. Calderara, M. H. Bani-Hashemian, J. VandeVondele, and M. Luisier. *Efficient Algorithms for Large-Scale Quantum Transport Calculations*. The Journal of Chemical Physics 147(7): 074116, Aug. 2017. doi:[10.1063/1.4998421](http://doi.org/10.1063/1.4998421).
+1. S. Brück, M. Calderara, M. H. Bani-Hashemian, J. VandeVondele, and M. Luisier. *Towards Ab-Initio Simulations of Nanowire Field-Effect Transistors*. Proceedings of the International Workshop on Computational Electronics (IWCE), June 2014, Paris, France. doi: [10.1109/IWCE.2014.6865831](http://doi.org/10.1109/IWCE.2014.6865831).  
+2. M. Calderara, S. Brück, A. Pedersen, M. H. Bani-Hashemian, J. VandeVondele, and M. Luisier. *Pushing back the Limit of Ab-Initio Quantum Transport Simulations on Hybrid Supercomputers*. SC'15: Proceedings of the International Conference for High Performance Computing, Networking, Storage and Analysis, Nov. 2015, Austin, TX, USA. doi:[10.1145/2807591.2807673](http://doi.org/10.1145/2807591.2807673).   
+3. S. Brück, M. Calderara, M. H. Bani-Hashemian, J. VandeVondele, and M. Luisier. *Efficient Algorithms for Large-Scale Quantum Transport Calculations*. The Journal of Chemical Physics 147(7): 074116, Aug. 2017. doi:[10.1063/1.4998421](http://doi.org/10.1063/1.4998421).
 
 Theses
 ------
