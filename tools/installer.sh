@@ -34,7 +34,7 @@
 # =========================================================================
 
 # * Set the following paths *******
-TOPDIR=/scratch/seyedb
+TOPDIR=~/Projects/cp2k-omen
 cp2kDIR=${TOPDIR}/cp2k
 omenDIR=${TOPDIR}/omen
 
@@ -43,13 +43,14 @@ buildDIR=${installDIR}/build
 libsDIR=${installDIR}/libs
 
 # * Preparation for STEP 1 ********
-# Install either the current truck version (trunk) of CP2K or a release version (release) (>=4.1)
-cp2kTRUNKorRELEASE="trunk"
-cp2kRELEASEVER="4_1"
+# Install either the current development version (dev) of CP2K or a release version (release) (>=4.1)
+cp2kDEVorRELEASE="dev"
+cp2kRELEASEVER="7.1"
 
 # * Preparation for STEP 2 ********
 # Specify the versions of the solvers that you would like to install:
 # An unset version would mean the solver will not be installed.  
+parmetisVER="4.0.3"
 hypreVER="2.11.2"
 SuiteSparseVER="4.5.5"
 qhullVER="2015-src-7.2.0"
@@ -93,53 +94,50 @@ omenCONFIGURE_ARGS="--with-pexsi --with-mumps"
 
 # install CP2K: ===========================================================
 # Here the script uses the CP2K toolchain script to install CP2K together
-# with PEXSI, SuperLU_DIST, and ParMETIS that all are used by OMEN as well.
+# with PEXSI and SuperLU_DIST that all are used by OMEN as well.
 # -------------------------------------------------------------------------
-echo "installing CP2K ==========================================="
+echo "Installing CP2K ==========================================="
 cd ${TOPDIR} 
 
-if [ "${cp2kTRUNKorRELEASE}" = "trunk" ] ; then
-   svn checkout http://svn.code.sf.net/p/cp2k/code/trunk cp2k
-elif [ "${cp2kTRUNKorRELEASE}" = "release" ] ; then 
+if [ "${cp2kDEVorRELEASE}" = "dev" ] ; then
+   git clone --recursive https://github.com/cp2k/cp2k.git cp2k
+elif [ "${cp2kDEVorRELEASE}" = "release" ] ; then
    if [ -z ${cp2kRELEASEVER} ]; then
       echo "CP2K release version (cp2kRELEASEVER) needs to be set."
       exit 1
    fi
-   svn checkout http://svn.code.sf.net/p/cp2k/code/branches/cp2k-${cp2kRELEASEVER}-branch cp2k
+   git clone -b support/v${cp2kRELEASEVER} https://github.com/cp2k/cp2k.git cp2k
 fi
 
-cp2k_toolchainDIR=${cp2kDIR}/cp2k/tools/toolchain
+cp2k_toolchainDIR=${cp2kDIR}/tools/toolchain
 
 cd ${cp2k_toolchainDIR}
 ./install_cp2k_toolchain.sh \
                  --with-gcc \
-                 --with-binutils \
                  --with-mpich \
                  --with-pexsi \
                  --no-check-certificate 
 
-cp ${cp2k_toolchainDIR}/install/arch/* ${cp2kDIR}/cp2k/arch/  
+cp ${cp2k_toolchainDIR}/install/arch/* ${cp2kDIR}/arch/  
 
 # IMPORTANT: Set up environment variables before moving on:
 source ${cp2k_toolchainDIR}/install/setup
 
-# get versions of libraries that have been just installed by CP2K toolchain
-source ${cp2k_toolchainDIR}/scripts/package_versions.sh
-
 # define lib path for .mk file (STEP 3)
-lib_cp2k="-L${cp2kDIR}/cp2k/lib/local/${cp2k_target} -lcp2k -lxsmmf -lxsmm -lderiv -lint -lxcf90 -lxc -lfftw3"
+lib_cp2k="-L${cp2kDIR}/lib/local/${cp2k_target} -lcp2k -lxsmmf -lxsmm -lxcf03 -lxc -lint2 -lsymspg -lelpa -lfftw3"
+lib_dbcsr="-L${cp2kDIR}/lib/local/${cp2k_target}/exts/dbcsr -ldbcsr"
 
 # STEP 2: ******************************************************************************************
 
 # install OMEN solvers: ===================================================
 # the following are installed by CP2K toolchain
-parmetisVER=${parmetis_ver}
-reflapackVER=${reflapack_ver}
-scalapackVER=${scalapack_ver}
-mpichVER=${mpich_ver}
-superluVER=${superlu_ver}
-pexsiVER=${pexsi_ver}
-openblasVER=${openblas_ver}
+# get versions of libraries that have been just installed by CP2K toolchain
+scalapackVER=$(awk -F'"' '/^scalapack_ver=/ {print $2}' ${cp2k_toolchainDIR}/scripts/install_scalapack.sh)
+mpichVER=$(awk -F'"' '/^mpich_ver=/ {print $2}' ${cp2k_toolchainDIR}/scripts/install_mpich.sh)
+superluVER=$(awk -F'"' '/^superlu_ver=/ {print $2}' ${cp2k_toolchainDIR}/scripts/install_superlu.sh)
+pexsiVER=$(awk -F'"' '/^pexsi_ver=/ {print $2}' ${cp2k_toolchainDIR}/scripts/install_pexsi.sh)
+openblasVER=$(awk -F'"' '/^openblas_ver=/ {print $2}' ${cp2k_toolchainDIR}/scripts/install_openblas.sh)
+
 # -------------------------------------------------------------------------
 mkdir -p ${installDIR}
 mkdir -p ${libsDIR}
@@ -151,7 +149,7 @@ cat <<EOF > ${cp2komenENVSETUP}
 #!/bin/bash
 EOF
 
-echo "installing OMEN solvers ==================================="
+echo "Installing OMEN solvers ==================================="
 echo " "
 
 # PEXSI -------------------------------------------------------------------
@@ -159,15 +157,47 @@ echo " "
 cp -r ${cp2k_toolchainDIR}/build/pexsi_v${pexsiVER}/include/pexsi/ ${cp2k_toolchainDIR}/install/pexsi-${pexsiVER}/include/
 
 # define include and lib paths for .mk file (STEP 3)
-lib_parmetis="-L\$(TOOLCHAIN)/install/parmetis-${parmetisVER}/lib -lparmetis -lmetis"
 inc_sludist="-I\$(TOOLCHAIN)/install/superlu_dist-${superluVER}/include/"
 lib_sludist="-L\$(TOOLCHAIN)/install/superlu_dist-${superluVER}/lib -lsuperlu_dist"
 inc_pexsi="-I\$(TOOLCHAIN)/install/pexsi-${pexsiVER}/include/"
 lib_pexsi="-L\$(TOOLCHAIN)/install/pexsi-${pexsiVER}/lib -lpexsi"
 
+# ParMETIS ----------------------------------------------------------------
+if [ ! -z ${parmetisVER} ]; then
+   echo "Installing ParMETIS ======================================="
+   mkdir -p ${libsDIR}/parmetis-${parmetisVER}
+   mkdir -p ${libsDIR}/parmetis-${parmetisVER}/lib
+   cd ${buildDIR}
+
+   wget http://glaros.dtc.umn.edu/gkhome/fetch/sw/parmetis/parmetis-${parmetisVER}.tar.gz
+   tar -xf parmetis-${parmetisVER}.tar.gz
+
+   cd ${buildDIR}/parmetis-${parmetisVER}
+
+   make config \
+        cc=${MPICC:-mpicc} \
+        cxx=${MPICXX:-mpic++} \
+        prefix=${buildDIR}/parmetis-${parmetisVER} > configure.log 2>&1
+   make > make.log 2>&1
+   make install > install.log 2>&1
+
+   cd metis
+   make config \
+        cc=${MPICC:-mpicc} \
+        cxx=${MPICXX:-mpic++} \
+        prefix=${buildDIR}/parmetis-${parmetisVER} > configure.log 2>&1
+   make > make.log 2>&1
+   make install > install.log 2>&1
+
+   find . -name "*.a" -type f -exec cp {} ${libsDIR}/parmetis-${parmetisVER}/lib \;
+
+   # define include and lib paths for .mk file (STEP 3)
+   lib_parmetis="-L\$(LIB_TOP)/parmetis-${parmetisVER}/lib -lparmetis -lmetis"
+fi
+
 # HYPRE -------------------------------------------------------------------
 if [ ! -z ${hypreVER} ]; then
-   echo "installing hypre =========================================="
+   echo "Installing hypre =========================================="
    mkdir -p ${libsDIR}/hypre
    mkdir -p ${libsDIR}/hypre/bin
    mkdir -p ${libsDIR}/hypre/libexec
@@ -186,7 +216,7 @@ if [ ! -z ${hypreVER} ]; then
                   --includedir=${libsDIR}/hypre/include \
                   --without-superlu
 
-   make install > install.log
+   make install > install.log 2>&1
 
    # define include and lib paths for .mk file (STEP 3)
    inc_hypre="-I\$(LIB_TOP)/hypre/include/"
@@ -195,7 +225,7 @@ fi
 
 # SuiteSparse -------------------------------------------------------------
 if [ ! -z ${SuiteSparseVER} ]; then
-   echo "installing SuiteSparse ===================================="
+   echo "Installing SuiteSparse ===================================="
    mkdir -p ${libsDIR}/SuiteSparse
    mkdir -p ${libsDIR}/SuiteSparse/static
    cd ${buildDIR}
@@ -207,11 +237,13 @@ if [ ! -z ${SuiteSparseVER} ]; then
 
    make install INSTALL_LIB=${libsDIR}/SuiteSparse/lib \
                 INSTALL_INCLUDE=${libsDIR}/SuiteSparse/include \
+                BLAS=${cp2k_toolchainDIR}/install/openblas-${openblasVER}/lib/libopenblas.a  \
+                LAPACK=${cp2k_toolchainDIR}/install/scalapack-${scalapackVER}/lib/libscalapack.a \
                 AUTOCC=no \
                 CUDA=no \
-                MY_METIS_LIB=${cp2k_toolchainDIR}/install/parmetis-${parmetisVER}/lib/libmetis.a \
-                MY_METIS_INC=${cp2k_toolchainDIR}/install/parmetis-${parmetisVER}/include \
-                > install.log
+                MY_METIS_LIB=${buildDIR}/parmetis-${parmetisVER}/lib/libmetis.a \
+                MY_METIS_INC=${buildDIR}/parmetis-${parmetisVER}/include \
+                > install.log 2>&1
 
    find . -name "*.a" -type f -exec cp {} ${libsDIR}/SuiteSparse/static \;
 
@@ -222,7 +254,7 @@ fi
 
 # Qhull -------------------------------------------------------------------
 if [ ! -z ${qhullVER} ]; then
-   echo "installing qhull =========================================="
+   echo "Installing qhull =========================================="
    mkdir -p ${libsDIR}/qhull
    cd ${buildDIR}
 
@@ -235,8 +267,8 @@ if [ ! -z ${qhullVER} ]; then
    mv ${buildDIR}/qhull/Makefile ${buildDIR}/qhull/Makefile.orig
    sed -e "s|\(DESTDIR *=\).*|\1 ${libsDIR}/qhull|g" \
        -e "s|\(CC *=\).*|\1 gcc -w|g" ${buildDIR}/qhull/Makefile.orig > ${buildDIR}/qhull/Makefile
-   make all > install.log 
-   make install
+   make all > make.log 2>&1 
+   make install > install.log 2>&1
 
    # define include and lib paths for .mk file (STEP 3)
    inc_qhull="-I\$(LIB_TOP)/qhull/include/libqhull/"
@@ -245,7 +277,7 @@ fi
 
 # MUMPS -------------------------------------------------------------------
 if [ ! -z ${mumpsVER} ]; then
-   echo "installing MUMPS =========================================="
+   echo "Installing MUMPS =========================================="
    mkdir -p ${libsDIR}/MUMPS
    cd ${buildDIR}
 
@@ -257,22 +289,22 @@ if [ ! -z ${mumpsVER} ]; then
 
    sed -e "/^#.*LMETISDIR *=/s/^#//" \
        -e "/^#.*IMETIS *=/s/^#//" \
-       -e "s|\(LMETISDIR *=\).*|\1 ${cp2k_toolchainDIR}/install/parmetis-${parmetisVER}/lib|g" \
-       -e "s|\(IMETIS *=\).*|\1 -I${cp2k_toolchainDIR}/install/parmetis-${parmetisVER}/include|g" \
+       -e "s|\(LMETISDIR *=\).*|\1 ${buildDIR}/parmetis-${parmetisVER}/lib|g" \
+       -e "s|\(IMETIS *=\).*|\1 -I${buildDIR}/parmetis-${parmetisVER}/include|g" \
        -e "/^#.*-lparmetis/s/^#//" \
        -e "s|\(CC *=\).*|\1 gcc|g" \
        -e "s|\(FC *=\).*|\1 mpif90|g" \
        -e "s|\(FL *=\).*|\1 mpif90|g" \
-       -e "s|\(LAPACK *=\).*|\1 -L/${cp2k_toolchainDIR}/install/lapack-${reflapackVER}/lib -llapack|g" \
-       -e "s|\(SCALAP *=\).*|\1 -L/${cp2k_toolchainDIR}/install/lapack-${scalapackVER}/lib -lscalapack|g" \
+       -e "s|\(LAPACK *=\).*|\1 -L/${cp2k_toolchainDIR}/install/scalapack-${scalapackVER}/lib -lscalapack|g" \
+       -e "s|\(SCALAP *=\).*|\1 -L/${cp2k_toolchainDIR}/install/scalapack-${scalapackVER}/lib -lscalapack|g" \
        -e "s|\(INCPAR *=\).*|\1 -I/${cp2k_toolchainDIR}/install/mpich-${mpichVER}/include|g" \
        -e "s|\(LIBPAR *=\).*|\1 \$(SCALAP) \$(LAPACK) -L/${cp2k_toolchainDIR}/install/mpich-${mpichVER}/lib -lmpi -lgfortran|g" \
-       -e "s|\(LIBBLAS *=\).*|\1 -L/${cp2k_toolchainDIR}/install/lapack-${scalapackVER}/lib -lblas|g" \
+       -e "s|\(LIBBLAS *=\).*|\1 -L/${cp2k_toolchainDIR}/install/openblas-${openblasVER}/lib -lopenblas|g" \
        -e "s|\(OPTF *=\).*|\1 -O -w|g" \
        -e "s|\(OPTC *=\).*|\1 -O3 -w|g" \
           Make.inc/Makefile.inc.generic > Makefile.inc
 
-   make alllib > install.log
+   make alllib > install.log 2>&1
    cp -r ${buildDIR}/MUMPS/lib/ ${buildDIR}/MUMPS/include/ ${libsDIR}/MUMPS
 
    # define include and lib paths for .mk file (STEP 3)
@@ -282,7 +314,7 @@ fi
 
 # MAGMA -------------------------------------------------------------------
 if [ ! -z ${magmaVER} ]; then
-   echo "installing MAGMA =========================================="
+   echo "Installing MAGMA =========================================="
    mkdir -p ${libsDIR}/magma
    cd ${buildDIR}
 
@@ -308,7 +340,7 @@ if [ ! -z ${magmaVER} ]; then
        -e "/^-.*include/s/^-/#-/" \
           make.inc.openblas > make.inc
 
-   make install prefix=${libsDIR}/magma > install.log
+   make install prefix=${libsDIR}/magma > install.log 2>&1
 
    # define include and lib paths for .mk file (STEP 3)
    nvcc_path="${cudaDIR}/bin/nvcc"
@@ -355,7 +387,7 @@ echo " "
 # generate a .mk file:
 # -------------------------------------------------------------------------
 if [ "${generate_makefile}" = "yes" ] ; then
-   echo "generate a .mk file ======================================="
+   echo "Generate a .mk file ======================================="
    cd ${omenDIR}
 
    topdir=${installDIR}
@@ -378,6 +410,7 @@ if [ "${generate_makefile}" = "yes" ] ; then
        -e "s|\(LIBPARMETIS *=\).*|\1 ${lib_parmetis}|g" \
        -e "s|\(LIBSLUDIST *=\).*|\1 ${lib_sludist}|g" \
        -e "s|\(LIBPEXSI *=\).*|\1 ${lib_pexsi}|g" \
+       -e "s|\(LIBDBCSR *=\).*|\1 ${lib_dbcsr}|g" \
        -e "s|\(LIBCP2K *=\).*|\1 ${lib_cp2k}|g" \
        -e "s|\(LIBPARDISO *=\).*|\1 ${lib_pardiso}|g" \
        -e "s|\(NVCC *=\).*|\1 ${nvcc_path}|g" \
@@ -399,15 +432,14 @@ fi
 if [ "${compile_cp2komen}" = "yes" ] ; then
    source ${cp2k_toolchainDIR}/install/setup
    # compile CP2K
-   echo "compiling cp2k with target ${cp2k_target} libcp2k ========="
-   cd ${cp2kDIR}/cp2k/src
-   ln -sf ../makefiles/Makefile .
+   echo "Compiling cp2k with target ${cp2k_target} libcp2k ========="
+   cd ${cp2kDIR}
 #   make -j ${Nproc} ARCH=local VERSION=${cp2k_target} 
    make -j ${Nproc} ARCH=local VERSION=${cp2k_target} libcp2k
 
    source ${cp2komenENVSETUP}
    # compile OMEN
-   echo "compiling OMEN ============================================"
+   echo "Compiling OMEN ============================================"
    cd ${omenDIR}/src
    ./configure --with-arch=${machine}.mk ${omenCONFIGURE_ARGS}
    make -j ${Nproc} 
